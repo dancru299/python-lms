@@ -1,0 +1,200 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ USERS ============
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          String    @default("student") // student, teacher, admin
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  submissions        Submission[]
+  progress           UserProgress[]
+  notifications      Notification[]
+  teacherClassrooms  Classroom[] @relation("TeacherClassrooms")
+  studentClassrooms  ClassroomStudent[] @relation("StudentClassrooms")
+}
+
+// ============ CHAPTERS ============
+model Chapter {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  icon        String   @default("fa-book")
+  color       String   @default("#3B82F6")
+  sortOrder   Int      @default(0)
+  isLocked    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  lessons     Lesson[]
+}
+
+// ============ LESSONS ============
+model Lesson {
+  id          String   @id @default(cuid())
+  chapterId   String
+  title       String
+  slug        String?
+  content     String?
+  duration    Int      @default(60)
+  difficulty  String   @default("beginner")
+  sortOrder   Int      @default(0)
+  isLocked    Boolean  @default(false)
+  isPublished Boolean  @default(true)
+  
+  // Learning Objectives
+  objectiveKnowledge String?
+  objectiveSkills    String?
+  objectiveAttitude  String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  chapter     Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  sections    Section[]
+  exercises   Exercise[]
+  progress    UserProgress[]
+}
+
+// ============ SECTIONS ============
+model Section {
+  id          String   @id @default(cuid())
+  lessonId    String
+  title       String
+  content     String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+// ============ EXERCISES ============
+model Exercise {
+  id            String   @id @default(cuid())
+  lessonId      String
+  type          String   @default("practice")
+  title         String
+  question      String?
+  answer        String?
+  difficulty    String   @default("easy")
+  points        Int      @default(10)
+  sortOrder     Int      @default(0)
+  answerVisible Boolean  @default(false)
+  dueDate       DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  lesson        Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  submissions   Submission[]
+}
+
+// ============ SUBMISSIONS ============
+model Submission {
+  id          String   @id @default(cuid())
+  exerciseId  String
+  userId      String
+  content     String
+  files       String?
+  status      String   @default("pending")
+  score       Int?
+  maxScore    Int?
+  feedback    String?
+  gradedAt    DateTime?
+  gradedBy    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ USER PROGRESS ============
+model UserProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  lessonId    String
+  completed   Boolean  @default(false)
+  timeSpent   Int      @default(0)
+  lastAccess  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+// ============ NOTIFICATIONS ============
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // submission_graded, new_submission, etc.
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ CLASSROOMS ============
+model Classroom {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  code        String   @unique // Mã lớp để học sinh tham gia
+  teacherId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  teacher     User     @relation("TeacherClassrooms", fields: [teacherId], references: [id])
+  students    ClassroomStudent[]
+}
+
+model ClassroomStudent {
+  id          String   @id @default(cuid())
+  classroomId String
+  studentId   String
+  joinedAt    DateTime @default(now())
+
+  // Relations
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  student     User      @relation("StudentClassrooms", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classroomId, studentId])
+}
+
+// ============ SETTINGS ============
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
