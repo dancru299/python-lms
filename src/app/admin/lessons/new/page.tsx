@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -211,7 +211,7 @@ print(solution)
   },
 ];
 
-export default function NewLessonPage() {
+function NewLessonContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedChapter = searchParams.get("chapterId") || "";
@@ -895,5 +895,18 @@ print(my_list)`}
         </div>
       )}
     </div>
+  );
+}
+
+// Wrapper component với Suspense cho useSearchParams
+export default function NewLessonPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <NewLessonContent />
+    </Suspense>
   );
 }
