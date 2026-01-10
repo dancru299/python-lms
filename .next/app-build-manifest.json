@@ -35,56 +35,6 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/admin/page.js"
-    ],
-    "/admin/grading/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/admin/grading/page.js"
-    ],
-    "/admin/lessons/new/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/admin/lessons/new/page.js"
-    ],
-    "/api/chapters/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/chapters/route.js"
-    ],
-    "/api/admin/lessons/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/admin/lessons/route.js"
-    ],
-    "/admin/lessons/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/admin/lessons/page.js"
-    ],
-    "/lessons/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/lessons/[id]/page.js"
-    ],
-    "/api/auth/session/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/auth/session/route.js"
-    ],
-    "/api/lessons/[id]/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/lessons/[id]/route.js"
-    ],
-    "/admin/lessons/[id]/edit/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/admin/lessons/[id]/edit/page.js"
-    ],
-    "/api/admin/lessons/[id]/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/admin/lessons/[id]/route.js"
     ]
   }
 }
