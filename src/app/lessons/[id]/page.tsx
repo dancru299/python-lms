@@ -543,8 +543,67 @@ export default function LessonPage() {
         .lesson-content h2 { font-size: 1.5rem; font-weight: 600; color: #1d4ed8; margin-top: 1.5rem; margin-bottom: 0.75rem; }
         .lesson-content h3 { font-size: 1.25rem; font-weight: 600; color: #1f2937; margin-top: 1.25rem; margin-bottom: 0.5rem; }
         .lesson-content p { color: #374151; margin-bottom: 0.75rem; line-height: 1.7; }
-        .lesson-content ul, .lesson-content ol { padding-left: 1.5rem; margin-bottom: 1rem; }
-        .lesson-content li { color: #374151; margin-bottom: 0.5rem; line-height: 1.6; }
+        .lesson-content ul { 
+          padding-left: 0; 
+          margin-bottom: 1rem; 
+          list-style: none; 
+        }
+        .lesson-content ol { 
+          padding-left: 1.75rem; 
+          margin-bottom: 1rem; 
+          list-style-type: decimal; 
+        }
+        .lesson-content ul > li { 
+          color: #374151; 
+          margin-bottom: 0.625rem; 
+          line-height: 1.7; 
+          padding-left: 1.5rem;
+          position: relative;
+        }
+        .lesson-content ul > li::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0.5rem;
+          width: 6px;
+          height: 6px;
+          background: #3b82f6;
+          border-radius: 50%;
+        }
+        .lesson-content ol > li {
+          color: #374151; 
+          margin-bottom: 0.625rem; 
+          line-height: 1.7;
+          padding-left: 0.5rem;
+        }
+        .lesson-content ol > li::marker {
+          color: #3b82f6;
+          font-weight: 600;
+        }
+        .lesson-content ul ul { 
+          margin-top: 0.5rem;
+          margin-left: 0.5rem;
+        }
+        .lesson-content ul ul > li::before {
+          background: transparent;
+          border: 1.5px solid #60a5fa;
+          width: 5px;
+          height: 5px;
+        }
+        .lesson-content ul ul ul > li::before {
+          background: #94a3b8;
+          border: none;
+          width: 4px;
+          height: 4px;
+          border-radius: 1px;
+        }
+        .lesson-content ol ol { 
+          list-style-type: lower-alpha; 
+          margin-top: 0.5rem; 
+        }
+        .lesson-content li strong {
+          color: #1e40af;
+        }
         .lesson-content code { background: #e5e7eb; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-family: 'Courier New', monospace; font-size: 0.9em; }
         .lesson-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; border: 1px solid #d1d5db; }
         .lesson-content th { background: #f3f4f6; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 1px solid #d1d5db; }
