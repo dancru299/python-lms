@@ -67,7 +67,7 @@ export default function RegisterPage() {
         if (loginData.user.role === "teacher" || loginData.user.role === "admin") {
           router.push("/admin");
         } else {
-          router.push("/dashboard");
+          router.push("/");
         }
       } else {
         router.push("/login");

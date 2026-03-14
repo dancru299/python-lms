@@ -13,6 +13,19 @@ function hashPassword(password: string): string {
 async function main() {
   console.log("🌱 Seeding database...");
 
+  // Create admin account
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@example.com" },
+    update: {},
+    create: {
+      email: "admin@example.com",
+      password: hashPassword("admin123"),
+      name: "Quản trị viên",
+      role: "admin",
+    },
+  });
+  console.log("✅ Created admin:", admin.email);
+
   // Create admin/teacher account
   const teacher = await prisma.user.upsert({
     where: { email: "teacher@example.com" },

@@ -33,7 +33,7 @@ export default function LoginPage() {
       if (data.user.role === "teacher" || data.user.role === "admin") {
         router.push("/admin");
       } else {
-        router.push("/dashboard");
+        router.push("/");
       }
     } catch (err) {
       setError("Đã xảy ra lỗi, vui lòng thử lại");
@@ -84,9 +84,17 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mật khẩu
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  Mật khẩu
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  Quên mật khẩu?
+                </Link>
+              </div>
               <input
                 type="password"
                 className="input"

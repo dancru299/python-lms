@@ -228,7 +228,7 @@ export default function LessonPage() {
           <i className="fa-solid fa-exclamation-triangle text-5xl text-red-500 mb-4"></i>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Không tìm thấy bài giảng</h2>
           <p className="text-gray-500 mb-6">Bài giảng này không tồn tại hoặc đã bị xóa</p>
-          <Link href="/dashboard" className="btn btn-primary">
+          <Link href="/" className="btn btn-primary">
             <i className="fa-solid fa-arrow-left mr-2"></i>
             Quay lại Dashboard
           </Link>
@@ -532,7 +532,7 @@ export default function LessonPage() {
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <Link href="/dashboard" className="text-indigo-600 hover:text-indigo-700 font-medium">
+          <Link href="/" className="text-indigo-600 hover:text-indigo-700 font-medium">
             <i className="fa-solid fa-arrow-left mr-2"></i>Quay lại Dashboard
           </Link>
           <p className="text-gray-500 text-sm">🐍 Python LMS - Made with ❤️ by AnhDuc Team</p>

@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 // ============ USERS ============
@@ -17,7 +17,7 @@ model User {
   password      String
   name          String
   role          String    @default("student") // student, teacher, admin
-  avatar        String?
+  avatar        String?   @db.Text
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -33,7 +33,7 @@ model User {
 model Chapter {
   id          String   @id @default(cuid())
   title       String
-  description String?
+  description String?  @db.Text
   icon        String   @default("fa-book")
   color       String   @default("#3B82F6")
   sortOrder   Int      @default(0)
@@ -51,7 +51,7 @@ model Lesson {
   chapterId   String
   title       String
   slug        String?
-  content     String?
+  content     String?  @db.LongText
   duration    Int      @default(60)
   difficulty  String   @default("beginner")
   sortOrder   Int      @default(0)
@@ -59,9 +59,9 @@ model Lesson {
   isPublished Boolean  @default(true)
   
   // Learning Objectives
-  objectiveKnowledge String?
-  objectiveSkills    String?
-  objectiveAttitude  String?
+  objectiveKnowledge String? @db.Text
+  objectiveSkills    String? @db.Text
+  objectiveAttitude  String? @db.Text
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -71,6 +71,8 @@ model Lesson {
   sections    Section[]
   exercises   Exercise[]
   progress    UserProgress[]
+
+  @@index([chapterId])
 }
 
 // ============ SECTIONS ============
@@ -78,13 +80,15 @@ model Section {
   id          String   @id @default(cuid())
   lessonId    String
   title       String
-  content     String?
+  content     String?  @db.LongText
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
   lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
 }
 
 // ============ EXERCISES ============
@@ -93,8 +97,8 @@ model Exercise {
   lessonId      String
   type          String   @default("practice")
   title         String
-  question      String?
-  answer        String?
+  question      String?  @db.LongText
+  answer        String?  @db.LongText
   difficulty    String   @default("easy")
   points        Int      @default(10)
   sortOrder     Int      @default(0)
@@ -106,6 +110,8 @@ model Exercise {
   // Relations
   lesson        Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   submissions   Submission[]
+
+  @@index([lessonId])
 }
 
 // ============ SUBMISSIONS ============
@@ -113,12 +119,12 @@ model Submission {
   id          String   @id @default(cuid())
   exerciseId  String
   userId      String
-  content     String
-  files       String?
+  content     String   @db.LongText
+  files       String?  @db.Text
   status      String   @default("pending")
   score       Int?
   maxScore    Int?
-  feedback    String?
+  feedback    String?  @db.Text
   gradedAt    DateTime?
   gradedBy    String?
   createdAt   DateTime @default(now())
@@ -127,6 +133,9 @@ model Submission {
   // Relations
   exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([exerciseId])
+  @@index([userId])
 }
 
 // ============ USER PROGRESS ============
@@ -145,6 +154,8 @@ model UserProgress {
   lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
 }
 
 // ============ NOTIFICATIONS ============
@@ -153,20 +164,22 @@ model Notification {
   userId    String
   type      String   // submission_graded, new_submission, etc.
   title     String
-  message   String
+  message   String   @db.Text
   link      String?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   // Relations
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ============ CLASSROOMS ============
 model Classroom {
   id          String   @id @default(cuid())
   name        String
-  description String?
+  description String?  @db.Text
   code        String   @unique // Mã lớp để học sinh tham gia
   teacherId   String
   createdAt   DateTime @default(now())
@@ -175,6 +188,8 @@ model Classroom {
   // Relations
   teacher     User     @relation("TeacherClassrooms", fields: [teacherId], references: [id])
   students    ClassroomStudent[]
+
+  @@index([teacherId])
 }
 
 model ClassroomStudent {
@@ -188,13 +203,26 @@ model ClassroomStudent {
   student     User      @relation("StudentClassrooms", fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([classroomId, studentId])
+  @@index([classroomId])
+  @@index([studentId])
 }
 
 // ============ SETTINGS ============
 model Setting {
   id        String   @id @default(cuid())
   key       String   @unique
-  value     String
+  value     String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============ PASSWORD RESET (OTP) ============
+model PasswordReset {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String   // 6-digit numeric code
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
 }

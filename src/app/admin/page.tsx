@@ -68,6 +68,9 @@ export default async function AdminPage() {
               Chấm bài
               {pendingSubmissions > 0 && <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-xs">{pendingSubmissions}</span>}
             </Link>
+            <Link href="/admin/submissions" className="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm whitespace-nowrap">
+              Bài tập
+            </Link>
             <Link href="/admin/lessons" className="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm whitespace-nowrap">
               Bài giảng
             </Link>

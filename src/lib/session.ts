@@ -44,7 +44,7 @@ export async function requireAuth() {
 export async function requireTeacher() {
   const session = await requireAuth();
   if (session.role !== "teacher" && session.role !== "admin") {
-    redirect("/dashboard");
+    redirect("/");
   }
   return session;
 }
@@ -52,7 +52,7 @@ export async function requireTeacher() {
 export async function requireAdmin() {
   const session = await requireAuth();
   if (session.role !== "admin") {
-    redirect("/dashboard");
+    redirect("/");
   }
   return session;
 }
