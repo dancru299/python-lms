@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Editor } from "@tinymce/tinymce-react";
 
 interface Section {
   id: string;
@@ -213,8 +214,13 @@ print(solution)
 
 function NewLessonContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const preselectedChapter = searchParams.get("chapterId") || "";
+  const params = useSearchParams();
+  const chapterIdParam = params.get("chapterId");
+
+  const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
+  const [aiContent, setAiContent] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const editorRef = useRef<any>(null);
 
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [saving, setSaving] = useState(false);
@@ -224,7 +230,7 @@ function NewLessonContent() {
 
   // Form state
   const [formData, setFormData] = useState({
-    chapterId: preselectedChapter,
+    chapterId: chapterIdParam || "",
     title: "",
     duration: 120,
     difficulty: "beginner",
@@ -251,6 +257,10 @@ function NewLessonContent() {
         if (res.ok) {
           const data = await res.json();
           setChapters(data);
+
+          if (chapterIdParam) {
+            setFormData((prev) => ({ ...prev, chapterId: chapterIdParam }));
+          }
         }
       } catch (error) {
         console.error("Failed to load chapters:", error);
@@ -331,7 +341,77 @@ function NewLessonContent() {
   };
 
   const removeExercise = (id: string) => {
-    setExercises(exercises.filter((e) => e.id !== id));
+    setExercises(exercises.filter((exercise) => exercise.id !== id));
+  };
+
+  const handleAiGenerate = async () => {
+    if (!aiContent.trim()) {
+      alert("Vui lòng nhập nội dung để AI phân tích!");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const res = await fetch("/api/admin/lessons/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: aiContent }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Lỗi khi gọi AI API");
+      }
+
+      const generatedData = await res.json();
+
+      // Update Form Data
+      setFormData((prev) => ({
+        ...prev,
+        title: generatedData.title || prev.title,
+        duration: parseInt(generatedData.duration) || 120,
+        difficulty: generatedData.difficulty || "beginner",
+        objectives: {
+          knowledge: generatedData.objectives?.knowledge || "",
+          skills: generatedData.objectives?.skills || "",
+          attitude: generatedData.objectives?.attitude || "",
+        },
+      }));
+
+      // Update Sections
+      if (generatedData.sections && Array.isArray(generatedData.sections)) {
+        const newSections = generatedData.sections.map((sec: any, idx: number) => ({
+          id: `sec-ai-${Date.now()}-${idx}`,
+          title: sec.title || `Phần ${idx + 1}`,
+          content: sec.content || "",
+        }));
+        setSections(newSections);
+      }
+
+      // Update Exercises
+      if (generatedData.exercises && Array.isArray(generatedData.exercises)) {
+        const newExercises = generatedData.exercises.map((ex: any, idx: number) => ({
+          id: `ex-ai-${Date.now()}-${idx}`,
+          type: ex.type || "practice",
+          title: ex.title || "Bài tập AI",
+          question: ex.question || "",
+          answer: ex.answer || "",
+          difficulty: ex.difficulty || "medium",
+          points: parseInt(ex.points) || 10,
+          answerVisible: ex.answerVisible || false,
+        }));
+        setExercises(newExercises);
+      }
+
+      // Chuyển về tab manual để user review
+      setCreationMode("manual");
+
+    } catch (error: any) {
+      alert("Đã xảy ra lỗi khi tạo bằng AI: " + error.message);
+      console.error(error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   // Quick insert helpers
@@ -409,6 +489,92 @@ function NewLessonContent() {
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         
+        {/* Mode Selector Tabs */}
+        <div className="flex p-1 bg-gray-200 rounded-lg w-max mx-auto mb-8">
+          <button
+            onClick={() => setCreationMode("manual")}
+            className={`px-6 py-2.5 rounded-md font-medium text-sm transition-all ${
+              creationMode === "manual"
+                ? "bg-white text-indigo-600 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <i className="fa-solid fa-pen-nib mr-2"></i>
+            Tạo thủ công / Xem trước
+          </button>
+          <button
+            onClick={() => setCreationMode("ai")}
+            className={`px-6 py-2.5 rounded-md font-medium text-sm transition-all flex items-center gap-2 ${
+              creationMode === "ai"
+                ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <i className="fa-solid fa-wand-magic-sparkles"></i>
+            AI tạo bài giảng
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 font-bold uppercase tracking-wider">Mới</span>
+          </button>
+        </div>
+
+        {creationMode === "ai" && (
+          <div className="card p-6 border-2 border-purple-100 shadow-purple-50 animate-fade-in">
+            <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-robot"></i>
+              </span>
+              Nhập nội dung thô
+            </h2>
+            <p className="text-gray-500 mb-6">
+              Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Hệ thống AI (Gemini) sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn.
+            </p>
+
+            <div className="border border-gray-300 rounded-lg overflow-hidden mb-6">
+              <Editor
+                apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY}
+                onInit={(evt, editor) => (editorRef.current = editor)}
+                initialValue={aiContent}
+                init={{
+                  height: 500,
+                  menubar: false,
+                  plugins: [
+                    'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+                    'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                    'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
+                  ],
+                  toolbar: 'undo redo | blocks | ' +
+                    'bold italic forecolor | alignleft aligncenter ' +
+                    'alignright alignjustify | bullist numlist outdent indent | ' +
+                    'removeformat | help',
+                  content_style: 'body { font-family:Helvetica,Arial,sans-serif; font-size:14px }',
+                  branding: false,
+                }}
+                onEditorChange={(content) => setAiContent(content)}
+              />
+            </div>
+
+            <div className="bg-purple-50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-purple-800">
+                <i className="fa-solid fa-circle-info mr-2"></i>
+                Sau khi phân tích, hệ thống sẽ tự động chuyển về chế độ <strong>Tạo thủ công</strong> để bạn xem trước và chỉnh sửa kết quả. Khóa học chưa được lưu cho đến khi bạn bấm <strong>"Lưu bài giảng"</strong>.
+              </div>
+              <button
+                onClick={handleAiGenerate}
+                disabled={isGenerating}
+                className="btn btn-primary whitespace-nowrap bg-gradient-to-r from-purple-600 to-indigo-600 border-none shadow-md hover:shadow-lg disabled:opacity-70"
+              >
+                {isGenerating ? (
+                  <><i className="fa-solid fa-spinner fa-spin mr-2"></i> Đang phân tích...</>
+                ) : (
+                  <><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Tự động điền</>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CÁC PHẦN DƯỚI ĐÂY LÀ CHẾ ĐỘ THỦ CÔNG */}
+        <div className={creationMode !== "manual" ? "hidden" : "space-y-6 animate-fade-in"}>
+
         {/* Section 1: Basic Info */}
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -756,6 +922,10 @@ function NewLessonContent() {
             )}
           </button>
         </div>
+        
+        </div>
+        {/* End of manual wrapper */}
+
       </main>
 
       {/* Template Modal */}

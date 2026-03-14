@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { Editor } from "@tinymce/tinymce-react";
 
 interface Section {
   id: string;
@@ -128,6 +129,11 @@ export default function EditLessonPage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateTargetSection, setTemplateTargetSection] = useState<string | null>(null);
+
+  // AI Generation State
+  const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
+  const [aiContent, setAiContent] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -279,6 +285,75 @@ export default function EditLessonPage() {
     }
   };
 
+  // AI Generaton Handler
+  const handleAIGenerate = async () => {
+    if (!aiContent.trim()) {
+      alert("Vui lòng nhập nội dung bài giảng để AI xử lý!");
+      return;
+    }
+    
+    setIsGenerating(true);
+    try {
+      const res = await fetch("/api/admin/lessons/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: aiContent })
+      });
+      
+      if (!res.ok) {
+        throw new Error("Lỗi khi gọi API AI");
+      }
+      
+      const data = await res.json();
+      
+      if (data.lessonInfo) {
+        setFormData(prev => ({
+          ...prev,
+          title: data.lessonInfo.title || prev.title,
+          duration: data.lessonInfo.duration || prev.duration,
+          difficulty: data.lessonInfo.difficulty || prev.difficulty,
+          objectives: {
+            knowledge: data.lessonInfo.objectiveKnowledge || prev.objectives.knowledge,
+            skills: data.lessonInfo.objectiveSkills || prev.objectives.skills,
+            attitude: data.lessonInfo.objectiveAttitude || prev.objectives.attitude
+          }
+        }));
+      }
+      
+      if (data.sections && data.sections.length > 0) {
+        const mappedSections = data.sections.map((s: any) => ({
+          id: `ai-sec-${Date.now()}-${Math.random()}`,
+          title: s.title,
+          content: s.content
+        }));
+        setSections(mappedSections);
+      }
+      
+      if (data.exercises && data.exercises.length > 0) {
+        const mappedExercises = data.exercises.map((e: any) => ({
+          id: `ai-ex-${Date.now()}-${Math.random()}`,
+          type: e.type as "practice" | "homework",
+          title: e.title,
+          question: e.question,
+          answer: e.answer,
+          difficulty: e.difficulty as "easy" | "medium" | "hard",
+          points: e.points,
+          answerVisible: e.answerVisible || false
+        }));
+        setExercises(mappedExercises);
+      }
+      
+      alert("AI đã xử lý xong! Bạn hãy kiểm tra lại cấu trúc trong chế độ thủ công.");
+      setCreationMode("manual");
+      
+    } catch (error) {
+      console.error(error);
+      alert("Quá trình AI tạo bài giảng gặp lỗi. Vui lòng thử lại.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // Save lesson
   const handleSave = async () => {
     if (!formData.chapterId) {
@@ -348,11 +423,15 @@ export default function EditLessonPage() {
               <Link href={`/lessons/${lessonId}`} target="_blank" className="btn btn-secondary">
                 <i className="fa-solid fa-eye"></i> Xem trước
               </Link>
-              <button onClick={handleSave} disabled={saving} className="btn btn-success">
-                {saving ? (
-                  <><i className="fa-solid fa-spinner fa-spin"></i> Đang lưu...</>
+              <button 
+                onClick={creationMode === "ai" ? handleAIGenerate : handleSave} 
+                disabled={saving || isGenerating} 
+                className="btn btn-success"
+              >
+                {creationMode === "ai" ? (
+                  isGenerating ? <><i className="fa-solid fa-spinner fa-spin"></i> Đang xử lý...</> : <><i className="fa-solid fa-wand-magic-sparkles"></i> Sinh bài giảng</>
                 ) : (
-                  <><i className="fa-solid fa-save"></i> Lưu thay đổi</>
+                  saving ? <><i className="fa-solid fa-spinner fa-spin"></i> Đang lưu...</> : <><i className="fa-solid fa-save"></i> Lưu thay đổi</>
                 )}
               </button>
             </div>
@@ -361,7 +440,83 @@ export default function EditLessonPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        {/* Toggle Mode */}
+        <div className="flex bg-white shadow-sm rounded-lg p-1 border border-gray-200 mx-auto w-fit mb-6">
+          <button
+            onClick={() => setCreationMode("manual")}
+            className={`px-6 py-2 rounded-md font-medium text-sm transition-colors ${
+              creationMode === "manual" 
+                ? "bg-indigo-50 text-indigo-700 shadow-sm" 
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            <i className="fa-solid fa-pen-nib mr-2"></i>
+            Chỉnh sửa tự do
+          </button>
+          <button
+            onClick={() => setCreationMode("ai")}
+            className={`px-6 py-2 rounded-md font-medium text-sm transition-colors ${
+              creationMode === "ai" 
+                ? "bg-purple-50 text-purple-700 shadow-sm" 
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            <i className="fa-solid fa-robot mr-2"></i>
+            AI phân tích dữ liệu mới
+          </button>
+        </div>
         
+        {creationMode === "ai" ? (
+          <div className="card p-6 border-2 border-purple-100 bg-purple-50/30">
+            <h2 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-paste"></i>
+              </span>
+              Nhập nội dung thô (AI Auto Parse)
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Dán bất kỳ nội dung văn bản giáo án, slide, hoặc tài liệu thô vào đây. AI sẽ tự động phân tích và chia thành nội dung, mục tiêu, cũng như sinh bài tập tương đương. Nội dung cũ sẽ bị ghi đè các tham số nếu sinh thành công.
+            </p>
+            
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mb-4">
+              <Editor
+                apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY}
+                init={{
+                  height: 500,
+                  menubar: false,
+                  plugins: [
+                    'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+                    'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                    'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
+                  ],
+                  toolbar: 'undo redo | blocks | ' +
+                    'bold italic forecolor | alignleft aligncenter ' +
+                    'alignright alignjustify | bullist numlist outdent indent | ' +
+                    'removeformat | help',
+                  content_style: 'body { font-family:Helvetica,Arial,sans-serif; font-size:14px }',
+                  placeholder: "Dán nội dung giáo án thô vào đây..."
+                }}
+                value={aiContent}
+                onEditorChange={(content) => setAiContent(content)}
+              />
+            </div>
+            
+            <div className="flex justify-end">
+              <button 
+                onClick={handleAIGenerate}
+                disabled={isGenerating || !aiContent}
+                className="btn bg-purple-600 hover:bg-purple-700 text-white font-medium"
+              >
+                {isGenerating ? (
+                  <><i className="fa-solid fa-spinner fa-spin mr-2"></i> AI đang phân tích...</>
+                ) : (
+                  <><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Phân tích cấu trúc</>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Section 1: Basic Info */}
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -561,6 +716,127 @@ export default function EditLessonPage() {
                     <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-100">
                       <span className="text-xs text-gray-500 mr-2">Chèn:</span>
                       
+                      {/* Template Button */}
+                      <button
+                        type="button"
+                        onClick={() => openTemplateModal(section.id)}
+                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium"
+                      >
+                        <i className="fa-solid fa-wand-magic-sparkles mr-1"></i> Mẫu
+                      </button>
+                      
+                      <div className="w-px h-6 bg-gray-200"></div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => insertContent(section.id, `<div class="code-block">\n# Code ở đây\nprint("Hello")\n</div>`)}
+                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                      >
+                        <i className="fa-solid fa-code mr-1"></i> Code
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertContent(section.id, `<table>\n  <thead>\n    <tr>\n      <th>Cột 1</th>\n      <th>Cột 2</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>Dữ liệu</td>\n      <td>Dữ liệu</td>\n    </tr>\n  </tbody>\n</table>`)}
+                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                      >
+                        <i className="fa-solid fa-table mr-1"></i> Bảng
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertContent(section.id, `<ul>\n  <li>Mục 1</li>\n  <li>Mục 2</li>\n</ul>`)}
+                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                      >
+                        <i className="fa-solid fa-list mr-1"></i> List
+                      </button>
+                    </div>
+
+                    <textarea
+                      value={section.content}
+                      onChange={(e) => updateSection(section.id, "content", e.target.value)}
+                      placeholder="Nội dung HTML..."
+                      className="input min-h-[300px] font-mono text-sm"
+                      style={{ whiteSpace: "pre-wrap" }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-lg flex items-center justify-center">
+                <i className="fa-solid fa-layer-group"></i>
+              </span>
+              Nội dung bài giảng ({sections.length} tabs)
+            </h2>
+            <button onClick={addSection} className="btn btn-secondary text-sm">
+              <i className="fa-solid fa-plus"></i> Thêm tab
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {sections.map((section, index) => (
+              <div
+                key={section.id}
+                className={`border rounded-lg overflow-hidden transition-all ${
+                  activeSection === section.id ? "border-indigo-500 shadow-md" : "border-gray-200"
+                }`}
+              >
+                {/* Section Header */}
+                <div
+                  className="flex items-center justify-between p-3 bg-gray-50 cursor-pointer"
+                  onClick={() => setActiveSection(activeSection === section.id ? null : section.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
+                      {index + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={section.title}
+                      onChange={(e) => { e.stopPropagation(); updateSection(section.id, "title", e.target.value); }}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="Tên tab"
+                      className="font-medium text-gray-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveSection(section.id, "up"); }}
+                      disabled={index === 0}
+                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                    >
+                      <i className="fa-solid fa-chevron-up"></i>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveSection(section.id, "down"); }}
+                      disabled={index === sections.length - 1}
+                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                    >
+                      <i className="fa-solid fa-chevron-down"></i>
+                    </button>
+                    {sections.length > 1 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeSection(section.id); }}
+                        className="p-1 text-red-400 hover:text-red-600"
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                    )}
+                    <i className={`fa-solid fa-chevron-${activeSection === section.id ? "up" : "down"} text-gray-400`}></i>
+                  </div>
+                </div>
+
+                {/* Section Content Editor */}
+                {activeSection === section.id && (
+                  <div className="p-4 border-t border-gray-200 bg-white">
+                    {/* Toolbar */}
+                    <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+                      <span className="text-xs text-gray-500 mr-2">Chèn:</span>
+                      
                       <button
                         type="button"
                         onClick={() => openTemplateModal(section.id)}
@@ -676,6 +952,8 @@ export default function EditLessonPage() {
             )}
           </button>
         </div>
+        </>
+        )}
       </main>
 
       {/* Template Modal */}
