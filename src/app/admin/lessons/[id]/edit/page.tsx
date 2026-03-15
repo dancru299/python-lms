@@ -440,42 +440,43 @@ export default function EditLessonPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-        {/* Toggle Mode */}
-        <div className="flex bg-white shadow-sm rounded-lg p-1 border border-gray-200 mx-auto w-fit mb-6">
+        {/* Mode Selector Tabs */}
+        <div className="flex p-1 bg-gray-200 rounded-lg w-max mx-auto mb-8">
           <button
             onClick={() => setCreationMode("manual")}
-            className={`px-6 py-2 rounded-md font-medium text-sm transition-colors ${
-              creationMode === "manual" 
-                ? "bg-indigo-50 text-indigo-700 shadow-sm" 
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            className={`px-6 py-2.5 rounded-md font-medium text-sm transition-all ${
+              creationMode === "manual"
+                ? "bg-white text-indigo-600 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
             }`}
           >
             <i className="fa-solid fa-pen-nib mr-2"></i>
-            Chỉnh sửa tự do
+            Tạo thủ công / Xem trước
           </button>
           <button
             onClick={() => setCreationMode("ai")}
-            className={`px-6 py-2 rounded-md font-medium text-sm transition-colors ${
-              creationMode === "ai" 
-                ? "bg-purple-50 text-purple-700 shadow-sm" 
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            className={`px-6 py-2.5 rounded-md font-medium text-sm transition-all flex items-center gap-2 ${
+              creationMode === "ai"
+                ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-200"
+                : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            <i className="fa-solid fa-robot mr-2"></i>
-            AI phân tích dữ liệu mới
+            <i className="fa-solid fa-wand-magic-sparkles"></i>
+            AI tạo bài giảng
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 font-bold uppercase tracking-wider">Mới</span>
           </button>
         </div>
         
         {creationMode === "ai" ? (
-          <div className="card p-6 border-2 border-purple-100 bg-purple-50/30">
-            <h2 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
-                <i className="fa-solid fa-paste"></i>
+          <div className="card p-8 border-none bg-gradient-to-br from-purple-50 via-white to-indigo-50 shadow-xl shadow-purple-100 animate-fade-in ring-1 ring-purple-100">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+              <span className="w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-purple-200">
+                <i className="fa-solid fa-wand-magic-sparkles"></i>
               </span>
-              Nhập nội dung thô (AI Auto Parse)
+              AI Trợ Lý Soạn Bài Giảng
             </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Dán bất kỳ nội dung văn bản giáo án, slide, hoặc tài liệu thô vào đây. AI sẽ tự động phân tích và chia thành nội dung, mục tiêu, cũng như sinh bài tập tương đương. Nội dung cũ sẽ bị ghi đè các tham số nếu sinh thành công.
+            <p className="text-gray-500 mb-6">
+              Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Hệ thống AI (Gemini) sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn. Nội dung cũ sẽ bị ghi đè các tham số nếu sinh thành công.
             </p>
             
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mb-4">
@@ -501,22 +502,26 @@ export default function EditLessonPage() {
               />
             </div>
             
-            <div className="flex justify-end">
+            <div className="bg-purple-50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-purple-800">
+                <i className="fa-solid fa-circle-info mr-2"></i>
+                Sau khi phân tích, hệ thống sẽ tự động chuyển về chế độ <strong>Tạo thủ công</strong> để bạn xem trước và chỉnh sửa kết quả. Bài giảng sẽ chỉ được cập nhật khi bạn bấm <strong>"Lưu thay đổi"</strong>.
+              </div>
               <button 
                 onClick={handleAIGenerate}
                 disabled={isGenerating || !aiContent}
-                className="btn bg-purple-600 hover:bg-purple-700 text-white font-medium"
+                className="btn btn-primary whitespace-nowrap bg-gradient-to-r from-purple-600 to-indigo-600 border-none shadow-md hover:shadow-lg disabled:opacity-70"
               >
                 {isGenerating ? (
-                  <><i className="fa-solid fa-spinner fa-spin mr-2"></i> AI đang phân tích...</>
+                  <><i className="fa-solid fa-spinner fa-spin mr-2"></i> Đang phân tích...</>
                 ) : (
-                  <><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Phân tích cấu trúc</>
+                  <><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Tự động điền</>
                 )}
               </button>
             </div>
           </div>
         ) : (
-          <>
+          <div className="space-y-6 animate-fade-in">
         {/* Section 1: Basic Info */}
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -764,126 +769,6 @@ export default function EditLessonPage() {
           </div>
         </div>
 
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-lg flex items-center justify-center">
-                <i className="fa-solid fa-layer-group"></i>
-              </span>
-              Nội dung bài giảng ({sections.length} tabs)
-            </h2>
-            <button onClick={addSection} className="btn btn-secondary text-sm">
-              <i className="fa-solid fa-plus"></i> Thêm tab
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {sections.map((section, index) => (
-              <div
-                key={section.id}
-                className={`border rounded-lg overflow-hidden transition-all ${
-                  activeSection === section.id ? "border-indigo-500 shadow-md" : "border-gray-200"
-                }`}
-              >
-                {/* Section Header */}
-                <div
-                  className="flex items-center justify-between p-3 bg-gray-50 cursor-pointer"
-                  onClick={() => setActiveSection(activeSection === section.id ? null : section.id)}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
-                      {index + 1}
-                    </span>
-                    <input
-                      type="text"
-                      value={section.title}
-                      onChange={(e) => { e.stopPropagation(); updateSection(section.id, "title", e.target.value); }}
-                      onClick={(e) => e.stopPropagation()}
-                      placeholder="Tên tab"
-                      className="font-medium text-gray-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveSection(section.id, "up"); }}
-                      disabled={index === 0}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <i className="fa-solid fa-chevron-up"></i>
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveSection(section.id, "down"); }}
-                      disabled={index === sections.length - 1}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <i className="fa-solid fa-chevron-down"></i>
-                    </button>
-                    {sections.length > 1 && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeSection(section.id); }}
-                        className="p-1 text-red-400 hover:text-red-600"
-                      >
-                        <i className="fa-solid fa-trash"></i>
-                      </button>
-                    )}
-                    <i className={`fa-solid fa-chevron-${activeSection === section.id ? "up" : "down"} text-gray-400`}></i>
-                  </div>
-                </div>
-
-                {/* Section Content Editor */}
-                {activeSection === section.id && (
-                  <div className="p-4 border-t border-gray-200 bg-white">
-                    {/* Toolbar */}
-                    <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-100">
-                      <span className="text-xs text-gray-500 mr-2">Chèn:</span>
-                      
-                      <button
-                        type="button"
-                        onClick={() => openTemplateModal(section.id)}
-                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium"
-                      >
-                        <i className="fa-solid fa-wand-magic-sparkles mr-1"></i> Mẫu
-                      </button>
-                      
-                      <div className="w-px h-6 bg-gray-200"></div>
-                      
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<div class="code-block">\n# Code ở đây\nprint("Hello")\n</div>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-code mr-1"></i> Code
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<table>\n  <thead>\n    <tr>\n      <th>Cột 1</th>\n      <th>Cột 2</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>Dữ liệu</td>\n      <td>Dữ liệu</td>\n    </tr>\n  </tbody>\n</table>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-table mr-1"></i> Bảng
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<ul>\n  <li>Mục 1</li>\n  <li>Mục 2</li>\n</ul>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-list mr-1"></i> List
-                      </button>
-                    </div>
-
-                    <textarea
-                      value={section.content}
-                      onChange={(e) => updateSection(section.id, "content", e.target.value)}
-                      placeholder="Nội dung HTML..."
-                      className="input min-h-[300px] font-mono text-sm"
-                      style={{ whiteSpace: "pre-wrap" }}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Section 3: Exercises */}
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
@@ -952,7 +837,7 @@ export default function EditLessonPage() {
             )}
           </button>
         </div>
-        </>
+        </div>
         )}
       </main>
 

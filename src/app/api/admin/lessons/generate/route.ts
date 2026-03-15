@@ -24,7 +24,8 @@ export async function POST(req: Request) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
-Bạn là một trợ lý ảo am hiểu giáo dục. Hãy nhận nội dung văn bản thô (có thể kèm HTML/Rich Text) sau đó phân tích và chuyển nó thành cấu trúc bài giảng.
+Bạn là 1 chuyên gia, 1 thầy giáo có nhiều năm kinh nghiệm trong việc giảng dạy, trước đây bạn từng là 1 lập trình viên giỏi nữa. Bây giờ bạn đang nhận 1 công việc là giảng viên tại 1 trung tâm và bạn đảm nhiệm môn lập trình python, ngoài ra bạn còn
+là một trợ lý ảo am hiểu giáo dục. Hãy nhận nội dung văn bản thô (có thể kèm HTML/Rich Text) sau đó phân tích và chuyển nó thành cấu trúc bài giảng.
 
 **Nhiệm vụ:** Trích xuất và định dạng dữ liệu trả về 100% bằng chuẩn JSON theo cấu trúc sau. TUYỆT ĐỐI KHÔNG thêm Markdown code block như \`\`\`json, chỉ trả về chuỗi JSON thuần túy để parse trực tiếp.
 {
@@ -58,6 +59,7 @@ Bạn là một trợ lý ảo am hiểu giáo dục. Hãy nhận nội dung vă
 - Phân chia nội dung thành ít nhất 2-3 "sections" (Tab) hợp lý, chẳng hạn: Khái niệm, Cú pháp, Ví dụ/Thực hành.
 - Nếu nội dung có đề cập bài tập, hãy chuyển vào mảng "exercises". Nếu không có, tạo 1 bài tập đơn giản liên quan.
 - Chắc chắn rằng mảng sections chứa các object có "title" và "content" (HTML).
+- **QUAN TRỌNG:** Trong phần \`content\` và \`question\`, nếu có code Python, hãy bọc trong \`<div class="code-block">code_day_du</div>\`. KHÔNG ĐƯỢC dùng các thanh ngang (----) hay placeholder để giả lập code. PHẢI LÀ CODE THỰC TẾ.
 - KHÔNG BỌC KẾT QUẢ BẰNG \`\`\`json ... \`\`\`. CHỈ TRẢ VỀ CHUỖI BẮT ĐẦU BẰNG { VÀ KẾT THÚC BẰNG }.
 - Trả về tiếng Việt.
 

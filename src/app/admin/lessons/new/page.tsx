@@ -517,12 +517,12 @@ function NewLessonContent() {
         </div>
 
         {creationMode === "ai" && (
-          <div className="card p-6 border-2 border-purple-100 shadow-purple-50 animate-fade-in">
-            <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
-              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
-                <i className="fa-solid fa-robot"></i>
+          <div className="card p-8 border-none bg-gradient-to-br from-purple-50 via-white to-indigo-50 shadow-xl shadow-purple-100 animate-fade-in ring-1 ring-purple-100">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+              <span className="w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-purple-200">
+                <i className="fa-solid fa-wand-magic-sparkles"></i>
               </span>
-              Nhập nội dung thô
+              AI Trợ Lý Soạn Bài Giảng
             </h2>
             <p className="text-gray-500 mb-6">
               Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Hệ thống AI (Gemini) sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn.

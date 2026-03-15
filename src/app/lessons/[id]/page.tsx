@@ -104,18 +104,36 @@ function DonutChart({ data }: { data: { label: string; value: number; color: str
   );
 }
 
-// Helper function to trim whitespace inside code-blocks
+// Highlight Python (#) and block (/* */) comments inside code-blocks
+function highlightComments(code: string): string {
+  // Escape HTML entities in raw text to prevent XSS
+  const lines = code.split('\n');
+  return lines.map(line => {
+    // Check for Python-style comment: # ...
+    const hashIdx = line.indexOf('#');
+    if (hashIdx !== -1) {
+      // Make sure # isn't inside a string (basic check)
+      const before = line.substring(0, hashIdx);
+      const comment = line.substring(hashIdx);
+      return `${before}<span class="code-comment">${comment}</span>`;
+    }
+    return line;
+  }).join('\n')
+    // Block comments /* ... */ (single-line for simplicity)
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => `<span class="code-comment">${m}</span>`);
+}
+
+// Helper function to trim whitespace inside code-blocks and apply syntax highlighting
 function processCodeBlocks(html: string): string {
   if (!html) return html;
-  // Match <div class="code-block">...</div> and trim the content inside
   return html.replace(
     /<div\s+class="code-block">([\s\S]*?)<\/div>/gi,
     (match, content) => {
-      // Remove leading/trailing whitespace and empty first/last lines
-      const trimmedContent = content
-        .replace(/^[\s\n]+/, '') // Remove leading whitespace/newlines
-        .replace(/[\s\n]+$/, ''); // Remove trailing whitespace/newlines
-      return `<div class="code-block">${trimmedContent}</div>`;
+      const trimmed = content
+        .replace(/^[\s\n]+/, '')
+        .replace(/[\s\n]+$/, '');
+      const highlighted = highlightComments(trimmed);
+      return `<div class="code-block">${highlighted}</div>`;
     }
   );
 }
@@ -540,53 +558,101 @@ export default function LessonPage() {
       </footer>
 
       <style jsx global>{`
-        .lesson-content h2 { font-size: 1.5rem; font-weight: 600; color: #1d4ed8; margin-top: 1.5rem; margin-bottom: 0.75rem; }
-        .lesson-content h3 { font-size: 1.25rem; font-weight: 600; color: #1f2937; margin-top: 1.25rem; margin-bottom: 0.5rem; }
-        .lesson-content p { color: #374151; margin-bottom: 0.75rem; line-height: 1.7; }
-        .lesson-content ul { 
-          padding-left: 0; 
-          margin-bottom: 1rem; 
-          list-style: none; 
+        /* ===== LESSON CONTENT TYPOGRAPHY ===== */
+
+        /* Headings: H2 - section title (blue accent bar) */
+        .lesson-content h2 {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1e3a8a;
+          margin-top: 2rem;
+          margin-bottom: 0.75rem;
+          padding-bottom: 0.5rem;
+          border-bottom: 3px solid #3b82f6;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
         }
-        .lesson-content ol { 
-          padding-left: 1.75rem; 
-          margin-bottom: 1rem; 
-          list-style-type: decimal; 
+
+        /* Headings: H3 - sub-section (left accent bar) */
+        .lesson-content h3 {
+          font-size: 1.2rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin-top: 1.5rem;
+          margin-bottom: 0.5rem;
+          padding-left: 0.75rem;
+          border-left: 4px solid #6366f1;
         }
-        .lesson-content ul > li { 
-          color: #374151; 
-          margin-bottom: 0.625rem; 
-          line-height: 1.7; 
-          padding-left: 1.5rem;
+
+        /* H4 - minor heading */
+        .lesson-content h4 {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #374151;
+          margin-top: 1.25rem;
+          margin-bottom: 0.375rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          font-size: 0.875rem;
+        }
+
+        /* Paragraphs */
+        .lesson-content p {
+          color: #374151;
+          margin-bottom: 0.9rem;
+          line-height: 1.8;
+          font-size: 0.975rem;
+        }
+
+        /* Unordered list */
+        .lesson-content ul {
+          padding-left: 0;
+          margin-bottom: 1.1rem;
+          list-style: none;
+        }
+
+        /* Ordered list */
+        .lesson-content ol {
+          padding-left: 1.75rem;
+          margin-bottom: 1.1rem;
+          list-style-type: decimal;
+        }
+
+        .lesson-content ul > li {
+          color: #374151;
+          margin-bottom: 0.6rem;
+          line-height: 1.75;
+          padding-left: 1.6rem;
           position: relative;
         }
         .lesson-content ul > li::before {
           content: '';
           position: absolute;
           left: 0;
-          top: 0.5rem;
-          width: 6px;
-          height: 6px;
+          top: 0.6rem;
+          width: 7px;
+          height: 7px;
           background: #3b82f6;
           border-radius: 50%;
         }
         .lesson-content ol > li {
-          color: #374151; 
-          margin-bottom: 0.625rem; 
-          line-height: 1.7;
-          padding-left: 0.5rem;
+          color: #374151;
+          margin-bottom: 0.6rem;
+          line-height: 1.75;
+          padding-left: 0.4rem;
         }
         .lesson-content ol > li::marker {
           color: #3b82f6;
-          font-weight: 600;
+          font-weight: 700;
         }
-        .lesson-content ul ul { 
-          margin-top: 0.5rem;
+        .lesson-content ul ul {
+          margin-top: 0.4rem;
           margin-left: 0.5rem;
         }
         .lesson-content ul ul > li::before {
           background: transparent;
-          border: 1.5px solid #60a5fa;
+          border: 2px solid #60a5fa;
           width: 5px;
           height: 5px;
         }
@@ -597,22 +663,99 @@ export default function LessonPage() {
           height: 4px;
           border-radius: 1px;
         }
-        .lesson-content ol ol { 
-          list-style-type: lower-alpha; 
-          margin-top: 0.5rem; 
+        .lesson-content ol ol {
+          list-style-type: lower-alpha;
+          margin-top: 0.4rem;
+        }
+
+        /* Bold/Strong text */
+        .lesson-content strong, .lesson-content b {
+          color: #1e3a8a;
+          font-weight: 700;
         }
         .lesson-content li strong {
           color: #1e40af;
         }
-        .lesson-content code { background: #e5e7eb; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-family: 'Courier New', monospace; font-size: 0.9em; }
-        .lesson-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; border: 1px solid #d1d5db; }
-        .lesson-content th { background: #f3f4f6; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 1px solid #d1d5db; }
-        .lesson-content td { padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; }
-        .lesson-content .code-block, .lesson-content pre, .code-block {
-          background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem;
-          overflow-x: auto; font-family: 'Courier New', monospace; font-size: 0.875rem;
-          line-height: 1.6; margin: 1rem 0; white-space: pre-wrap; word-wrap: break-word;
+
+        /* Inline code highlighting */
+        .lesson-content code {
+          background: #eff6ff;
+          color: #1d4ed8;
+          padding: 0.15rem 0.45rem;
+          border-radius: 0.3rem;
+          font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 0.875em;
+          border: 1px solid #bfdbfe;
+          font-weight: 500;
         }
+
+        /* Blockquote / Note */
+        .lesson-content blockquote {
+          border-left: 4px solid #6366f1;
+          background: #f5f3ff;
+          padding: 0.75rem 1.25rem;
+          border-radius: 0 0.5rem 0.5rem 0;
+          color: #4c1d95;
+          margin: 1.25rem 0;
+          font-style: italic;
+        }
+
+        /* Table */
+        .lesson-content table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1.25rem 0;
+          border-radius: 0.5rem;
+          overflow: hidden;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .lesson-content th {
+          background: #1e3a8a;
+          color: #fff;
+          padding: 0.75rem 1rem;
+          text-align: left;
+          font-weight: 600;
+          font-size: 0.9rem;
+          letter-spacing: 0.03em;
+        }
+        .lesson-content td {
+          padding: 0.7rem 1rem;
+          border-bottom: 1px solid #e5e7eb;
+          font-size: 0.9rem;
+        }
+        .lesson-content tr:nth-child(even) td {
+          background: #f8fafc;
+        }
+
+        /* Code block */
+        .lesson-content .code-block, .lesson-content pre, .code-block {
+          background: #1f1f1f;
+          color: #f8fafc;
+          padding: 1.25rem 1.5rem;
+          border-radius: 0.5rem;
+          overflow-x: auto;
+          font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 0.875rem;
+          line-height: 1.75;
+          margin: 1.25rem 0;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          letter-spacing: 0.01em;
+        }
+        .code-block *, .code-block code {
+          background: transparent !important;
+          padding: 0 !important;
+          border-radius: 0 !important;
+          border: none !important;
+          color: inherit;
+          font-size: inherit;
+        }
+        /* Comment color blue (applied by highlightComments JS function) */
+        .code-comment {
+          color: #60a5fa;
+          font-style: italic;
+        }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
       `}</style>

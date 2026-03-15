@@ -11,7 +11,7 @@
 }
 
 body {
-  font-family: var(--font-inter), system-ui, sans-serif;
+  font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   background: #f8fafc;
 }
 
@@ -21,7 +21,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-outfit), system-ui, sans-serif;
+  font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* Custom scrollbar */
@@ -45,13 +45,31 @@ h6 {
 
 /* Code block styling */
 .code-block {
-  background: #1e293b;
-  color: #e2e8f0;
-  padding: 1rem;
+  background: #1f1f1f;
+  color: #f8fafc;
+  padding: 1.25rem 1.5rem;
   border-radius: 0.5rem;
   overflow-x: auto;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 0.875rem;
+  font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 1.25rem 0;
+  letter-spacing: 0.01em;
+}
+
+/* Comment highlighting inside code blocks (applied via JS) */
+.code-block .code-comment {
+  color: #569955; /* bright blue */
+  font-style: italic;
+}
+
+/* Reset nested styles */
+.code-block *, .code-block code {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
 }
 
 /* Animation utilities */
