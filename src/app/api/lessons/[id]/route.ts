@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           orderBy: { sortOrder: "asc" },
           include: {
             submissions: user ? {
-              where: { userId: user.id },
+              where: { userId: user.userId },
               orderBy: { createdAt: "desc" },
               take: 1,
             } : false,

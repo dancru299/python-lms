@@ -28,13 +28,13 @@ export async function GET() {
     }
 
     const notifications = await prisma.notification.findMany({
-      where: { userId: user.id },
+      where: { userId: user.userId },
       orderBy: { createdAt: "desc" },
       take: 20,
     });
 
     const unreadCount = await prisma.notification.count({
-      where: { userId: user.id, isRead: false },
+      where: { userId: user.userId, isRead: false },
     });
 
     return NextResponse.json({ notifications, unreadCount });
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     if (markAllRead) {
       await prisma.notification.updateMany({
-        where: { userId: user.id, isRead: false },
+        where: { userId: user.userId, isRead: false },
         data: { isRead: true },
       });
     } else if (notificationId) {

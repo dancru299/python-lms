@@ -160,6 +160,12 @@ export default async function HomePage() {
               <span className="text-xl font-bold text-gray-900">Python LMS</span>
             </div>
             <div className="flex items-center gap-4">
+              <Link href="/classrooms" className="text-gray-600 hover:text-gray-900 font-medium">
+                Lớp học
+              </Link>
+              <Link href="/profile" className="text-gray-600 hover:text-gray-900 font-medium">
+                Hồ sơ
+              </Link>
               {notifications.length > 0 && (
                 <div className="relative">
                   <i className="fa-solid fa-bell text-gray-600"></i>
