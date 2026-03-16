@@ -1,4 +1,4 @@
-﻿import { requireTeacher } from "@/lib/session";
+import { requireTeacher } from "@/lib/session";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -50,46 +50,70 @@ export default async function AdminStudentProfilePage({ params }: PageProps) {
           <Link href="/admin/classrooms" className="text-gray-600 hover:text-gray-900">
             <i className="fa-solid fa-arrow-left"></i>
           </Link>
-          <h1 className="text-xl font-bold text-gray-900">H? so h?c sinh</h1>
+          <h1 className="text-xl font-bold text-gray-900">Hồ sơ học sinh</h1>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="card p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">H? và tên</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Họ và tên
+            </label>
             <div className="input bg-gray-50">{student.name}</div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ð? tu?i</label>
-              <div className="input bg-gray-50">{student.profile?.age ?? "Chua c?p nh?t"}</div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Độ tuổi
+              </label>
+              <div className="input bg-gray-50">
+                {student.profile?.age ?? "Chưa cập nhật"}
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gi?i tính</label>
-              <div className="input bg-gray-50">{student.profile?.gender || "Chua c?p nh?t"}</div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giới tính
+              </label>
+              <div className="input bg-gray-50">
+                {student.profile?.gender || "Chưa cập nhật"}
+              </div>
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">L?p / Kh?i</label>
-              <div className="input bg-gray-50">{student.profile?.gradeLevel || "Chua c?p nh?t"}</div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Lớp / Khối
+              </label>
+              <div className="input bg-gray-50">
+                {student.profile?.gradeLevel || "Chưa cập nhật"}
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tru?ng</label>
-              <div className="input bg-gray-50">{student.profile?.school || "Chua c?p nh?t"}</div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Trường
+              </label>
+              <div className="input bg-gray-50">
+                {student.profile?.school || "Chưa cập nhật"}
+              </div>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">S? di?n tho?i</label>
-            <div className="input bg-gray-50">{student.profile?.phone || "Chua c?p nh?t"}</div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Số điện thoại
+            </label>
+            <div className="input bg-gray-50">
+              {student.profile?.phone || "Chưa cập nhật"}
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
             <div className="input bg-gray-50">{student.email}</div>
           </div>
         </div>
@@ -97,4 +121,3 @@ export default async function AdminStudentProfilePage({ params }: PageProps) {
     </div>
   );
 }
-

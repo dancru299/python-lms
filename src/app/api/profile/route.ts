@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCookieSessionUser } from "@/lib/cookie-session";
 
@@ -35,7 +35,10 @@ export async function GET() {
     return NextResponse.json({ user });
   } catch (error) {
     console.error("Get profile error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Đã xảy ra lỗi khi tải hồ sơ" },
+      { status: 500 }
+    );
   }
 }
 
@@ -48,23 +51,19 @@ export async function PUT(request: NextRequest) {
 
     if (session.role !== "student") {
       return NextResponse.json(
-        { error: "Ch? h?c sinh du?c phép t? c?p nh?t h? so" },
+        { error: "Chỉ học sinh được phép tự cập nhật hồ sơ" },
         { status: 403 }
       );
     }
 
     const body = await request.json();
-    const {
-      name,
-      age,
-      gender,
-      gradeLevel,
-      school,
-      phone,
-    } = body;
+    const { name, age, gender, gradeLevel, school, phone } = body;
 
     if (!name?.trim()) {
-      return NextResponse.json({ error: "Tên là b?t bu?c" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Tên là bắt buộc" },
+        { status: 400 }
+      );
     }
 
     await prisma.user.update({
@@ -91,13 +90,15 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, message: "C?p nh?t h? so thành công" });
+    return NextResponse.json({
+      success: true,
+      message: "Cập nhật hồ sơ thành công",
+    });
   } catch (error) {
     console.error("Update profile error:", error);
     return NextResponse.json(
-      { error: "Ðã x?y ra l?i, vui lòng th? l?i" },
+      { error: "Đã xảy ra lỗi, vui lòng thử lại" },
       { status: 500 }
     );
   }
 }
-

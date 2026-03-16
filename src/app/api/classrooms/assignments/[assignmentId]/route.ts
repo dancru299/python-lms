@@ -28,7 +28,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     if (!assignment) {
-      return NextResponse.json({ error: "Không tìm th?y bài giao" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Không tìm thấy bài giao" },
+        { status: 404 }
+      );
     }
 
     const isTeacherSide = session.role === "admin" || assignment.classroom.teacherId === session.userId;
@@ -41,7 +44,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     if (!isTeacherSide && !isStudentMember) {
-      return NextResponse.json({ error: "Không có quy?n truy c?p" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Không có quyền truy cập" },
+        { status: 403 }
+      );
     }
 
     const mySubmission = session.role === "student"

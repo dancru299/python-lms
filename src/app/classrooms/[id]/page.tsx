@@ -7,7 +7,9 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function StudentClassroomDetailPage({ params }: PageProps) {
+export default async function StudentClassroomDetailPage({
+  params,
+}: PageProps) {
   const session = await requireAuth();
   const { id } = await params;
 
@@ -53,12 +55,19 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
-          <Link href="/classrooms" className="text-gray-600 hover:text-gray-900">
+          <Link
+            href="/classrooms"
+            className="text-gray-600 hover:text-gray-900"
+          >
             <i className="fa-solid fa-arrow-left"></i>
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{membership.classroom.name}</h1>
-            <p className="text-sm text-gray-500">Giáo viên: {membership.classroom.teacher.name}</p>
+            <h1 className="text-xl font-bold text-gray-900">
+              {membership.classroom.name}
+            </h1>
+            <p className="text-sm text-gray-500">
+              Giáo viên: {membership.classroom.teacher.name}
+            </p>
           </div>
         </div>
       </header>
@@ -76,28 +85,36 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`badge ${assignment.type === "test" ? "badge-warning" : "badge-success"}`}>
-                        {assignment.type === "test" ? "Ki?m tra" : "BTVN"}
+                      <span
+                        className={`badge ${assignment.type === "test" ? "badge-warning" : "badge-success"}`}
+                      >
+                        {assignment.type === "test" ? "Kiểm tra" : "BTVN"}
                       </span>
-                      <span className="text-sm text-gray-500">{assignment.lesson?.title || "Không rõ bài gi?ng"}</span>
+                      <span className="text-sm text-gray-500">
+                        {assignment.lesson?.title || "Không rõ bài giảng"}
+                      </span>
                     </div>
-                    <h2 className="font-semibold text-gray-900">{assignment.title}</h2>
+                    <h2 className="font-semibold text-gray-900">
+                      {assignment.title}
+                    </h2>
                     <p className="text-sm text-gray-500">
                       {assignment.type === "test" && assignment.durationMinutes
                         ? `${assignment.durationMinutes} phút • `
                         : ""}
-                      {assignment.maxScore} di?m
+                      {assignment.maxScore} diểm
                     </p>
                   </div>
                   <div>
                     {mySubmission ? (
-                      <span className={`badge ${mySubmission.status === "graded" ? "badge-success" : "badge-warning"}`}>
+                      <span
+                        className={`badge ${mySubmission.status === "graded" ? "badge-success" : "badge-warning"}`}
+                      >
                         {mySubmission.status === "graded"
-                          ? `Ðã ch?m ${mySubmission.score ?? 0}/${assignment.maxScore}`
-                          : "Ðã n?p"}
+                          ? `Đã chấm ${mySubmission.score ?? 0}/${assignment.maxScore}`
+                          : "Đã nộp"}
                       </span>
                     ) : (
-                      <span className="badge badge-primary">Chua n?p</span>
+                      <span className="badge badge-primary">Chưa nộp</span>
                     )}
                   </div>
                 </div>
@@ -107,7 +124,7 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
 
           {assignments.length === 0 && (
             <div className="card p-10 text-center text-gray-500">
-              Hi?n chua có bài t?p ho?c bài ki?m tra nào.
+              Hiện chưa có bài tập hoặc bài kiểm tra nào.
             </div>
           )}
         </div>
@@ -115,4 +132,3 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
     </div>
   );
 }
-

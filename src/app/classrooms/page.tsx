@@ -31,11 +31,11 @@ export default async function StudentClassroomsPage() {
             <Link href="/" className="text-gray-600 hover:text-gray-900">
               <i className="fa-solid fa-arrow-left"></i>
             </Link>
-            <h1 className="text-xl font-bold text-gray-900">L?p h?c c?a tôi</h1>
+            <h1 className="text-xl font-bold text-gray-900">Lớp học của tôi</h1>
           </div>
           <Link href="/profile" className="btn btn-secondary">
             <i className="fa-solid fa-user"></i>
-            H? so
+            Hồ sơ
           </Link>
         </div>
       </header>
@@ -43,7 +43,7 @@ export default async function StudentClassroomsPage() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {classroomEnrollments.length === 0 ? (
           <div className="card p-10 text-center text-gray-500">
-            B?n chua du?c thêm vào l?p h?c nào.
+            Bạn chưa được thêm vào lớp học nào.
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">

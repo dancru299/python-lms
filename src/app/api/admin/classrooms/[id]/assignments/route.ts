@@ -37,7 +37,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const access = await verifyTeacherAccess(id);
 
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.status });
+      return NextResponse.json(
+        { error: access.error },
+        { status: access.status },
+      );
     }
 
     const assignments = await prisma.classroomAssignment.findMany({
@@ -52,7 +55,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ assignments });
   } catch (error) {
     console.error("Get classroom assignments error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
 
@@ -62,7 +68,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const access = await verifyTeacherAccess(classroomId);
 
     if ("error" in access) {
-      return NextResponse.json({ error: access.error }, { status: access.status });
+      return NextResponse.json(
+        { error: access.error },
+        { status: access.status },
+      );
     }
 
     const formData = await request.formData();
@@ -70,15 +79,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const lessonId = String(formData.get("lessonId") || "").trim() || null;
     const exerciseId = String(formData.get("exerciseId") || "").trim() || null;
     const title = String(formData.get("title") || "").trim();
-    const description = String(formData.get("description") || "").trim() || null;
+    const description =
+      String(formData.get("description") || "").trim() || null;
     const maxScore = Number(formData.get("maxScore") || 10);
 
     if (type !== "homework" && type !== "test") {
-      return NextResponse.json({ error: "Lo?i bài giao không h?p l?" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Lo?i bài giao không h?p l?" },
+        { status: 400 },
+      );
     }
 
     if (!lessonId) {
-      return NextResponse.json({ error: "Vui lòng ch?n bài gi?ng liên quan" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Vui lòng ch?n bài gi?ng liên quan" },
+        { status: 400 },
+      );
     }
 
     const lesson = await prisma.lesson.findUnique({
@@ -87,7 +103,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!lesson) {
-      return NextResponse.json({ error: "Bài gi?ng không t?n t?i" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Bài gi?ng không t?n t?i" },
+        { status: 404 },
+      );
     }
 
     let questionHtml: string | null = null;
@@ -110,37 +129,59 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
 
         if (!exercise || exercise.lessonId !== lessonId) {
-          return NextResponse.json({ error: "Bài t?p không h?p l?" }, { status: 400 });
+          return NextResponse.json(
+            { error: "Bài t?p không h?p l?" },
+            { status: 400 },
+          );
         }
 
         questionHtml = exercise.question || null;
         answerTemplate = exercise.answer || null;
       } else {
-        questionHtml = String(formData.get("questionHtml") || "").trim() || null;
-        answerTemplate = String(formData.get("answerTemplate") || "").trim() || null;
+        questionHtml =
+          String(formData.get("questionHtml") || "").trim() || null;
+        answerTemplate =
+          String(formData.get("answerTemplate") || "").trim() || null;
       }
 
       if (!questionHtml) {
-        return NextResponse.json({ error: "BTVN c?n có n?i dung d?" }, { status: 400 });
+        return NextResponse.json(
+          { error: "BTVN c?n có n?i dung d?" },
+          { status: 400 },
+        );
       }
     }
 
     if (type === "test") {
       durationMinutes = Number(formData.get("durationMinutes") || 0);
       if (![15, 45, 60].includes(durationMinutes)) {
-        return NextResponse.json({ error: "Th?i gian làm bài ch? h? tr? 15, 45 ho?c 60 phút" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Th?i gian làm bài ch? h? tr? 15, 45 ho?c 60 phút" },
+          { status: 400 },
+        );
       }
 
       const file = formData.get("questionDocx");
       if (!file || typeof file === "string") {
-        return NextResponse.json({ error: "Vui lòng t?i lên file d? .docx" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Vui lòng t?i lên file d? .docx" },
+          { status: 400 },
+        );
       }
 
       if (!file.name.toLowerCase().endsWith(".docx")) {
-        return NextResponse.json({ error: "Ch? ch?p nh?n file .docx" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Ch? ch?p nh?n file .docx" },
+          { status: 400 },
+        );
       }
 
-      const uploadDir = path.join(process.cwd(), "public", "uploads", "classroom-tests");
+      const uploadDir = path.join(
+        process.cwd(),
+        "public",
+        "uploads",
+        "classroom-tests",
+      );
       await fs.mkdir(uploadDir, { recursive: true });
 
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -157,7 +198,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       questionHtml = converted.value?.trim() || null;
 
       if (!questionHtml) {
-        return NextResponse.json({ error: "Không th? chuy?n file .docx sang n?i dung hi?n th?" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Không th? chuy?n file .docx sang n?i dung hi?n th?" },
+          { status: 400 },
+        );
       }
     }
 
@@ -166,7 +210,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         classroomId,
         lessonId,
         type,
-        title: title || `${type === "test" ? "Bài ki?m tra" : "Bài t?p v? nhà"} - ${lesson.title}`,
+        title:
+          title ||
+          `${type === "test" ? "Bài kiểm tra" : "Bài t?p v? nhà"} - ${lesson.title}`,
         description,
         durationMinutes,
         questionHtml,
@@ -186,8 +232,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.error("Create classroom assignment error:", error);
     return NextResponse.json(
       { error: "Ðã x?y ra l?i khi t?o bài giao" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-

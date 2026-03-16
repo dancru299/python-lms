@@ -16,6 +16,11 @@ interface PageProps {
 export default async function ClassroomDetailPage({ params }: PageProps) {
   const session = await requireTeacher();
   const { id } = await params;
+  const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Asia/Saigon",
+  });
 
   const classroom = await prisma.classroom.findUnique({
     where: { id },
@@ -108,6 +113,7 @@ export default async function ClassroomDetailPage({ params }: PageProps) {
     durationMinutes: assignment.durationMinutes,
     maxScore: assignment.maxScore,
     createdAt: assignment.createdAt.toISOString(),
+    createdAtLabel: dateFormatter.format(assignment.createdAt),
     lesson: assignment.lesson,
     submissionsCount: assignment._count.submissions,
   }));

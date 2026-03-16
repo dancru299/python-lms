@@ -14,7 +14,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (session.role !== "student") {
-      return NextResponse.json({ error: "Ch? h?c sinh du?c n?p bài" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Chỉ học sinh được nộp bài" },
+        { status: 403 }
+      );
     }
 
     const { assignmentId } = await params;
@@ -22,7 +25,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const content = String(body.content || "").trim();
 
     if (!content) {
-      return NextResponse.json({ error: "Vui lòng nh?p n?i dung bài làm" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Vui lòng nhập nội dung bài làm" },
+        { status: 400 }
+      );
     }
 
     const assignment = await prisma.classroomAssignment.findUnique({
@@ -36,7 +42,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!assignment) {
-      return NextResponse.json({ error: "Không tìm th?y bài giao" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Không tìm thấy bài giao" },
+        { status: 404 }
+      );
     }
 
     const membership = await prisma.classroomStudent.findFirst({
@@ -48,7 +57,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!membership) {
-      return NextResponse.json({ error: "B?n không thu?c l?p h?c này" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Bạn không thuộc lớp học này" },
+        { status: 403 }
+      );
     }
 
     const submission = await prisma.classroomAssignmentSubmission.upsert({
@@ -76,12 +88,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: "N?p bài thành công",
+      message: "Nộp bài thành công",
       submission,
     });
   } catch (error) {
     console.error("Submit classroom assignment error:", error);
-    return NextResponse.json({ error: "Ðã x?y ra l?i khi n?p bài" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Đã xảy ra lỗi khi nộp bài" },
+      { status: 500 }
+    );
   }
 }
 

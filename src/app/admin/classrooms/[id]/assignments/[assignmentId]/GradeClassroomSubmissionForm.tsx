@@ -36,18 +36,18 @@ export default function GradeClassroomSubmissionForm({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ score, feedback }),
-        }
+        },
       );
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Không th? ch?m bài");
+        alert(data.error || "Không thể chấm bài");
         return;
       }
 
       router.refresh();
     } catch (error) {
-      alert("Ðã x?y ra l?i khi ch?m bài");
+      alert("Đã xảy ra lỗi khi chấm bài");
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,9 @@ export default function GradeClassroomSubmissionForm({
     <form onSubmit={handleGrade} className="border-t border-gray-200 pt-3">
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Ði?m (0 - {maxScore})</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Điểm (0 - {maxScore})
+          </label>
           <input
             type="number"
             min={0}
@@ -68,21 +70,30 @@ export default function GradeClassroomSubmissionForm({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nh?n xét</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Nhận xét
+          </label>
           <textarea
             className="input min-h-[90px]"
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Nh?p nh?n xét cho h?c sinh..."
+            placeholder="Nhập nhận xét cho học sinh..."
           />
         </div>
       </div>
       <div className="mt-3 flex justify-end">
         <button className="btn btn-success" disabled={loading}>
-          {loading ? <><i className="fa-solid fa-spinner fa-spin"></i> Ðang luu...</> : <><i className="fa-solid fa-check"></i> Luu ch?m di?m</>}
+          {loading ? (
+            <>
+              <i className="fa-solid fa-spinner fa-spin"></i> Đang lưu...
+            </>
+          ) : (
+            <>
+              <i className="fa-solid fa-check"></i> Lưu chấm điểm
+            </>
+          )}
         </button>
       </div>
     </form>
   );
 }
-

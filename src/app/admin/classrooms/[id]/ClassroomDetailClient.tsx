@@ -30,6 +30,7 @@ export interface ClassroomAssignmentItem {
   durationMinutes: number | null;
   maxScore: number;
   createdAt: string;
+  createdAtLabel: string;
   lesson: { id: string; title: string } | null;
   submissionsCount: number;
 }
@@ -80,6 +81,7 @@ export default function ClassroomDetailClient({
     durationMinutes: number | null;
     maxScore: number;
     createdAt: string;
+    createdAtLabel?: string;
     lesson: { id: string; title: string } | null;
     _count?: { submissions: number };
   }) => {
@@ -91,6 +93,7 @@ export default function ClassroomDetailClient({
         durationMinutes: created.durationMinutes,
         maxScore: created.maxScore,
         createdAt: created.createdAt,
+        createdAtLabel: created.createdAtLabel || created.createdAt,
         lesson: created.lesson,
         submissionsCount: created._count?.submissions || 0,
       },
@@ -100,11 +103,11 @@ export default function ClassroomDetailClient({
 
   const createHomework = async () => {
     if (!homeworkForm.lessonId) {
-      alert("Vui long chon bai giang cho BTVN");
+      alert("Vui lòng chọn bài giảng cho BTVN");
       return;
     }
     if (!homeworkForm.exerciseId) {
-      alert("Vui long chon bai tap ve nha co san de giao cho lop");
+      alert("Vui lòng chọn bài tập về nhà có sẵn để giao cho lớp");
       return;
     }
 
@@ -125,7 +128,7 @@ export default function ClassroomDetailClient({
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Khong the giao BTVN");
+        alert(data.error || "Không thể giao BTVN");
         return;
       }
 
@@ -137,9 +140,9 @@ export default function ClassroomDetailClient({
         description: "",
         maxScore: 10,
       });
-      alert("Da giao BTVN thanh cong");
+      alert("Đã giao BTVN thành công");
     } catch {
-      alert("Da xay ra loi khi giao bai");
+      alert("Đã xảy ra lỗi khi giao bài");
     } finally {
       setLoadingHomework(false);
     }
@@ -147,11 +150,11 @@ export default function ClassroomDetailClient({
 
   const createTest = async () => {
     if (!testForm.lessonId) {
-      alert("Vui long chon bai giang lien quan");
+      alert("Vui lòng chọn bài giảng liên quan");
       return;
     }
     if (!testForm.file) {
-      alert("Vui long tai len file de .docx");
+      alert("Vui lòng tải lên file đề .docx");
       return;
     }
 
@@ -173,7 +176,7 @@ export default function ClassroomDetailClient({
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Khong the tao bai kiem tra");
+        alert(data.error || "Không thể tạo bài kiểm tra");
         return;
       }
 
@@ -186,9 +189,9 @@ export default function ClassroomDetailClient({
         maxScore: 10,
         file: null,
       });
-      alert("Da giao bai kiem tra thanh cong");
+      alert("Đã giao bài kiểm tra thành công");
     } catch {
-      alert("Da xay ra loi khi tao bai kiem tra");
+      alert("Đã xảy ra lỗi khi tạo bài kiểm tra");
     } finally {
       setLoadingTest(false);
     }
@@ -200,7 +203,7 @@ export default function ClassroomDetailClient({
         <div className="card p-5">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             <i className="fa-solid fa-user-graduate mr-2 text-indigo-600"></i>
-            Danh sach hoc sinh ({students.length})
+            Danh sách học sinh ({students.length})
           </h2>
           <div className="space-y-2 max-h-[520px] overflow-y-auto">
             {students.map((student) => (
@@ -216,7 +219,7 @@ export default function ClassroomDetailClient({
                 <i className="fa-solid fa-chevron-right text-gray-400"></i>
               </Link>
             ))}
-            {students.length === 0 && <p className="text-sm text-gray-500">Chua co hoc sinh trong lop nay.</p>}
+            {students.length === 0 && <p className="text-sm text-gray-500">Chưa có học sinh trong lớp này.</p>}
           </div>
         </div>
       </div>
@@ -225,17 +228,17 @@ export default function ClassroomDetailClient({
         <div className="card p-5">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             <i className="fa-solid fa-house-laptop mr-2 text-green-600"></i>
-            Giao bai tap ve nha
+            Giao bài tập về nhà
           </h2>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bai giang lien quan</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bài giảng liên quan</label>
               <select
                 className="input"
                 value={homeworkForm.lessonId}
                 onChange={(e) => setHomeworkForm((prev) => ({ ...prev, lessonId: e.target.value, exerciseId: "" }))}
               >
-                <option value="">-- Chon bai giang --</option>
+                <option value="">-- Chọn bài giảng --</option>
                 {lessons.map((lesson) => (
                   <option key={lesson.id} value={lesson.id}>
                     {lesson.chapterTitle} - {lesson.title}
@@ -244,14 +247,14 @@ export default function ClassroomDetailClient({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bai tap co san</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bài tập có sẵn</label>
               <select
                 className="input"
                 value={homeworkForm.exerciseId}
                 onChange={(e) => setHomeworkForm((prev) => ({ ...prev, exerciseId: e.target.value }))}
                 disabled={!selectedLesson}
               >
-                <option value="">-- Chon bai tap --</option>
+                <option value="">-- Chọn bài tập --</option>
                 {selectedLesson?.exercises.map((exercise) => (
                   <option key={exercise.id} value={exercise.id}>
                     {exercise.title}
@@ -260,16 +263,16 @@ export default function ClassroomDetailClient({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tieu de BTVN</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề BTVN</label>
               <input
                 className="input"
                 value={homeworkForm.title}
                 onChange={(e) => setHomeworkForm((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="VD: BTVN Ham va Vong lap"
+                placeholder="VD: BTVN Hàm và Vòng lặp"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Diem toi da</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Điểm tối đa</label>
               <input
                 type="number"
                 min={1}
@@ -280,19 +283,19 @@ export default function ClassroomDetailClient({
             </div>
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mo ta ngan</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả ngắn</label>
             <textarea
               className="input min-h-[80px]"
               value={homeworkForm.description}
               onChange={(e) => setHomeworkForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Ghi chu them cho hoc sinh..."
+              placeholder="Ghi chú thêm cho học sinh..."
             />
           </div>
           <div className="mt-4 flex justify-end">
             <button onClick={createHomework} disabled={loadingHomework} className="btn btn-success">
               {loadingHomework ? (
                 <>
-                  <i className="fa-solid fa-spinner fa-spin"></i> Dang giao...
+                  <i className="fa-solid fa-spinner fa-spin"></i> Đang giao...
                 </>
               ) : (
                 <>
@@ -306,17 +309,17 @@ export default function ClassroomDetailClient({
         <div className="card p-5">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             <i className="fa-solid fa-file-word mr-2 text-orange-600"></i>
-            Giao bai kiem tra
+            Giao bài kiểm tra
           </h2>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bai giang lien quan</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bài giảng liên quan</label>
               <select
                 className="input"
                 value={testForm.lessonId}
                 onChange={(e) => setTestForm((prev) => ({ ...prev, lessonId: e.target.value }))}
               >
-                <option value="">-- Chon bai giang --</option>
+                <option value="">-- Chọn bài giảng --</option>
                 {lessons.map((lesson) => (
                   <option key={lesson.id} value={lesson.id}>
                     {lesson.chapterTitle} - {lesson.title}
@@ -325,28 +328,28 @@ export default function ClassroomDetailClient({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Thoi gian</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian</label>
               <select
                 className="input"
                 value={testForm.durationMinutes}
                 onChange={(e) => setTestForm((prev) => ({ ...prev, durationMinutes: Number(e.target.value) }))}
               >
-                <option value={15}>15 phut</option>
-                <option value={45}>45 phut</option>
-                <option value={60}>60 phut</option>
+                <option value={15}>15 phút</option>
+                <option value={45}>45 phút</option>
+                <option value={60}>60 phút</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tieu de bai kiem tra</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề bài kiểm tra</label>
               <input
                 className="input"
                 value={testForm.title}
                 onChange={(e) => setTestForm((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="VD: Kiem tra chuong 2"
+                placeholder="VD: Kiểm tra chương 2"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Diem toi da</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Điểm tối đa</label>
               <input
                 type="number"
                 min={1}
@@ -357,7 +360,7 @@ export default function ClassroomDetailClient({
             </div>
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">De kiem tra (.docx)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Đề kiểm tra (.docx)</label>
             <input
               type="file"
               accept=".docx"
@@ -366,23 +369,23 @@ export default function ClassroomDetailClient({
             />
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mo ta ngan</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả ngắn</label>
             <textarea
               className="input min-h-[80px]"
               value={testForm.description}
               onChange={(e) => setTestForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Ghi chu them cho hoc sinh..."
+              placeholder="Ghi chú thêm cho học sinh..."
             />
           </div>
           <div className="mt-4 flex justify-end">
             <button onClick={createTest} disabled={loadingTest} className="btn btn-primary">
               {loadingTest ? (
                 <>
-                  <i className="fa-solid fa-spinner fa-spin"></i> Dang tao...
+                  <i className="fa-solid fa-spinner fa-spin"></i> Đang tạo...
                 </>
               ) : (
                 <>
-                  <i className="fa-solid fa-paper-plane"></i> Giao bai kiem tra
+                  <i className="fa-solid fa-paper-plane"></i> Giao bài kiểm tra
                 </>
               )}
             </button>
@@ -392,7 +395,7 @@ export default function ClassroomDetailClient({
         <div className="card p-5">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             <i className="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i>
-            Xem lai bai da giao
+            Xem lại bài đã giao
           </h2>
 
           <div className="space-y-3">
@@ -406,26 +409,26 @@ export default function ClassroomDetailClient({
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`badge ${assignment.type === "test" ? "badge-warning" : "badge-success"}`}>
-                        {assignment.type === "test" ? "Kiem tra" : "BTVN"}
+                        {assignment.type === "test" ? "Kiểm tra" : "BTVN"}
                       </span>
-                      <span className="text-sm text-gray-500">{assignment.lesson?.title || "Khong ro bai giang"}</span>
+                      <span className="text-sm text-gray-500">{assignment.lesson?.title || "Không rõ bài giảng"}</span>
                     </div>
                     <h3 className="font-semibold text-gray-900">{assignment.title}</h3>
                     <p className="text-sm text-gray-500">
-                      {assignment.type === "test" && assignment.durationMinutes ? `${assignment.durationMinutes} phut - ` : ""}
-                      {assignment.maxScore} diem - {new Date(assignment.createdAt).toLocaleString("vi-VN")}
+                      {assignment.type === "test" && assignment.durationMinutes ? `${assignment.durationMinutes} phút - ` : ""}
+                      {assignment.maxScore} điểm - {assignment.createdAtLabel}
                     </p>
                   </div>
                   <div className="text-right">
                     <div className="text-indigo-600 font-semibold">{assignment.submissionsCount}</div>
-                    <div className="text-xs text-gray-500">bai nop</div>
+                    <div className="text-xs text-gray-500">bài nộp</div>
                   </div>
                 </div>
               </Link>
             ))}
             {assignments.length === 0 && (
               <div className="p-8 rounded-lg border border-dashed border-gray-300 text-center text-gray-500">
-                Chua co bai tap hoac bai kiem tra nao duoc giao.
+                Chưa có bài tập hoặc bài kiểm tra nào được giao.
               </div>
             )}
           </div>

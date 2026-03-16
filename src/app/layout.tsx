@@ -30,7 +30,10 @@ export default function RootLayout({
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
         />
       </head>
-      <body className={`${inter.variable} ${outfit.variable} antialiased`}>
+      <body
+        suppressHydrationWarning
+        className={`${inter.variable} ${outfit.variable} antialiased`}
+      >
         {children}
       </body>
     </html>

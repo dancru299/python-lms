@@ -2,11 +2,11 @@
 
 ## Skills
 
-- `lms-stack-guardrails`: Dùng khi làm m?i/refactor tính nang fullstack, d? gi? dúng convention ki?n trúc.
-- `lms-lesson-authoring`: Dùng khi s?a lu?ng chuong/bài/section/exercise và màn authoring.
-- `lms-submission-grading`: Dùng khi s?a lu?ng n?p bài, ch?m di?m, tr?ng thái, thông báo.
-- `lms-auth-session`: Dùng khi s?a dang nh?p/dang ký/session/OTP reset m?t kh?u.
-- `lms-prisma-ops`: Dùng khi d?i schema, migration, seed, thao tác d? li?u.
+- `lms-stack-guardrails`: Dï¿½ng khi lï¿½m m?i/refactor tï¿½nh nang fullstack, d? gi? dï¿½ng convention ki?n trï¿½c.
+- `lms-lesson-authoring`: Dï¿½ng khi s?a lu?ng chuong/bï¿½i/section/exercise vï¿½ mï¿½n authoring.
+- `lms-submission-grading`: Dï¿½ng khi s?a lu?ng n?p bï¿½i, chiá»ƒmdi?m, tr?ng thï¿½i, thï¿½ng bï¿½o.
+- `lms-auth-session`: Dï¿½ng khi s?a dang nh?p/dang kï¿½/session/OTP reset m?t kh?u.
+- `lms-prisma-ops`: Dï¿½ng khi d?i schema, migration, seed, thao tï¿½c d? li?u.
 
 ## Suggested Usage Order
 

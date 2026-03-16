@@ -19,6 +19,9 @@
 ## Style and UX Contracts
 
 - Keep Vietnamese labels/messages for UI and API errors.
+- Save source files as UTF-8 when they contain Vietnamese copy.
+- Prefer `apply_patch` for copy edits so text encoding stays stable.
+- After editing Vietnamese copy, verify the rendered page in the browser; terminal regex scans can false-positive on valid Vietnamese characters depending on shell encoding.
 - Keep existing utility class vocabulary (`btn`, `card`, `input`, `badge`).
 - Keep lesson content HTML-compatible (`dangerouslySetInnerHTML` consumers already exist).
 

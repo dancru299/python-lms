@@ -21,19 +21,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!assignment || assignment.classroomId !== classroomId) {
-      return NextResponse.json({ error: "Không tìm th?y bài giao" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Không tìm th?y bài giao" },
+        { status: 404 },
+      );
     }
 
-    if (session.role !== "admin" && assignment.classroom.teacherId !== session.userId) {
-      return NextResponse.json({ error: "Không có quy?n ch?m bài" }, { status: 403 });
+    if (
+      session.role !== "admin" &&
+      assignment.classroom.teacherId !== session.userId
+    ) {
+      return NextResponse.json(
+        { error: "Không có quy?n ch?m bài" },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
     const score = Number(body.score);
-    const feedback = typeof body.feedback === "string" ? body.feedback.trim() : null;
+    const feedback =
+      typeof body.feedback === "string" ? body.feedback.trim() : null;
 
     if (Number.isNaN(score) || score < 0) {
-      return NextResponse.json({ error: "Ði?m không h?p l?" }, { status: 400 });
+      return NextResponse.json({ error: "Ðiểm không h?p l?" }, { status: 400 });
     }
 
     const boundedScore = Math.min(score, assignment.maxScore);
@@ -52,7 +62,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: true, submission });
   } catch (error) {
     console.error("Grade assignment submission error:", error);
-    return NextResponse.json({ error: "Ðã x?y ra l?i khi ch?m bài" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Ðã x?y ra l?i khi ch?m bài" },
+      { status: 500 },
+    );
   }
 }
-

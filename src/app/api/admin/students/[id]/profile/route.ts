@@ -42,7 +42,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     if (!student || student.role !== "student") {
-      return NextResponse.json({ error: "Không tìm th?y h?c sinh" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Không tìm thấy học sinh" },
+        { status: 404 }
+      );
     }
 
     if (session.role !== "admin") {
@@ -51,7 +54,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
 
       if (!canView) {
-        return NextResponse.json({ error: "Không có quy?n truy c?p" }, { status: 403 });
+        return NextResponse.json(
+          { error: "Không có quyền truy cập" },
+          { status: 403 }
+        );
       }
     }
 

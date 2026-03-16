@@ -8,7 +8,9 @@ interface PageProps {
   params: Promise<{ id: string; assignmentId: string }>;
 }
 
-export default async function ClassroomAssignmentDetailPage({ params }: PageProps) {
+export default async function ClassroomAssignmentDetailPage({
+  params,
+}: PageProps) {
   const session = await requireTeacher();
   const { id: classroomId, assignmentId } = await params;
 
@@ -52,7 +54,10 @@ export default async function ClassroomAssignmentDetailPage({ params }: PageProp
     redirect(`/admin/classrooms/${classroomId}`);
   }
 
-  if (session.role !== "admin" && assignment.classroom.teacherId !== session.userId) {
+  if (
+    session.role !== "admin" &&
+    assignment.classroom.teacherId !== session.userId
+  ) {
     redirect(`/admin/classrooms/${classroomId}`);
   }
 
@@ -61,32 +66,43 @@ export default async function ClassroomAssignmentDetailPage({ params }: PageProp
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href={`/admin/classrooms/${classroomId}`} className="text-gray-600 hover:text-gray-900">
+            <Link
+              href={`/admin/classrooms/${classroomId}`}
+              className="text-gray-600 hover:text-gray-900"
+            >
               <i className="fa-solid fa-arrow-left"></i>
             </Link>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{assignment.title}</h1>
+              <h1 className="text-xl font-bold text-gray-900">
+                {assignment.title}
+              </h1>
               <p className="text-sm text-gray-500">
-                {assignment.type === "test" ? "Bài ki?m tra" : "Bài t?p v? nhà"} • {assignment.classroom.name}
+                {assignment.type === "test" ? "Bài kiểm tra" : "Bài tập về nhà"}{" "}
+                • {assignment.classroom.name}
               </p>
             </div>
           </div>
-          <span className="badge badge-primary">{assignment.maxScore} di?m</span>
+          <span className="badge badge-primary">
+            {assignment.maxScore} điểm
+          </span>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="card p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-3">Ð? bài</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-3">Đề bài</h2>
           <div
             className="prose max-w-none text-gray-800"
             dangerouslySetInnerHTML={{
-              __html: assignment.questionHtml || "<p>Chua có n?i dung d? bài.</p>",
+              __html:
+                assignment.questionHtml || "<p>Chưa có nội dung đề bài.</p>",
             }}
           />
           {assignment.answerTemplate && assignment.type === "homework" && (
             <div className="mt-4 p-4 rounded-lg bg-green-50 border border-green-200">
-              <h3 className="font-semibold text-green-700 mb-2">Ðáp án m?u dã setup</h3>
+              <h3 className="font-semibold text-green-700 mb-2">
+                Đáp án mẫu đã setup
+              </h3>
               <pre className="code-block">{assignment.answerTemplate}</pre>
             </div>
           )}
@@ -94,21 +110,34 @@ export default async function ClassroomAssignmentDetailPage({ params }: PageProp
 
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Bài n?p h?c sinh ({assignment.submissions.length})</h2>
-            <span className="text-sm text-gray-500">Bài gi?ng: {assignment.lesson?.title || "N/A"}</span>
+            <h2 className="text-lg font-bold text-gray-900">
+              Bài nộp học sinh ({assignment.submissions.length})
+            </h2>
+            <span className="text-sm text-gray-500">
+              Bài giảng: {assignment.lesson?.title || "N/A"}
+            </span>
           </div>
 
           <div className="space-y-4">
             {assignment.submissions.map((submission) => (
-              <div key={submission.id} className="border border-gray-200 rounded-lg p-4">
+              <div
+                key={submission.id}
+                className="border border-gray-200 rounded-lg p-4"
+              >
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div>
-                    <div className="font-semibold text-gray-900">{submission.student.name}</div>
-                    <div className="text-sm text-gray-500">{submission.student.email}</div>
+                    <div className="font-semibold text-gray-900">
+                      {submission.student.name}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {submission.student.email}
+                    </div>
                   </div>
                   <div className="text-right">
-                    <div className={`badge ${submission.status === "graded" ? "badge-success" : "badge-warning"}`}>
-                      {submission.status === "graded" ? "Ðã ch?m" : "Ðã n?p"}
+                    <div
+                      className={`badge ${submission.status === "graded" ? "badge-success" : "badge-warning"}`}
+                    >
+                      {submission.status === "graded" ? "Đã chấm" : "Đã nộp"}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
                       {new Date(submission.createdAt).toLocaleString("vi-VN")}
@@ -117,7 +146,9 @@ export default async function ClassroomAssignmentDetailPage({ params }: PageProp
                 </div>
 
                 <div className="mb-3">
-                  <div className="text-sm font-medium text-gray-700 mb-1">Code bài làm</div>
+                  <div className="text-sm font-medium text-gray-700 mb-1">
+                    Code bài làm
+                  </div>
                   <pre className="code-block">{submission.content}</pre>
                 </div>
 
@@ -134,7 +165,7 @@ export default async function ClassroomAssignmentDetailPage({ params }: PageProp
 
             {assignment.submissions.length === 0 && (
               <div className="text-center text-gray-500 py-10 border border-dashed border-gray-300 rounded-lg">
-                Chua có h?c sinh nào n?p bài.
+                Chưa có học sinh nào nộp bài.
               </div>
             )}
           </div>
@@ -143,4 +174,3 @@ export default async function ClassroomAssignmentDetailPage({ params }: PageProp
     </div>
   );
 }
-

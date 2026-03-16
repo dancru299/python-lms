@@ -20,7 +20,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     if (!classroom) {
-      return NextResponse.json({ error: "Không tìm th?y l?p h?c" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Không tìm thấy lớp học" },
+        { status: 404 }
+      );
     }
 
     const isTeacherSide = session.role === "admin" || classroom.teacherId === session.userId;
@@ -30,7 +33,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     if (!isTeacherSide && !isStudentMember) {
-      return NextResponse.json({ error: "Không có quy?n truy c?p" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Không có quyền truy cập" },
+        { status: 403 }
+      );
     }
 
     const assignments = await prisma.classroomAssignment.findMany({

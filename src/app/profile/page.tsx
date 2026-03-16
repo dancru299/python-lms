@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -49,8 +49,8 @@ export default function ProfilePage() {
           school: data.user.profile?.school || "",
           phone: data.user.profile?.phone || "",
         });
-      } catch (error) {
-        alert("Không th? t?i h? so");
+      } catch {
+        alert("Không thể tải hồ sơ");
       } finally {
         setLoading(false);
       }
@@ -81,13 +81,13 @@ export default function ProfilePage() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Không th? c?p nh?t h? so");
+        alert(data.error || "Không thể cập nhật hồ sơ");
         return;
       }
 
-      alert("C?p nh?t h? so thành công");
-    } catch (error) {
-      alert("Ðã x?y ra l?i");
+      alert("Cập nhật hồ sơ thành công");
+    } catch {
+      alert("Đã xảy ra lỗi");
     } finally {
       setSaving(false);
     }
@@ -114,93 +114,131 @@ export default function ProfilePage() {
           <Link href="/" className="text-gray-600 hover:text-gray-900">
             <i className="fa-solid fa-arrow-left"></i>
           </Link>
-          <h1 className="text-xl font-bold text-gray-900">H? so cá nhân</h1>
+          <h1 className="text-xl font-bold text-gray-900">Hồ sơ cá nhân</h1>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="card p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">H? và tên</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Họ và tên
+            </label>
             <input
               className="input"
               value={form.name}
               disabled={!editable}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, name: e.target.value }))
+              }
             />
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ð? tu?i</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Độ tuổi
+              </label>
               <input
                 type="number"
                 min={1}
                 className="input"
                 value={form.age}
                 disabled={!editable}
-                onChange={(e) => setForm((prev) => ({ ...prev, age: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, age: e.target.value }))
+                }
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gi?i tính</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giới tính
+              </label>
               <input
                 className="input"
                 value={form.gender}
                 disabled={!editable}
-                onChange={(e) => setForm((prev) => ({ ...prev, gender: e.target.value }))}
-                placeholder="Nam / N? / Khác"
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, gender: e.target.value }))
+                }
+                placeholder="Nam / Nữ / Khác"
               />
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">L?p / Kh?i</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Lớp / Khối
+              </label>
               <input
                 className="input"
                 value={form.gradeLevel}
                 disabled={!editable}
-                onChange={(e) => setForm((prev) => ({ ...prev, gradeLevel: e.target.value }))}
-                placeholder="Ví d?: 10A1"
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, gradeLevel: e.target.value }))
+                }
+                placeholder="Ví dụ: 10A1"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tru?ng</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Trường
+              </label>
               <input
                 className="input"
                 value={form.school}
                 disabled={!editable}
-                onChange={(e) => setForm((prev) => ({ ...prev, school: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, school: e.target.value }))
+                }
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">S? di?n tho?i</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Số điện thoại
+            </label>
             <input
               className="input"
               value={form.phone}
               disabled={!editable}
-              onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-              placeholder="Có th? d? tr?ng"
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, phone: e.target.value }))
+              }
+              placeholder="Có thể để trống"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
             <input className="input bg-gray-50" value={user.email} disabled />
           </div>
 
           {editable ? (
             <div className="pt-2 flex justify-end">
-              <button onClick={handleSave} disabled={saving} className="btn btn-success">
-                {saving ? <><i className="fa-solid fa-spinner fa-spin"></i> Ðang luu...</> : <><i className="fa-solid fa-save"></i> Luu h? so</>}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="btn btn-success"
+              >
+                {saving ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin"></i> Đang lưu...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-save"></i> Lưu hồ sơ
+                  </>
+                )}
               </button>
             </div>
           ) : (
             <div className="p-3 bg-gray-100 rounded-lg text-sm text-gray-600">
-              Ch? h?c sinh có th? t? c?p nh?t h? so.
+              Chỉ học sinh có thể tự cập nhật hồ sơ.
             </div>
           )}
         </div>
@@ -208,4 +246,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

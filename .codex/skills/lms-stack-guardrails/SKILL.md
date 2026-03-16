@@ -13,6 +13,7 @@ Follow this sequence.
 4. Preserve session payload keys exactly: `userId`, `email`, `name`, `role`, `exp`.
 5. Keep server data fetching in async server components where possible; use client components only for stateful interactions.
 6. Keep Prisma writes explicit and predictable; when deleting parent entities, consider dependent entities in correct order if no cascade exists.
+7. Preserve Vietnamese text in UTF-8 when editing UI labels, API errors, and seeded content; do not downgrade accented copy to ASCII just to avoid encoding issues.
 
 Use [references/conventions.md](references/conventions.md) before coding.
 
@@ -24,6 +25,8 @@ Run these checks after edits:
 npm run lint
 npm run build
 ```
+
+If you touched Vietnamese copy or uploaded/generated document content, also do a quick browser spot-check on the affected screens. Prefer verifying rendered text in the app over relying only on terminal regex scans, because PowerShell output can misread valid Vietnamese characters.
 
 If auth/session code changed, also run:
 
