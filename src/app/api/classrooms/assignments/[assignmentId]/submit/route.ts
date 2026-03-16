@@ -38,6 +38,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         classroomId: true,
         maxScore: true,
         type: true,
+        title: true,
+        classroom: {
+          select: {
+            name: true,
+            teacherId: true,
+          },
+        },
       },
     });
 
@@ -63,6 +70,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const student = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { name: true },
+    });
+
     const submission = await prisma.classroomAssignmentSubmission.upsert({
       where: {
         assignmentId_studentId: {
@@ -83,6 +95,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         feedback: null,
         gradedAt: null,
         gradedBy: null,
+      },
+    });
+
+    await prisma.notification.create({
+      data: {
+        userId: assignment.classroom.teacherId,
+        type: "classroom_submission_created",
+        title: assignment.type === "test" ? "Có bài kiểm tra vừa nộp" : "Có bài tập vừa nộp",
+        message: `${student?.name || "Học sinh"} đã nộp bài "${assignment.title}" của lớp ${assignment.classroom.name}.`,
+        link: `/admin/classrooms/${assignment.classroomId}/assignments/${assignmentId}#submission-${submission.id}`,
       },
     });
 

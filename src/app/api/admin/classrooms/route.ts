@@ -64,6 +64,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (session.role !== "admin") {
+      return NextResponse.json(
+        { error: "Chỉ quản trị viên mới được tạo lớp học" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { name, description, teacherId, studentIds } = body;
 

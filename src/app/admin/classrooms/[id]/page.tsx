@@ -133,7 +133,12 @@ export default async function ClassroomDetailPage({ params }: PageProps) {
               </p>
             </div>
           </div>
-          <span className="badge badge-primary">{session.role === "admin" ? "Admin" : "Giáo viên"}</span>
+          <div className="flex items-center gap-3">
+            <Link href={`/admin/classrooms/${classroom.id}/edit`} className="btn btn-secondary">
+              <i className="fa-solid fa-pen"></i> Sửa lớp
+            </Link>
+            <span className="badge badge-primary">{session.role === "admin" ? "Admin" : "Giáo viên"}</span>
+          </div>
         </div>
       </header>
 

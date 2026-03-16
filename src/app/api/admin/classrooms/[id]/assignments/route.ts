@@ -227,6 +227,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    const classroomStudents = await prisma.classroomStudent.findMany({
+      where: { classroomId },
+      select: { studentId: true },
+    });
+
+    if (classroomStudents.length > 0) {
+      await prisma.notification.createMany({
+        data: classroomStudents.map((student) => ({
+          userId: student.studentId,
+          type: type === "test" ? "classroom_test_created" : "classroom_assignment_created",
+          title: type === "test" ? "Có bài kiểm tra mới" : "Có bài tập mới",
+          message: `${assignment.title} đã được giao trong lớp học. Nhấn để mở và làm bài.`,
+          link: `/classrooms/${classroomId}/assignments/${assignment.id}`,
+        })),
+      });
+    }
+
     return NextResponse.json({ success: true, assignment });
   } catch (error) {
     console.error("Create classroom assignment error:", error);

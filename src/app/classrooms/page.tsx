@@ -1,7 +1,9 @@
-﻿import { requireAuth } from "@/lib/session";
-import prisma from "@/lib/prisma";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
+import NotificationInbox from "@/components/notifications/NotificationInbox";
+import StudentChrome from "@/components/student/StudentChrome";
+import { requireAuth } from "@/lib/session";
 
 export default async function StudentClassroomsPage() {
   const session = await requireAuth();
@@ -10,64 +12,115 @@ export default async function StudentClassroomsPage() {
     redirect(session.role === "admin" || session.role === "teacher" ? "/admin/classrooms" : "/");
   }
 
-  const classroomEnrollments = await prisma.classroomStudent.findMany({
-    where: { studentId: session.userId },
-    include: {
-      classroom: {
-        include: {
-          teacher: { select: { name: true, email: true } },
-          _count: { select: { assignments: true } },
+  const [classroomEnrollments, notifications] = await Promise.all([
+    prisma.classroomStudent.findMany({
+      where: { studentId: session.userId },
+      include: {
+        classroom: {
+          include: {
+            teacher: { select: { name: true, email: true } },
+            _count: { select: { assignments: true } },
+          },
         },
       },
-    },
-    orderBy: { joinedAt: "desc" },
-  });
+      orderBy: { joinedAt: "desc" },
+    }),
+    prisma.notification.findMany({
+      where: { userId: session.userId, isRead: false },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }),
+  ]);
+
+  const totalAssignments = classroomEnrollments.reduce(
+    (sum, item) => sum + item.classroom._count.assignments,
+    0
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-gray-600 hover:text-gray-900">
-              <i className="fa-solid fa-arrow-left"></i>
-            </Link>
-            <h1 className="text-xl font-bold text-gray-900">Lớp học của tôi</h1>
+    <StudentChrome
+      active="classrooms"
+      userName={session.name}
+      title="Lớp học của tôi"
+      subtitle="Danh sách lớp được giữ gọn để bạn mở nhanh lớp đang học, còn các việc phát sinh sẽ đi qua thông báo để tránh phải dò trong nhiều khối thông tin."
+      summaryPills={[
+        { label: "Số lớp đang học", value: classroomEnrollments.length, tone: "indigo" },
+        { label: "Tổng bài tập", value: totalAssignments, tone: "amber" },
+        {
+          label: "Thông báo mới",
+          value: notifications.length,
+          tone: "slate",
+        },
+      ]}
+      primaryAction={{
+        href: "/",
+        label: "Về tổng quan",
+        icon: "fa-house",
+      }}
+      secondaryAction={{
+        href: "/profile",
+        label: "Hồ sơ",
+        icon: "fa-id-card",
+      }}
+      sectionLinks={[
+        { href: "#danh-sach", label: "Danh sách lớp" },
+        { href: "#thong-bao", label: "Thông báo" },
+      ]}
+    >
+      <div className="grid gap-8 xl:grid-cols-[1.7fr,1fr]">
+        <section id="danh-sach" className="space-y-5">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Danh sách lớp học</h2>
+            <p className="text-sm text-slate-500">
+              Tập trung vào lớp học và hành động mở lớp. Các đầu việc mới sẽ được đẩy sang thẻ thông báo bên phải.
+            </p>
           </div>
-          <Link href="/profile" className="btn btn-secondary">
-            <i className="fa-solid fa-user"></i>
-            Hồ sơ
-          </Link>
-        </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {classroomEnrollments.length === 0 ? (
-          <div className="card p-10 text-center text-gray-500">
-            Bạn chưa được thêm vào lớp học nào.
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {classroomEnrollments.map((item) => (
-              <Link
-                key={item.id}
-                href={`/classrooms/${item.classroom.id}`}
-                className="card p-5 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="badge badge-primary font-mono">{item.classroom.code}</span>
-                  <span className="text-sm text-gray-500">{item.classroom._count.assignments} bài</span>
-                </div>
-                <h2 className="text-lg font-bold text-gray-900">{item.classroom.name}</h2>
-                <p className="text-sm text-gray-500 mt-1">GV: {item.classroom.teacher.name}</p>
-                {item.classroom.description && (
-                  <p className="text-sm text-gray-600 mt-3 line-clamp-2">{item.classroom.description}</p>
-                )}
-              </Link>
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
+          {classroomEnrollments.length === 0 ? (
+            <div className="card rounded-[1.5rem] p-10 text-center text-slate-500">
+              <i className="fa-solid fa-users-slash text-4xl text-slate-300"></i>
+              <p className="mt-4">Bạn chưa được thêm vào lớp học nào.</p>
+            </div>
+          ) : (
+            <div className="grid gap-5 md:grid-cols-2">
+              {classroomEnrollments.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/classrooms/${item.classroom.id}`}
+                  className="card rounded-[1.5rem] p-5 transition hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+                      <i className="fa-solid fa-users"></i>
+                    </div>
+                    <span className="badge badge-primary font-mono">{item.classroom.code}</span>
+                  </div>
+
+                  <h3 className="mt-5 text-lg font-bold text-slate-900">{item.classroom.name}</h3>
+                  <p className="mt-2 text-sm text-slate-500">Giáo viên: {item.classroom.teacher.name}</p>
+
+                  <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <span>{item.classroom._count.assignments} bài tập đã giao</span>
+                    <span>{new Date(item.joinedAt).toLocaleDateString("vi-VN")}</span>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between text-sm font-semibold text-indigo-600">
+                    <span>Mở lớp học</span>
+                    <i className="fa-solid fa-arrow-right"></i>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div id="thong-bao">
+          <NotificationInbox
+            emptyMessage="Chưa có thông báo mới liên quan tới lớp học."
+            notifications={notifications}
+          />
+        </div>
+      </div>
+    </StudentChrome>
   );
 }
-

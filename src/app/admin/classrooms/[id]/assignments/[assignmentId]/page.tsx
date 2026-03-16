@@ -122,18 +122,17 @@ export default async function ClassroomAssignmentDetailPage({
             {assignment.submissions.map((submission) => (
               <div
                 key={submission.id}
-                className="border border-gray-200 rounded-lg p-4"
+                id={`submission-${submission.id}`}
+                className="rounded-2xl border border-gray-200 p-5"
               >
-                <div className="flex items-center justify-between gap-4 mb-3">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <div className="font-semibold text-gray-900">
-                      {submission.student.name}
-                    </div>
+                    <div className="font-semibold text-gray-900">{submission.student.name}</div>
                     <div className="text-sm text-gray-500">
                       {submission.student.email}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     <div
                       className={`badge ${submission.status === "graded" ? "badge-success" : "badge-warning"}`}
                     >
@@ -145,8 +144,8 @@ export default async function ClassroomAssignmentDetailPage({
                   </div>
                 </div>
 
-                <div className="mb-3">
-                  <div className="text-sm font-medium text-gray-700 mb-1">
+                <div className="mb-4">
+                  <div className="mb-2 text-sm font-medium text-gray-700">
                     Code bài làm
                   </div>
                   <pre className="code-block">{submission.content}</pre>
@@ -159,6 +158,12 @@ export default async function ClassroomAssignmentDetailPage({
                   maxScore={assignment.maxScore}
                   defaultScore={submission.score ?? assignment.maxScore}
                   defaultFeedback={submission.feedback || ""}
+                  isGraded={submission.status === "graded"}
+                  gradedAtLabel={
+                    submission.gradedAt
+                      ? new Date(submission.gradedAt).toLocaleString("vi-VN")
+                      : null
+                  }
                 />
               </div>
             ))}

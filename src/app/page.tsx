@@ -1,117 +1,113 @@
 import Link from "next/link";
-import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import LogoutButton from "@/components/LogoutButton";
+import { getSession } from "@/lib/session";
+import NotificationInbox from "@/components/notifications/NotificationInbox";
+import StudentChrome from "@/components/student/StudentChrome";
+
+function getDifficultyLabel(level: string) {
+  if (level === "beginner") return "Cơ bản";
+  if (level === "intermediate") return "Trung bình";
+  if (level === "advanced") return "Nâng cao";
+  return level;
+}
 
 export default async function HomePage() {
   const session = await getSession();
-  
-  // Guest: Show Landing Page
+
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-        {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🐍</span>
-                <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  Python LMS
-                </span>
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_45%,_#f8fafc_100%)]">
+        <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 text-white shadow-lg shadow-indigo-200">
+                <i className="fa-solid fa-graduation-cap text-lg"></i>
               </div>
-              <div className="flex items-center gap-4">
-                <Link href="/login" className="text-gray-600 hover:text-gray-900 font-medium">
-                  Đăng nhập
-                </Link>
-                <Link href="/register" className="btn btn-primary">
-                  Bắt đầu học
-                </Link>
+              <div>
+                <div className="text-xl font-bold text-slate-900">Python LMS</div>
+                <div className="text-sm text-slate-500">Học Python theo lộ trình rõ ràng</div>
               </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Link href="/login" className="btn btn-secondary">
+                Đăng nhập
+              </Link>
+              <Link href="/register" className="btn btn-primary">
+                Bắt đầu học
+              </Link>
             </div>
           </div>
         </header>
 
-        {/* Hero Section */}
-        <main className="pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-4xl mx-auto">
-              <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight">
-                Học <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Python</span> <br />
-                Hiệu quả & Thực tế
-              </h1>
-              <p className="mt-6 text-xl text-gray-600 max-w-2xl mx-auto">
-                Hệ thống học tập trực tuyến với bài giảng tương tác, bài tập thực hành và hệ thống chấm điểm chuyên nghiệp.
-              </p>
-              <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link href="/register" className="btn btn-primary text-lg px-8 py-3">
-                  <i className="fa-solid fa-rocket"></i>
-                  Đăng ký miễn phí
-                </Link>
-                <Link href="/login" className="btn btn-secondary text-lg px-8 py-3">
-                  <i className="fa-solid fa-right-to-bracket"></i>
-                  Đã có tài khoản
-                </Link>
+        <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
+          <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)]">
+            <div className="grid gap-10 bg-[linear-gradient(135deg,_rgba(15,23,42,0.97),_rgba(67,56,202,0.92)_58%,_rgba(6,182,212,0.82))] px-6 py-12 text-white lg:grid-cols-[1.45fr,1fr] lg:px-10">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-indigo-50 ring-1 ring-white/15">
+                  <i className="fa-solid fa-compass-drafting"></i>
+                  Giao diện học tập dễ theo dõi, dễ quản lý
+                </div>
+                <h1 className="mt-6 max-w-3xl text-4xl font-bold leading-tight sm:text-5xl">
+                  Học Python với bố cục rõ ràng cho cả học sinh và giáo viên
+                </h1>
+                <p className="mt-5 max-w-2xl text-base leading-7 text-indigo-50">
+                  Theo dõi tiến độ, quản lý lớp học, giao bài và chấm bài trong một hệ thống có
+                  điều hướng trực quan hơn, giúp việc học và dạy mạch lạc ngay từ lần nhìn đầu tiên.
+                </p>
+
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link href="/register" className="btn btn-primary">
+                    <i className="fa-solid fa-rocket"></i>
+                    Tạo tài khoản
+                  </Link>
+                  <Link href="/login" className="btn btn-secondary">
+                    <i className="fa-solid fa-right-to-bracket"></i>
+                    Tôi đã có tài khoản
+                  </Link>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                {[
+                  {
+                    icon: "fa-route",
+                    title: "Lộ trình học rõ ràng",
+                    description: "Theo chương, theo bài và theo trạng thái hoàn thành.",
+                  },
+                  {
+                    icon: "fa-users-rectangle",
+                    title: "Quản lý lớp học tập trung",
+                    description: "Xem nhanh lớp học, bài tập và các việc cần xử lý.",
+                  },
+                  {
+                    icon: "fa-pen-ruler",
+                    title: "Luồng giao bài, chấm bài gọn",
+                    description: "Giảm thao tác tìm kiếm, tăng khả năng theo dõi tiến độ.",
+                  },
+                ].map((item) => (
+                  <div key={item.title} className="rounded-2xl bg-white/10 p-5 ring-1 ring-white/15 backdrop-blur">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-lg text-white">
+                      <i className={`fa-solid ${item.icon}`}></i>
+                    </div>
+                    <h2 className="mt-4 text-lg font-semibold">{item.title}</h2>
+                    <p className="mt-2 text-sm leading-6 text-indigo-50">{item.description}</p>
+                  </div>
+                ))}
               </div>
             </div>
-
-            {/* Features */}
-            <div className="mt-32 grid md:grid-cols-3 gap-8">
-              <div className="card p-8 text-center hover:shadow-lg transition-shadow">
-                <div className="w-16 h-16 mx-auto bg-indigo-100 rounded-2xl flex items-center justify-center mb-6">
-                  <i className="fa-solid fa-book-open text-2xl text-indigo-600"></i>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-3">Bài giảng tương tác</h3>
-                <p className="text-gray-600">
-                  Nội dung được thiết kế dễ hiểu với ví dụ thực tế và code mẫu
-                </p>
-              </div>
-
-              <div className="card p-8 text-center hover:shadow-lg transition-shadow">
-                <div className="w-16 h-16 mx-auto bg-green-100 rounded-2xl flex items-center justify-center mb-6">
-                  <i className="fa-solid fa-code text-2xl text-green-600"></i>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-3">Bài tập thực hành</h3>
-                <p className="text-gray-600">
-                  Luyện tập với các bài tập từ cơ bản đến nâng cao, nộp bài online
-                </p>
-              </div>
-
-              <div className="card p-8 text-center hover:shadow-lg transition-shadow">
-                <div className="w-16 h-16 mx-auto bg-purple-100 rounded-2xl flex items-center justify-center mb-6">
-                  <i className="fa-solid fa-chart-line text-2xl text-purple-600"></i>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-3">Theo dõi tiến độ</h3>
-                <p className="text-gray-600">
-                  Xem điểm số, nhận xét từ giảng viên và theo dõi quá trình học tập
-                </p>
-              </div>
-            </div>
-          </div>
+          </section>
         </main>
-
-        {/* Footer */}
-        <footer className="bg-gray-900 text-gray-400 py-12">
-          <div className="max-w-7xl mx-auto px-4 text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <span className="text-2xl">🐍</span>
-              <span className="text-xl font-bold text-white">Python LMS</span>
-            </div>
-            <p>© 2024 Python LMS. Made with ❤️ by AnhDuc Team</p>
-          </div>
-        </footer>
       </div>
     );
   }
 
-  // Teacher/Admin: Redirect to /admin
   if (session.role === "teacher" || session.role === "admin") {
     redirect("/admin");
   }
 
-  // Student: Show Student Dashboard
-  const [chapters, userProgress, submissions, notifications] = await Promise.all([
+  const [chapters, userProgress, submissions, notifications, classroomEnrollments] = await Promise.all([
     prisma.chapter.findMany({
       where: { isLocked: false },
       include: {
@@ -127,7 +123,7 @@ export default async function HomePage() {
     }),
     prisma.submission.findMany({
       where: { userId: session.userId },
-      include: { 
+      include: {
         exercise: {
           include: {
             lesson: true,
@@ -142,152 +138,293 @@ export default async function HomePage() {
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
+    prisma.classroomStudent.findMany({
+      where: { studentId: session.userId },
+      include: {
+        classroom: {
+          include: {
+            teacher: { select: { name: true } },
+            _count: { select: { assignments: true } },
+          },
+        },
+      },
+      orderBy: { joinedAt: "desc" },
+      take: 4,
+    }),
   ]);
 
-  const totalLessons = chapters.reduce((sum, ch) => sum + ch.lessons.length, 0);
-  const completedLessons = userProgress.filter((p) => p.completed).length;
+  const completedLessonIds = new Set(
+    userProgress.filter((item) => item.completed).map((item) => item.lessonId)
+  );
+
+  const totalLessons = chapters.reduce((sum, chapter) => sum + chapter.lessons.length, 0);
+  const completedLessons = completedLessonIds.size;
   const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-  const pendingSubmissions = submissions.filter((s) => s.status === "pending").length;
-  const gradedSubmissions = submissions.filter((s) => s.status === "graded");
+  const pendingSubmissions = submissions.filter((submission) => submission.status === "pending").length;
+  const gradedSubmissions = submissions.filter(
+    (submission) => submission.status === "graded" && submission.score !== null
+  );
+  const averageScore =
+    gradedSubmissions.length > 0
+      ? Math.round(
+          gradedSubmissions.reduce((sum, submission) => sum + (submission.score || 0), 0) /
+            gradedSubmissions.length
+        )
+      : null;
+
+  const chapterProgress = chapters.map((chapter) => {
+    const completed = chapter.lessons.filter((lesson) => completedLessonIds.has(lesson.id)).length;
+    const firstRemainingLesson =
+      chapter.lessons.find((lesson) => !completedLessonIds.has(lesson.id)) || chapter.lessons[0] || null;
+
+    return {
+      ...chapter,
+      completed,
+      percent: chapter.lessons.length > 0 ? Math.round((completed / chapter.lessons.length) * 100) : 0,
+      firstRemainingLesson,
+    };
+  });
+
+  const nextLesson =
+    chapterProgress.find((chapter) => chapter.firstRemainingLesson)?.firstRemainingLesson || null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🐍</span>
-              <span className="text-xl font-bold text-gray-900">Python LMS</span>
+    <StudentChrome
+      active="home"
+      userName={session.name}
+      title="Bảng điều khiển học tập"
+      subtitle="Theo dõi tiến độ, mở nhanh lớp học, xem bài chờ chấm và nắm các đầu việc quan trọng trong cùng một nơi."
+      summaryPills={[
+        { label: "Tiến độ tổng", value: `${progressPercent}%`, tone: "indigo" },
+        { label: "Lớp đang theo học", value: classroomEnrollments.length, tone: "emerald" },
+        { label: "Thông báo mới", value: notifications.length, tone: "amber" },
+      ]}
+      primaryAction={
+        nextLesson
+          ? {
+              href: `/lessons/${nextLesson.id}`,
+              label: "Tiếp tục học",
+              icon: "fa-play",
+            }
+          : {
+              href: "/classrooms",
+              label: "Mở lớp học",
+              icon: "fa-users",
+            }
+      }
+      secondaryAction={{
+        href: "/profile",
+        label: "Xem hồ sơ",
+        icon: "fa-id-card",
+      }}
+      sectionLinks={[
+        { href: "#tong-quan", label: "Tổng quan" },
+        { href: "#lo-trinh", label: "Lộ trình học" },
+        { href: "#lop-hoc", label: "Lớp học" },
+        { href: "#thong-bao", label: "Thông báo" },
+      ]}
+    >
+      <section id="tong-quan" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            label: "Bài đã hoàn thành",
+            value: `${completedLessons}/${totalLessons || 0}`,
+            description: totalLessons > 0 ? "Đã hoàn thành trên toàn lộ trình" : "Chưa có bài học",
+            icon: "fa-circle-check",
+            iconClass: "bg-emerald-100 text-emerald-600",
+          },
+          {
+            label: "Bài đang chờ chấm",
+            value: pendingSubmissions,
+            description: pendingSubmissions > 0 ? "Giáo viên đang xem bài của bạn" : "Không có bài chờ chấm",
+            icon: "fa-hourglass-half",
+            iconClass: "bg-amber-100 text-amber-600",
+          },
+          {
+            label: "Điểm trung bình",
+            value: averageScore !== null ? `${averageScore}/10` : "Chưa có",
+            description:
+              averageScore !== null ? "Tính từ các bài đã được chấm" : "Điểm sẽ xuất hiện sau khi có bài được chấm",
+            icon: "fa-chart-simple",
+            iconClass: "bg-indigo-100 text-indigo-600",
+          },
+          {
+            label: "Bài nên học tiếp",
+            value: nextLesson ? "Sẵn sàng" : "Hoàn thành",
+            description: nextLesson ? nextLesson.title : "Bạn đã học xong các bài đang mở",
+            icon: "fa-flag-checkered",
+            iconClass: "bg-sky-100 text-sky-600",
+          },
+        ].map((item) => (
+          <div key={item.label} className="card rounded-[1.5rem] p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-slate-500">{item.label}</div>
+                <div className="mt-3 text-2xl font-bold text-slate-900">{item.value}</div>
+              </div>
+              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${item.iconClass}`}>
+                <i className={`fa-solid ${item.icon}`}></i>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Link href="/classrooms" className="text-gray-600 hover:text-gray-900 font-medium">
-                Lớp học
-              </Link>
-              <Link href="/profile" className="text-gray-600 hover:text-gray-900 font-medium">
-                Hồ sơ
-              </Link>
-              {notifications.length > 0 && (
-                <div className="relative">
-                  <i className="fa-solid fa-bell text-gray-600"></i>
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {notifications.length}
-                  </span>
-                </div>
-              )}
-              <span className="text-gray-600">
-                Xin chào, <span className="font-medium text-gray-900">{session.name}</span>
-              </span>
-              <LogoutButton />
-            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-500">{item.description}</p>
           </div>
-        </div>
-      </header>
+        ))}
+      </section>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
-          <h1 className="text-3xl font-bold mb-2">👋 Chào mừng trở lại!</h1>
-          <p className="text-indigo-100 text-lg">Tiếp tục hành trình học Python của bạn</p>
-        </div>
-
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <div className="card p-6">
-            <div className="text-3xl font-bold text-indigo-600">{progressPercent}%</div>
-            <div className="text-gray-600 mt-1">Tiến độ học tập</div>
-            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-600 rounded-full transition-all" style={{ width: `${progressPercent}%` }} />
+      <div className="mt-8 grid gap-8 xl:grid-cols-[1.6fr,1fr]">
+        <section id="lo-trinh" className="space-y-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900">Lộ trình học theo chương</h2>
+              <p className="text-sm text-slate-500">
+                Mỗi chương đều có tiến độ riêng để bạn dễ xác định đang ở đâu và nên học gì tiếp theo.
+              </p>
             </div>
+            <Link href="/classrooms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+              Xem toàn bộ lớp học
+            </Link>
           </div>
-          <div className="card p-6">
-            <div className="text-3xl font-bold text-green-600">{completedLessons}</div>
-            <div className="text-gray-600 mt-1">Bài đã hoàn thành</div>
-          </div>
-          <div className="card p-6">
-            <div className="text-3xl font-bold text-orange-600">{pendingSubmissions}</div>
-            <div className="text-gray-600 mt-1">Bài đang chờ chấm</div>
-          </div>
-          <div className="card p-6">
-            <div className="text-3xl font-bold text-purple-600">
-              {gradedSubmissions.length > 0
-                ? Math.round(gradedSubmissions.reduce((sum, s) => sum + (s.score || 0), 0) / gradedSubmissions.length)
-                : "-"}
-            </div>
-            <div className="text-gray-600 mt-1">Điểm trung bình</div>
-          </div>
-        </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-xl font-bold text-gray-900">📚 Khóa học</h2>
-            {chapters.map((chapter) => (
-              <div key={chapter.id} className="card">
-                <div className="p-4 border-b border-gray-200" style={{ backgroundImage: `linear-gradient(135deg, ${chapter.color}15, transparent)` }}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: chapter.color + "20", color: chapter.color }}>
-                      <i className={`fa-solid ${chapter.icon}`}></i>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">{chapter.title}</h3>
-                      <p className="text-sm text-gray-500">{chapter.lessons.length} bài học</p>
+          {chapterProgress.length > 0 ? (
+            <div className="space-y-5">
+              {chapterProgress.map((chapter) => (
+                <article key={chapter.id} className="card overflow-hidden rounded-[1.5rem]">
+                  <div
+                    className="border-b border-slate-200 px-5 py-5"
+                    style={{
+                      backgroundImage: `linear-gradient(135deg, ${chapter.color}18, rgba(255,255,255,0.96))`,
+                    }}
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className="flex h-12 w-12 items-center justify-center rounded-2xl"
+                          style={{ backgroundColor: `${chapter.color}24`, color: chapter.color }}
+                        >
+                          <i className={`fa-solid ${chapter.icon}`}></i>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-slate-900">{chapter.title}</h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {chapter.completed}/{chapter.lessons.length} bài đã hoàn thành
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="min-w-[220px]">
+                        <div className="flex items-center justify-between text-sm text-slate-500">
+                          <span>Tiến độ chương</span>
+                          <span className="font-semibold text-slate-900">{chapter.percent}%</span>
+                        </div>
+                        <div className="mt-2 h-2 rounded-full bg-slate-200">
+                          <div
+                            className="h-2 rounded-full bg-slate-900 transition-all"
+                            style={{ width: `${chapter.percent}%` }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {chapter.lessons.map((lesson, index) => {
-                    const progress = userProgress.find((p) => p.lessonId === lesson.id);
-                    const isCompleted = progress?.completed;
-                    return (
-                      <Link key={lesson.id} href={`/lessons/${lesson.id}`} className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${isCompleted ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"}`}>
-                          {isCompleted ? <i className="fa-solid fa-check"></i> : index + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">{lesson.title}</div>
-                          <div className="text-sm text-gray-500">{lesson.duration} phút • {lesson.difficulty}</div>
-                        </div>
-                        <i className="fa-solid fa-chevron-right text-gray-400"></i>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            {chapters.length === 0 && (
-              <div className="card p-8 text-center text-gray-500">
-                <i className="fa-solid fa-book-open text-4xl mb-4"></i>
-                <p>Chưa có khóa học nào</p>
-              </div>
-            )}
-          </div>
 
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-6">📝 Bài nộp gần đây</h2>
-            <div className="card divide-y divide-gray-100">
-              {submissions.map((submission) => (
-                <Link key={submission.id} href={`/lessons/${submission.exercise.lessonId}?tab=bai-tap`} className="block p-4 hover:bg-gray-50 transition-colors">
-                  <div className="text-sm text-gray-500 mb-1">{submission.exercise.lesson.title}</div>
-                  <div className="font-medium text-gray-900 mb-2">{submission.exercise.title}</div>
-                  <div className="flex items-center justify-between">
-                    <span className={`badge ${submission.status === "graded" ? "badge-success" : submission.status === "pending" ? "badge-warning" : "badge-primary"}`}>
-                      {submission.status === "graded" ? `✓ ${submission.score}/${submission.maxScore}` : submission.status === "pending" ? "⏳ Chờ chấm" : "Đã trả lại"}
-                    </span>
-                    <span className="text-xs text-gray-500">{new Date(submission.createdAt).toLocaleDateString("vi-VN")}</span>
+                  <div className="divide-y divide-slate-100">
+                    {chapter.lessons.map((lesson, index) => {
+                      const isCompleted = completedLessonIds.has(lesson.id);
+
+                      return (
+                        <Link
+                          key={lesson.id}
+                          href={`/lessons/${lesson.id}`}
+                          className="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center"
+                        >
+                          <div
+                            className={`flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold ${
+                              isCompleted
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {isCompleted ? <i className="fa-solid fa-check"></i> : index + 1}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-slate-900">{lesson.title}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                              <span>{lesson.duration} phút</span>
+                              <span>•</span>
+                              <span>{getDifficultyLabel(lesson.difficulty)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`badge ${
+                                isCompleted ? "badge-success" : "badge-primary"
+                              }`}
+                            >
+                              {isCompleted ? "Đã xong" : "Tiếp tục"}
+                            </span>
+                            <i className="fa-solid fa-chevron-right text-slate-300"></i>
+                          </div>
+                        </Link>
+                      );
+                    })}
                   </div>
-                  {submission.status === "graded" && submission.feedback && (
-                    <div className="mt-2 text-sm text-blue-600">
-                      <i className="fa-solid fa-comment mr-1"></i> Có nhận xét từ giáo viên
-                    </div>
-                  )}
-                </Link>
+                </article>
               ))}
-              {submissions.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
-                  <p>Chưa có bài nộp nào</p>
+            </div>
+          ) : (
+            <div className="card rounded-[1.5rem] p-10 text-center text-slate-500">
+              <i className="fa-solid fa-book-open text-4xl text-slate-300"></i>
+              <p className="mt-4">Chưa có chương học nào khả dụng.</p>
+            </div>
+          )}
+        </section>
+
+        <div className="space-y-6">
+          <section id="thong-bao">
+            <NotificationInbox
+              emptyMessage="Hiện chưa có thông báo nào cần xử lý."
+              notifications={notifications}
+            />
+          </section>
+
+          <section id="lop-hoc" className="card rounded-[1.5rem] p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900">Lớp học nổi bật</h2>
+              <Link href="/classrooms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                Mở danh sách
+              </Link>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {classroomEnrollments.length > 0 ? (
+                classroomEnrollments.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/classrooms/${item.classroom.id}`}
+                    className="block rounded-2xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:bg-slate-50"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-slate-900">{item.classroom.name}</div>
+                        <div className="mt-1 text-sm text-slate-500">GV: {item.classroom.teacher.name}</div>
+                      </div>
+                      <span className="badge badge-primary font-mono">{item.classroom.code}</span>
+                    </div>
+                    <div className="mt-3 text-sm text-slate-500">
+                      {item.classroom._count.assignments} bài tập được giao
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                  Chưa có lớp học nào để hiển thị.
                 </div>
               )}
             </div>
-          </div>
+          </section>
         </div>
-      </main>
-    </div>
+      </div>
+    </StudentChrome>
   );
 }

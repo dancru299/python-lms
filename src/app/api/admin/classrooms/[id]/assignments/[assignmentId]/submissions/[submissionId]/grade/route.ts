@@ -17,13 +17,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const assignment = await prisma.classroomAssignment.findUnique({
       where: { id: assignmentId },
-      include: { classroom: { select: { teacherId: true } } },
+      include: {
+        classroom: { select: { teacherId: true } },
+        submissions: {
+          where: { id: submissionId },
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+          },
+          take: 1,
+        },
+      },
     });
 
     if (!assignment || assignment.classroomId !== classroomId) {
       return NextResponse.json(
         { error: "Không tìm th?y bài giao" },
         { status: 404 },
+      );
+    }
+
+    const targetSubmission = assignment.submissions[0];
+    if (!targetSubmission) {
+      return NextResponse.json(
+        { error: "Không tìm thấy bài nộp" },
+        { status: 404 },
+      );
+    }
+
+    if (targetSubmission.status === "graded") {
+      return NextResponse.json(
+        { error: "Bài này đã được chấm điểm rồi" },
+        { status: 409 },
       );
     }
 
@@ -58,6 +84,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         gradedBy: session.userId,
       },
     });
+
+    const studentId = targetSubmission.studentId;
+    if (studentId) {
+      await prisma.notification.create({
+        data: {
+          userId: studentId,
+          type: "classroom_submission_graded",
+          title: "Bài làm đã được chấm",
+          message: `Bài "${assignment.title}" đã được chấm ${boundedScore}/${assignment.maxScore} điểm${feedback ? " và có nhận xét từ giáo viên." : "."}`,
+          link: `/classrooms/${classroomId}/assignments/${assignmentId}`,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, submission });
   } catch (error) {
