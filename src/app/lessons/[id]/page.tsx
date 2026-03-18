@@ -138,6 +138,93 @@ function processCodeBlocks(html: string): string {
   );
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatInlineContent(text: string): string {
+  return escapeHtml(text).replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function normalizeExerciseHtml(content: string): string {
+  if (!content?.trim()) return "";
+
+  const trimmed = content.trim();
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  let normalized = trimmed.replace(/\r\n/g, "\n");
+  const codeBlocks: string[] = [];
+
+  normalized = normalized.replace(/```(?:\w+)?\n?([\s\S]*?)```/g, (_, code: string) => {
+    const token = `__CODE_BLOCK_${codeBlocks.length}__`;
+    codeBlocks.push(`<div class="code-block">${escapeHtml(code.trim())}</div>`);
+    return `\n${token}\n`;
+  });
+
+  const html = normalized
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      if (/^__CODE_BLOCK_\d+__$/.test(block)) {
+        return block;
+      }
+
+      const lines = block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      if (lines.length > 0 && lines.every((line) => /^\d+[\.\)]\s+/.test(line))) {
+        return `<ol>${lines
+          .map((line) => `<li>${formatInlineContent(line.replace(/^\d+[\.\)]\s+/, ""))}</li>`)
+          .join("")}</ol>`;
+      }
+
+      if (lines.length > 0 && lines.every((line) => /^[-*]\s+/.test(line))) {
+        return `<ul>${lines
+          .map((line) => `<li>${formatInlineContent(line.replace(/^[-*]\s+/, ""))}</li>`)
+          .join("")}</ul>`;
+      }
+
+      return `<p>${formatInlineContent(block).replace(/\n/g, "<br />")}</p>`;
+    })
+    .join("\n");
+
+  return html.replace(/__CODE_BLOCK_(\d+)__/g, (_, index: string) => codeBlocks[Number(index)] || "");
+}
+
+function renderExerciseHtml(content: string): string {
+  return processCodeBlocks(normalizeExerciseHtml(content));
+}
+
+function getDifficultyMeta(difficulty: string) {
+  switch (difficulty) {
+    case "hard":
+      return {
+        label: "Nâng cao",
+        className: "border-red-200 bg-red-50 text-red-700",
+      };
+    case "medium":
+      return {
+        label: "Trung bình",
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+      };
+    default:
+      return {
+        label: "Cơ bản",
+        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      };
+  }
+}
+
 export default function LessonPage() {
   const params = useParams();
   const [lesson, setLesson] = useState<Lesson | null>(null);
@@ -393,15 +480,61 @@ export default function LessonPage() {
           {/* Luyện Tập Tab */}
           {activeTab === "luyen-tap" && (
             <div className="px-4 py-6 bg-white rounded-lg shadow-lg animate-fade-in">
+              <div className="mb-6 overflow-hidden rounded-[28px] border border-sky-200 bg-gradient-to-r from-sky-50 via-white to-blue-50">
+                <div className="px-6 py-6 md:px-8">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">
+                        <i className="fa-solid fa-dumbbell"></i>
+                        Luyện tập
+                      </span>
+                      <h2 className="mt-4 text-2xl font-bold text-slate-900">Củng cố kiến thức ngay sau khi học</h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                        Mỗi bài luyện tập được trình bày lại theo dạng nhiệm vụ nhỏ, rõ đầu việc và có đáp án mẫu để bạn tự đối chiếu sau khi hoàn thành.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm text-slate-600">
+                      <div className="rounded-2xl border border-sky-100 bg-white/80 px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-sky-600">Số bài</div>
+                        <div className="mt-1 text-xl font-bold text-slate-900">{practiceExercises.length}</div>
+                      </div>
+                      <div className="rounded-2xl border border-sky-100 bg-white/80 px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-sky-600">Chế độ</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">Tự làm và đối chiếu</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-6">
-                {practiceExercises.map((exercise, index) => (
-                  <div key={exercise.id} className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                {practiceExercises.map((exercise, index) => {
+                  const difficultyMeta = getDifficultyMeta(exercise.difficulty);
+                  const questionHtml = renderExerciseHtml(exercise.question);
+
+                  return (
+                  <div key={exercise.id} className="practice-shell">
                     <h2 className="text-xl font-semibold text-blue-700 mb-3">
                       Bài tập {index + 1}: {exercise.title}
                     </h2>
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full border text-sm font-medium ${difficultyMeta.className}`}>
+                        {difficultyMeta.label}
+                      </span>
+                      <span className="px-3 py-1 rounded-full border border-sky-200 bg-white text-sm font-medium text-sky-700">
+                        {exercise.points} điểm
+                      </span>
+                      <span className={`px-3 py-1 rounded-full border text-sm font-medium ${
+                        exercise.answerVisible
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-100 text-slate-600"
+                      }`}>
+                        {exercise.answerVisible ? "Có đáp án mẫu" : "Đáp án đang khóa"}
+                      </span>
+                    </div>
                     
-                    {exercise.question && (
-                      <div className="text-gray-700 mb-4 lesson-content" dangerouslySetInnerHTML={{ __html: processCodeBlocks(exercise.question) }} />
+                    {questionHtml && (
+                      <div className="text-gray-700 mb-4 lesson-content exercise-content" dangerouslySetInnerHTML={{ __html: questionHtml }} />
                     )}
 
                     <button
@@ -425,7 +558,8 @@ export default function LessonPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -433,13 +567,42 @@ export default function LessonPage() {
           {/* Bài Tập Về Nhà Tab */}
           {activeTab === "bai-tap" && (
             <div className="px-4 py-6 bg-white rounded-lg shadow-lg animate-fade-in">
+              <div className="mb-6 overflow-hidden rounded-[28px] border border-purple-200 bg-gradient-to-r from-purple-50 via-white to-fuchsia-50">
+                <div className="px-6 py-6 md:px-8">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <span className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-purple-700">
+                        <i className="fa-solid fa-house-laptop"></i>
+                        Bài tập về nhà
+                      </span>
+                      <h2 className="mt-4 text-2xl font-bold text-slate-900">Vận dụng kiến thức vào bài làm hoàn chỉnh</h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                        Mỗi BTVN có khu vực đề bài, nộp bài và phản hồi riêng để người học theo dõi trọn vẹn trong cùng một mạch.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm text-slate-600">
+                      <div className="rounded-2xl border border-purple-100 bg-white/80 px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-purple-600">Số bài</div>
+                        <div className="mt-1 text-xl font-bold text-slate-900">{homeworkExercises.length}</div>
+                      </div>
+                      <div className="rounded-2xl border border-purple-100 bg-white/80 px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.2em] text-purple-600">Mục đích</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">Luyện nộp bài và nhận phản hồi</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-6">
                 {homeworkExercises.map((exercise, index) => {
                   const hasSubmitted = !!exercise.mySubmission;
                   const isGraded = exercise.mySubmission?.status === "graded";
+                  const difficultyMeta = getDifficultyMeta(exercise.difficulty);
+                  const questionHtml = renderExerciseHtml(exercise.question);
                   
                   return (
-                    <div key={exercise.id} className="bg-purple-50 p-5 rounded-lg border border-purple-200">
+                    <div key={exercise.id} className="homework-shell">
                       <div className="flex items-center justify-between mb-3">
                         <h2 className="text-xl font-semibold text-purple-700">
                           BTVN {index + 1}: {exercise.title}
@@ -452,18 +615,17 @@ export default function LessonPage() {
                               {isGraded ? `✓ Đã chấm: ${exercise.mySubmission?.score}/${exercise.points}` : "⏳ Chờ chấm"}
                             </span>
                           )}
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            exercise.difficulty === "hard" ? "bg-red-100 text-red-700" 
-                            : exercise.difficulty === "medium" ? "bg-yellow-100 text-yellow-700"
-                            : "bg-green-100 text-green-700"
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full border text-sm font-medium ${difficultyMeta.className}`}>
+                            {difficultyMeta.label}
+                          </span>
+                          <span className="px-3 py-1 rounded-full border border-purple-200 bg-white text-sm font-medium text-purple-700">
                             {exercise.points} điểm
                           </span>
                         </div>
                       </div>
                       
-                      {exercise.question && (
-                        <div className="text-gray-700 mb-4 lesson-content" dangerouslySetInnerHTML={{ __html: processCodeBlocks(exercise.question) }} />
+                      {questionHtml && (
+                        <div className="text-gray-700 mb-4 lesson-content exercise-content" dangerouslySetInnerHTML={{ __html: questionHtml }} />
                       )}
 
                       {/* Show graded result */}
@@ -754,6 +916,141 @@ export default function LessonPage() {
         .code-comment {
           color: #60a5fa;
           font-style: italic;
+        }
+
+        .practice-shell,
+        .homework-shell {
+          position: relative;
+          overflow: hidden;
+          border-radius: 1.5rem;
+          border: 1px solid #dbeafe;
+          padding: 1.5rem;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+          box-shadow: 0 18px 45px rgba(148, 163, 184, 0.12);
+        }
+
+        .homework-shell {
+          border-color: #ddd6fe;
+          background: linear-gradient(180deg, #ffffff 0%, #fcfaff 100%);
+        }
+
+        .practice-shell::before,
+        .homework-shell::before {
+          content: "";
+          position: absolute;
+          inset: 0 0 auto 0;
+          height: 6px;
+          background: linear-gradient(90deg, #38bdf8 0%, #2563eb 100%);
+        }
+
+        .homework-shell::before {
+          background: linear-gradient(90deg, #8b5cf6 0%, #d946ef 100%);
+        }
+
+        .practice-shell > h2,
+        .homework-shell > div:first-child h2 {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1rem;
+          padding-top: 0.6rem;
+          color: #0f172a !important;
+          font-size: 1.45rem !important;
+          line-height: 1.35;
+        }
+
+        .practice-shell > h2::after,
+        .homework-shell > div:first-child h2::after {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          border: 1px solid currentColor;
+          padding: 0.35rem 0.85rem;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          white-space: nowrap;
+          opacity: 0.9;
+        }
+
+        .practice-shell > h2::after {
+          content: "Practice";
+          color: #0369a1;
+          background: #f0f9ff;
+        }
+
+        .homework-shell > div:first-child h2::after {
+          content: "Homework";
+          color: #7c3aed;
+          background: #faf5ff;
+        }
+
+        .practice-shell > .lesson-content,
+        .homework-shell > .lesson-content {
+          margin-top: 1rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 1.25rem;
+          background: rgba(255, 255, 255, 0.92);
+          padding: 1.35rem 1.4rem;
+        }
+
+        .homework-shell > .lesson-content {
+          border-color: #ddd6fe;
+        }
+
+        .practice-shell > .lesson-content::before,
+        .homework-shell > .lesson-content::before {
+          content: "Đề bài và yêu cầu";
+          display: inline-flex;
+          align-items: center;
+          margin-bottom: 1rem;
+          border-radius: 999px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          padding: 0.35rem 0.85rem;
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .homework-shell > .lesson-content::before {
+          content: "Nhiệm vụ và tiêu chí";
+          background: #f5f3ff;
+          color: #7c3aed;
+        }
+
+        .exercise-content > :first-child {
+          margin-top: 0 !important;
+        }
+
+        .practice-shell > button {
+          margin-top: 1rem;
+          border-radius: 1rem;
+          padding: 0.8rem 1.1rem;
+          font-size: 0.95rem;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .practice-shell > div.mt-4,
+        .homework-shell > div.mt-4,
+        .homework-shell > div.mt-4.space-y-4 {
+          border-radius: 1.25rem;
+        }
+
+        .homework-shell > div:first-child {
+          margin-bottom: 1.1rem;
+          border: 1px solid #e9d5ff;
+          border-radius: 1.25rem;
+          background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%);
+          padding: 1rem 1.1rem;
+        }
+
+        .homework-shell textarea {
+          border-radius: 1rem;
         }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

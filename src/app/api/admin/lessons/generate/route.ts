@@ -65,6 +65,11 @@ là một trợ lý ảo am hiểu giáo dục. Hãy nhận nội dung văn bả
 
 **Nội dung thô cần xử lý:**
 ---
+- Trường "question" trong mảng "exercises" phải là HTML có cấu trúc rõ ràng, không được trả về dạng text thô sạch dòng.
+- Với bài "practice": bắt buộc có ít nhất 1 đoạn mở bài, 1 heading cho đề bài, 1 danh sách <ol> hoặc <ul> cho yêu cầu/các bước, và 1 phần nêu rõ kết quả cần đạt.
+- Với bài "homework": bắt buộc có 1 heading mở bài, 1 phần "Nhiệm vụ" hoặc "Yêu cầu", và 1 phần "Tiêu chí hoàn thành" hoặc "Đầu ra cần nộp". Mức độ chăm chút phải tương đương các section khác.
+- Nếu có code minh họa trong "question", phải dùng <div class="code-block">...</div>, không dùng Markdown code fence.
+- Trường "answer" chỉ chứa đáp án mẫu thuần túy hoặc code thuần túy, không bê nguyên HTML.
 ${content}
 ---
     `;
