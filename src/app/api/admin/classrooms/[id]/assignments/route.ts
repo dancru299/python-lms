@@ -43,7 +43,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const assignments = await prisma.classroomAssignment.findMany({
       where: { classroomId: id },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        durationMinutes: true,
+        maxScore: true,
+        createdAt: true,
         lesson: { select: { id: true, title: true } },
         _count: { select: { submissions: true } },
       },
@@ -179,6 +185,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const converted = await convertDocxToHtml(buffer);
       questionHtml = converted.html || null;
+      questionDocx = buffer.toString("base64");
 
       if (!questionHtml) {
         return NextResponse.json(
@@ -186,10 +193,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           { status: 400 },
         );
       }
-
-      // Deployed environments may not allow writing back into the app filesystem.
-      // The assignment flow only needs the rendered HTML for students to view and submit.
-      questionDocx = null;
     }
 
     const assignment = await prisma.classroomAssignment.create({
@@ -208,7 +211,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         maxScore: maxScore > 0 ? maxScore : 10,
         createdBy: access.session.userId,
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        durationMinutes: true,
+        maxScore: true,
+        createdAt: true,
         lesson: { select: { id: true, title: true } },
         _count: { select: { submissions: true } },
       },

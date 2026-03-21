@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import AssignmentQuestionPreview from "@/components/AssignmentQuestionPreview";
 import GradeClassroomSubmissionForm from "./GradeClassroomSubmissionForm";
 
 interface PageProps {
@@ -91,13 +92,12 @@ export default async function ClassroomAssignmentDetailPage({
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-3">Đề bài</h2>
-          <div
-            className="assignment-rich text-gray-800"
-            dangerouslySetInnerHTML={{
-              __html:
-                assignment.questionHtml || "<p>Chưa có nội dung đề bài.</p>",
-            }}
-          />
+          <div className="assignment-rich text-gray-800">
+            <AssignmentQuestionPreview
+              docxBase64={assignment.questionDocx}
+              html={assignment.questionHtml}
+            />
+          </div>
           {assignment.answerTemplate && assignment.type === "homework" && (
             <div className="mt-4 p-4 rounded-lg bg-green-50 border border-green-200">
               <h3 className="font-semibold text-green-700 mb-2">

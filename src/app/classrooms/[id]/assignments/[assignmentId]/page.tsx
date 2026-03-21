@@ -1,6 +1,6 @@
 ﻿import { requireAuth } from "@/lib/session";
 import prisma from "@/lib/prisma";
-import ClientOnlyNoCopyHtml from "@/components/ClientOnlyNoCopyHtml";
+import AssignmentQuestionPreview from "@/components/AssignmentQuestionPreview";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import StudentAssignmentSubmitForm from "./StudentAssignmentSubmitForm";
@@ -102,11 +102,11 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
             Đề Bài
           </h2>
           <div className="assignment-rich min-h-[70vh] text-gray-800">
-            {assignment.questionHtml ? (
-              <ClientOnlyNoCopyHtml html={assignment.questionHtml} />
-            ) : (
-              <p>Chưa có nội dung đề bài.</p>
-            )}
+            <AssignmentQuestionPreview
+              docxBase64={assignment.questionDocx}
+              html={assignment.questionHtml}
+              protectContent
+            />
           </div>
         </section>
 

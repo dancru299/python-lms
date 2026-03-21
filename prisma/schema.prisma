@@ -261,7 +261,7 @@ model ClassroomAssignment {
   type            String   @default("homework") // homework, test
   durationMinutes Int?
   questionHtml    String?  @db.LongText
-  questionDocx    String?
+  questionDocx    String?  @db.LongText
   answerTemplate  String?  @db.LongText
   maxScore        Int      @default(10)
   isPublished     Boolean  @default(true)

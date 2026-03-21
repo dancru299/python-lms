@@ -240,8 +240,42 @@ h6 {
   padding-left: 1.5rem;
 }
 
+.assignment-rich ul {
+  list-style-type: disc;
+}
+
+.assignment-rich ol {
+  list-style-type: decimal;
+}
+
+.assignment-rich ul ul {
+  list-style-type: circle;
+}
+
+.assignment-rich ul ul ul {
+  list-style-type: square;
+}
+
+.assignment-rich ol ol {
+  list-style-type: lower-alpha;
+}
+
+.assignment-rich ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.assignment-rich li {
+  display: list-item;
+}
+
 .assignment-rich li + li {
   margin-top: 0.35rem;
+}
+
+.assignment-rich li > p:last-child,
+.assignment-rich li > ul:last-child,
+.assignment-rich li > ol:last-child {
+  margin-bottom: 0;
 }
 
 .assignment-rich strong {
@@ -251,6 +285,42 @@ h6 {
 
 .assignment-rich em {
   font-style: italic;
+}
+
+.assignment-rich s {
+  text-decoration: line-through;
+}
+
+.assignment-rich .docx-underline,
+.assignment-rich u {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.assignment-rich .docx-all-caps {
+  text-transform: uppercase;
+}
+
+.assignment-rich .docx-small-caps {
+  font-variant: small-caps;
+}
+
+.assignment-rich .docx-highlight,
+.assignment-rich mark {
+  background: #fef08a;
+  color: inherit;
+  padding: 0 0.08em;
+  border-radius: 0.18rem;
+}
+
+.assignment-rich .docx-highlight-yellow {
+  background: #fde047;
+}
+
+.assignment-rich sub,
+.assignment-rich sup {
+  font-size: 0.75em;
+  line-height: 0;
 }
 
 .assignment-rich blockquote {
@@ -302,4 +372,34 @@ h6 {
   max-width: 100%;
   height: auto;
   border-radius: 0.75rem;
+}
+
+.assignment-rich .docx-list {
+  margin-left: 0.25rem;
+}
+
+.assignment-rich .docx-list-level-2,
+.assignment-rich .docx-list-level-3,
+.assignment-rich .docx-list-level-4,
+.assignment-rich .docx-list-level-5 {
+  margin-top: 0.45rem;
+}
+
+.assignment-docx-preview {
+  overflow-x: auto;
+  border-radius: 1rem;
+}
+
+.assignment-docx-preview .assignment-docx-wrapper {
+  padding: 0 0 1.5rem;
+}
+
+.assignment-docx-preview .assignment-docx {
+  color: #111827;
+}
+
+.assignment-docx-preview .assignment-docx-wrapper > section.assignment-docx {
+  margin: 0 auto 1.5rem;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  border-radius: 0.6rem;
 }
