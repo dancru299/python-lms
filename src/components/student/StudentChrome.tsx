@@ -117,7 +117,7 @@ export default function StudentChrome({
               </div>
               <div>
                 <div className="text-lg font-bold text-gray-900">Python LMS</div>
-                <div className="text-sm text-gray-500">Kh\u00f4ng gian h\u1ecdc t\u1eadp</div>
+                <div className="text-sm text-gray-500">Không gian học tập</div>
               </div>
             </div>
 

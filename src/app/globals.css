@@ -47,16 +47,19 @@ h6 {
 .code-block {
   background: #1f1f1f;
   color: #f8fafc;
-  padding: 1.25rem 1.5rem;
+  padding: 1.35rem 1.75rem;
   border-radius: 0.5rem;
   overflow-x: auto;
-  font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.88rem;
-  line-height: 1.75;
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+  font-size: 0.97rem;
+  line-height: 1.9;
   white-space: pre-wrap;
   word-wrap: break-word;
   margin: 1.25rem 0;
   letter-spacing: 0.01em;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  font-variant-ligatures: none;
 }
 
 /* Comment highlighting inside code blocks (applied via JS) */
@@ -70,6 +73,17 @@ h6 {
   background: transparent !important;
   padding: 0 !important;
   border-radius: 0 !important;
+  font: inherit !important;
+  line-height: inherit !important;
+  tab-size: inherit;
+  -moz-tab-size: inherit;
+}
+
+.feedback-block {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #374151;
+  line-height: 1.75;
 }
 
 /* Animation utilities */
@@ -386,17 +400,16 @@ h6 {
 }
 
 .assignment-docx-preview {
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
   border-radius: 1rem;
-  padding-bottom: 0.75rem;
-  scrollbar-gutter: stable both-edges;
+  padding-bottom: 0.35rem;
 }
 
 .assignment-docx-preview .assignment-docx-wrapper {
-  width: max-content;
-  min-width: 100%;
-  padding: 1rem 1rem 1.5rem !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 0.15rem 0.15rem 0.35rem !important;
   display: flex !important;
   flex-flow: column nowrap !important;
   align-items: center !important;
@@ -410,18 +423,32 @@ h6 {
 }
 
 .assignment-docx-preview .assignment-docx-wrapper > section.assignment-docx {
-  margin: 0 auto 1.5rem !important;
+  width: calc(100% - 0.25rem) !important;
+  max-width: 100% !important;
+  min-height: auto !important;
+  padding: 1rem 1.4rem 1.25rem !important;
+  margin: 0 auto 0.2rem !important;
   box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12) !important;
   border-radius: 0.6rem;
+  box-sizing: border-box !important;
 }
 
 .assignment-docx-preview section.assignment-docx > article {
   line-height: 1.6 !important;
+  width: 100%;
 }
 
 .assignment-docx-preview section.assignment-docx p,
 .assignment-docx-preview section.assignment-docx li {
   line-height: 1.6 !important;
+}
+
+.assignment-docx-preview section.assignment-docx,
+.assignment-docx-preview section.assignment-docx *,
+.assignment-docx-preview section.assignment-docx span {
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 .assignment-docx-preview section.assignment-docx p + p {

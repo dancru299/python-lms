@@ -58,10 +58,11 @@ export default function StudentAssignmentSubmitForm({
     <form onSubmit={handleSubmit}>
       <label className="block text-2xl font-semibold text-gray-900 mb-2">Code bài làm:</label>
       <textarea
-        className="w-full min-h-[420px] p-4 rounded-md border border-gray-300 bg-gray-900 text-gray-100 font-mono text-sm"
+        className="w-full min-h-[420px] rounded-md border border-gray-300 bg-gray-900 px-5 py-4 font-mono text-[15px] leading-8 text-gray-100"
         placeholder="// Dán code của bạn vào đây..."
         value={content}
         onChange={(e) => setContent(e.target.value)}
+        spellCheck={false}
       />
 
       <button
@@ -83,8 +84,9 @@ export default function StudentAssignmentSubmitForm({
                 <strong>Điểm:</strong> {existingSubmission.score ?? 0}
               </div>
               {existingSubmission.feedback && (
-                <div className="text-sm text-gray-700 mt-1">
-                  <strong>Nhận xét:</strong> {existingSubmission.feedback}
+                <div className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
+                  <div className="text-sm font-semibold text-gray-700">Nhận xét</div>
+                  <div className="feedback-block mt-2">{existingSubmission.feedback}</div>
                 </div>
               )}
             </>

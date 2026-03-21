@@ -71,8 +71,6 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
     },
   });
 
-  const isTestAssignment = assignment.type === "test";
-
   return (
     <div className="min-h-screen bg-gray-200">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -98,14 +96,8 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
         </div>
       </header>
 
-      <main
-        className={
-          isTestAssignment
-            ? "max-w-[1600px] mx-auto px-4 py-6 space-y-5"
-            : "max-w-[1400px] mx-auto px-4 py-6 grid lg:grid-cols-2 gap-4 items-start"
-        }
-      >
-        <section className="bg-white rounded-lg border border-gray-300 p-5">
+      <main className="max-w-[1600px] mx-auto px-4 py-5 grid gap-4 items-start lg:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.95fr)]">
+        <section className="bg-white rounded-lg border border-gray-300 p-4">
           <h2 className="text-3xl font-semibold text-gray-900 mb-4 border-b-2 border-orange-500 pb-2">
             Đề Bài
           </h2>
@@ -119,9 +111,7 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
         </section>
 
         <section
-          className={`bg-white rounded-lg border border-gray-300 p-5 ${
-            isTestAssignment ? "max-w-5xl mx-auto w-full" : ""
-          }`}
+          className="bg-white rounded-lg border border-gray-300 p-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
         >
           <h2 className="text-3xl font-semibold text-gray-900 mb-4 border-b-2 border-orange-500 pb-2">
             Nộp Bài (Code Editor)
