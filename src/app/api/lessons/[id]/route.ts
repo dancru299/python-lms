@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
+import {
+  buildLessonProgressTabs,
+  summarizeLessonProgress,
+} from "@/lib/lesson-progress";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -50,9 +54,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
     }
 
+    const lessonTabs = buildLessonProgressTabs(lesson);
+    let progress = null;
+
+    if (user?.role === "student") {
+      try {
+        const tabProgress = await prisma.userLessonTabProgress.findMany({
+          where: { userId: user.userId, lessonId: id },
+          select: {
+            tabId: true,
+            timeSpent: true,
+            completed: true,
+          },
+        });
+
+        progress = summarizeLessonProgress(lessonTabs, tabProgress);
+      } catch (progressError) {
+        console.error("Get lesson progress error:", progressError);
+      }
+    }
+
     // Transform exercises to include mySubmission
     const transformedLesson = {
       ...lesson,
+      tabs: lessonTabs,
+      progress,
       exercises: lesson.exercises.map(exercise => ({
         ...exercise,
         mySubmission: exercise.submissions?.[0] || null,

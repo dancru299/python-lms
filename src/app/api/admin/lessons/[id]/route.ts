@@ -164,7 +164,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       });
     }
     
-    // 2. Delete user progress
+    // 2. Delete tab progress and user progress
+    await prisma.userLessonTabProgress.deleteMany({ where: { lessonId: id } });
     await prisma.userProgress.deleteMany({ where: { lessonId: id } });
     
     // 3. Delete sections

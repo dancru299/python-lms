@@ -24,6 +24,7 @@ model User {
   // Relations
   submissions                    Submission[]
   progress                       UserProgress[]
+  lessonTabProgress             UserLessonTabProgress[]
   notifications                  Notification[]
   teacherClassrooms              Classroom[]                     @relation("TeacherClassrooms")
   studentClassrooms              ClassroomStudent[]              @relation("StudentClassrooms")
@@ -75,6 +76,7 @@ model Lesson {
   sections    Section[]
   exercises   Exercise[]
   progress    UserProgress[]
+  tabProgress UserLessonTabProgress[]
   assignments ClassroomAssignment[]
 
   @@index([chapterId])
@@ -160,6 +162,26 @@ model UserProgress {
 
   @@unique([userId, lessonId])
   @@index([userId])
+  @@index([lessonId])
+}
+
+model UserLessonTabProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  lessonId   String
+  tabId      String
+  completed  Boolean  @default(false)
+  timeSpent  Int      @default(0)
+  lastAccess DateTime @default(now())
+  completedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId, tabId])
+  @@index([userId, lessonId])
   @@index([lessonId])
 }
 

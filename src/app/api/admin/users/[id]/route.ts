@@ -112,6 +112,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Delete related data first
     await prisma.notification.deleteMany({ where: { userId: id } });
     await prisma.submission.deleteMany({ where: { userId: id } });
+    await prisma.userLessonTabProgress.deleteMany({ where: { userId: id } });
     await prisma.userProgress.deleteMany({ where: { userId: id } });
     await prisma.classroomStudent.deleteMany({ where: { studentId: id } });
     

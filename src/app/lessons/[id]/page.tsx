@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -44,12 +44,54 @@ interface Lesson {
   chapter: { id: string; title: string; icon: string; color: string };
   sections: Section[];
   exercises: Exercise[];
+  tabs: LessonTab[];
+  progress: LessonProgressSummary | null;
 }
 
 interface UserSession {
   id: string;
   role: string;
   name: string;
+}
+
+interface LessonTab {
+  id: string;
+  label: string;
+}
+
+interface LessonProgressTab extends LessonTab {
+  completed: boolean;
+  timeSpent: number;
+  remainingSeconds: number;
+}
+
+interface LessonProgressSummary {
+  completed: boolean;
+  completedTabs: number;
+  totalTabs: number;
+  percent: number;
+  timeSpent: number;
+  tabs: LessonProgressTab[];
+}
+
+const TAB_COMPLETION_SECONDS = 60;
+const PROGRESS_BATCH_SECONDS = 10;
+
+function getTabCompletionPercent(timeSpent: number) {
+  return Math.round((Math.min(timeSpent, TAB_COMPLETION_SECONDS) / TAB_COMPLETION_SECONDS) * 100);
+}
+
+function getLessonVisualPercent(progress: LessonProgressSummary | null) {
+  if (!progress || progress.totalTabs === 0) {
+    return 0;
+  }
+
+  const totalProgress = progress.tabs.reduce(
+    (sum, tab) => sum + Math.min(tab.timeSpent, TAB_COMPLETION_SECONDS) / TAB_COMPLETION_SECONDS,
+    0
+  );
+
+  return Math.round((totalProgress / progress.totalTabs) * 100);
 }
 
 // Simple Donut Chart Component
@@ -234,6 +276,8 @@ export default function LessonPage() {
   const [submissions, setSubmissions] = useState<Record<string, string>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [user, setUser] = useState<UserSession | null>(null);
+  const segmentStartedAtRef = useRef<number | null>(null);
+  const progressQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
     async function fetchData() {
@@ -313,6 +357,108 @@ export default function LessonPage() {
     }
   };
 
+  const applyProgressUpdate = useEffectEvent((nextProgress: LessonProgressSummary) => {
+    startTransition(() => {
+      setLesson((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          progress: nextProgress,
+        };
+      });
+    });
+  });
+
+  const flushTabProgress = useEffectEvent(async (lessonId: string, tabId: string, force = false) => {
+    if (!lesson || lesson.id !== lessonId || user?.role !== "student" || !lesson.progress) {
+      return;
+    }
+
+    const currentTabState = lesson.progress.tabs.find((tab) => tab.id === tabId);
+    if (currentTabState?.completed) {
+      segmentStartedAtRef.current = Date.now();
+      return;
+    }
+
+    const startedAt = segmentStartedAtRef.current;
+    if (!startedAt) {
+      segmentStartedAtRef.current = Date.now();
+      return;
+    }
+
+    const deltaSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    if (deltaSeconds < (force ? 1 : PROGRESS_BATCH_SECONDS)) {
+      return;
+    }
+
+    segmentStartedAtRef.current = Date.now();
+
+    progressQueueRef.current = progressQueueRef.current
+      .then(async () => {
+        const res = await fetch(`/api/lessons/${lessonId}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tabId,
+            secondsSpent: deltaSeconds,
+          }),
+          keepalive: true,
+        });
+
+        if (!res.ok) {
+          return;
+        }
+
+        const data = await res.json();
+        if (data.progress) {
+          applyProgressUpdate(data.progress);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to update lesson progress:", error);
+      });
+  });
+
+  useEffect(() => {
+    if (!lesson || user?.role !== "student" || !lesson.progress) {
+      return;
+    }
+
+    const trackedLessonId = lesson.id;
+    const trackedTabId = activeTab;
+    segmentStartedAtRef.current = Date.now();
+
+    const interval = window.setInterval(() => {
+      void flushTabProgress(trackedLessonId, trackedTabId);
+    }, PROGRESS_BATCH_SECONDS * 1000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        void flushTabProgress(trackedLessonId, trackedTabId, true);
+        segmentStartedAtRef.current = null;
+        return;
+      }
+
+      segmentStartedAtRef.current = Date.now();
+    };
+
+    const handlePageHide = () => {
+      void flushTabProgress(trackedLessonId, trackedTabId, true);
+      segmentStartedAtRef.current = null;
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      void flushTabProgress(trackedLessonId, trackedTabId, true);
+      segmentStartedAtRef.current = null;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [activeTab, lesson?.id, user?.role]);
+
   const isTeacher = user?.role === "teacher" || user?.role === "admin";
 
   if (loading) {
@@ -360,6 +506,16 @@ export default function LessonPage() {
       : []),
   ];
 
+  const lessonTabs = lesson.progress?.tabs ?? lesson.tabs ?? tabs;
+  const lessonProgress = lesson.progress;
+  const activeTabState = lessonProgress?.tabs.find((tab) => tab.id === activeTab) || null;
+  const isStudent = user?.role === "student";
+  const visualProgressPercent = getLessonVisualPercent(lessonProgress);
+  const perTabPercent =
+    lessonProgress && lessonProgress.totalTabs > 0
+      ? Math.round(100 / lessonProgress.totalTabs)
+      : 0;
+
   const chartData = [
     { label: "Lý thuyết", value: Math.round(lesson.duration * 0.4), color: "rgba(59, 130, 246, 0.8)" },
     { label: "Ví dụ & Thực hành", value: Math.round(lesson.duration * 0.35), color: "rgba(16, 185, 129, 0.8)" },
@@ -371,6 +527,21 @@ export default function LessonPage() {
       {/* Header */}
       <header className="bg-white shadow-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 transition hover:bg-slate-200"
+            >
+              <i className="fa-solid fa-arrow-left text-xs"></i>
+              Dashboard
+            </Link>
+            <i className="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+            <Link href="/#lo-trinh" className="font-medium text-slate-600 transition hover:text-indigo-600">
+              {lesson.chapter.title}
+            </Link>
+            <i className="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+            <span className="font-semibold text-slate-900">{lesson.title}</span>
+          </div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             🐍 Bài Giảng: {lesson.title}
           </h1>
@@ -381,19 +552,36 @@ export default function LessonPage() {
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap justify-center sm:justify-start gap-2 py-3">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`text-sm sm:text-base font-medium py-2 px-4 rounded-lg transition-all duration-200 ${
-                  activeTab === tab.id
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
-                    : "bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {lessonTabs.map((tab) => {
+              const tabState = lessonProgress?.tabs.find((item) => item.id === tab.id);
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 text-sm sm:text-base font-medium py-2 px-4 rounded-lg transition-all duration-200 ${
+                    activeTab === tab.id
+                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                      : "bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700"
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {tabState?.completed ? (
+                    <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-xs font-bold ${
+                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
+                    }`}>
+                      <i className="fa-solid fa-check"></i>
+                    </span>
+                  ) : isStudent && tabState ? (
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-white text-slate-500"
+                    }`}>
+                      {Math.min(tabState.timeSpent, TAB_COMPLETION_SECONDS)}s/60s
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
       </nav>
@@ -401,6 +589,87 @@ export default function LessonPage() {
       {/* Main Content */}
       <main className="flex-grow">
         <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          {isStudent && lessonProgress && (
+            <section className="mx-4 mb-6 rounded-[1.75rem] border border-emerald-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                    <i className="fa-solid fa-chart-line"></i>
+                    Tiến độ bài giảng
+                  </div>
+                  <h2 className="mt-3 text-xl font-bold text-slate-900">
+                    {lessonProgress.completed
+                      ? "Bạn đã hoàn thành bài giảng này."
+                      : `Đã hoàn thành ${lessonProgress.completedTabs}/${lessonProgress.totalTabs} tab.`}
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {lessonProgress.completed
+                      ? "Tiến độ bài giảng đã được ghi nhận vào dashboard chương học."
+                      : activeTabState?.completed
+                        ? "Tab hiện tại đã đủ 1 phút. Bạn có thể chuyển sang tab tiếp theo."
+                        : `Ở lại tab hiện tại thêm ${activeTabState?.remainingSeconds ?? TAB_COMPLETION_SECONDS} giây để tab này được tính hoàn thành.`}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+                    <span className="rounded-full bg-slate-100 px-3 py-1">
+                      {"M\u1ed7i tab ho\u00e0n th\u00e0nh = +"}
+                      {perTabPercent}%
+                    </span>
+                    {activeTabState && (
+                      <span className="rounded-full bg-indigo-50 px-3 py-1 text-indigo-700">
+                        {"Tab hi\u1ec7n t\u1ea1i: "}
+                        {getTabCompletionPercent(activeTabState.timeSpent)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="min-w-[220px] lg:max-w-xs lg:flex-1">
+                  <div className="flex items-center justify-between text-sm text-slate-500">
+                    <span>Tiến độ bài giảng</span>
+                    <span className="font-semibold text-slate-900">{visualProgressPercent}%</span>
+                  </div>
+                  <div className="mt-2 h-3 rounded-full bg-slate-200">
+                    <div
+                      className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all"
+                      style={{ width: `${visualProgressPercent}%` }}
+                    />
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {lessonProgress.tabs.map((tab) => {
+                      const tabPercent = getTabCompletionPercent(tab.timeSpent);
+
+                      return (
+                        <div
+                          key={tab.id}
+                          className={`rounded-2xl border px-3 py-3 text-left ${
+                            tab.completed
+                              ? "border-emerald-200 bg-emerald-50"
+                              : tab.id === activeTab
+                                ? "border-indigo-200 bg-indigo-50"
+                                : "border-slate-200 bg-slate-50"
+                          }`}
+                        >
+                          <div className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            {tab.label}
+                          </div>
+                          <div className="mt-2 text-lg font-bold text-slate-900">{tabPercent}%</div>
+                          <div className="mt-2 h-2 rounded-full bg-white/80">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                tab.completed ? "bg-emerald-500" : "bg-indigo-500"
+                              }`}
+                              style={{ width: `${tabPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           
           {/* Trang Chủ Tab */}
           {activeTab === "trang-chu" && (
@@ -448,12 +717,29 @@ export default function LessonPage() {
               <div className="mt-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">📚 Nội Dung Bài Học</h2>
                 <ul className="space-y-2">
-                  {lesson.sections.map((section, i) => (
-                    <li key={section.id} className="flex items-center gap-3 text-gray-700">
-                      <span className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">{i + 1}</span>
-                      <button onClick={() => setActiveTab(`section-${section.id}`)} className="hover:text-indigo-600 hover:underline text-left">{section.title}</button>
-                    </li>
-                  ))}
+                  {lesson.sections.map((section, i) => {
+                    const sectionProgress = lessonProgress?.tabs.find(
+                      (tab) => tab.id === `section-${section.id}`
+                    );
+
+                    return (
+                      <li key={section.id} className="flex items-center justify-between gap-3 text-gray-700">
+                        <div className="flex items-center gap-3">
+                          <span className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">{i + 1}</span>
+                          <button onClick={() => setActiveTab(`section-${section.id}`)} className="hover:text-indigo-600 hover:underline text-left">{section.title}</button>
+                        </div>
+                        {isStudent && sectionProgress ? (
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            sectionProgress.completed
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {getTabCompletionPercent(sectionProgress.timeSpent)}%
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </div>
