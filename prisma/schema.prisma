@@ -129,7 +129,7 @@ model Submission {
   content    String    @db.LongText
   files      String?   @db.Text
   status     String    @default("pending")
-  score      Int?
+  score      Float?
   maxScore   Int?
   feedback   String?   @db.Text
   gradedAt   DateTime?
@@ -287,7 +287,7 @@ model ClassroomAssignmentSubmission {
   studentId    String
   content      String    @db.LongText
   status       String    @default("submitted") // submitted, graded
-  score        Int?
+  score        Float?
   feedback     String?   @db.Text
   gradedAt     DateTime?
   gradedBy     String?

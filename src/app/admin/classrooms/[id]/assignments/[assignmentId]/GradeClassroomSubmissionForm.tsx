@@ -88,9 +88,11 @@ export default function GradeClassroomSubmissionForm({
             type="number"
             min={0}
             max={maxScore}
+            step="0.01"
+            inputMode="decimal"
             value={score}
             disabled={locked || loading}
-            onChange={(e) => setScore(Number(e.target.value))}
+            onChange={(e) => setScore(parseFloat(e.target.value))}
             className="input bg-white text-lg font-semibold"
           />
         </div>

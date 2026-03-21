@@ -33,9 +33,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { score, maxScore, feedback } = body;
+    const score = Number(body.score);
+    const maxScore = Number(body.maxScore);
+    const feedback = body.feedback;
 
-    if (score === undefined || score < 0) {
+    if (Number.isNaN(score) || Number.isNaN(maxScore) || score < 0) {
       return NextResponse.json(
         { error: "Điểm số là bắt buộc" },
         { status: 400 }

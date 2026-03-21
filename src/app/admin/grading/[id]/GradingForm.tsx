@@ -70,8 +70,10 @@ export default function GradingForm({ submissionId, maxScore, graderId }: Gradin
             type="number"
             min={0}
             max={maxScore}
+            step="0.01"
+            inputMode="decimal"
             value={score}
-            onChange={(e) => setScore(Number(e.target.value))}
+            onChange={(e) => setScore(parseFloat(e.target.value))}
             className="input w-32 text-center text-xl font-bold"
             required
           />
