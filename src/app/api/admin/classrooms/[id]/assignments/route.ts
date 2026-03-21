@@ -1,8 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCookieSessionUser } from "@/lib/cookie-session";
-import { promises as fs } from "fs";
-import path from "path";
 import mammoth from "mammoth";
 
 interface RouteParams {
@@ -176,23 +174,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const uploadDir = path.join(
-        process.cwd(),
-        "public",
-        "uploads",
-        "classroom-tests",
-      );
-      await fs.mkdir(uploadDir, { recursive: true });
-
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storedName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${safeName}`;
-      const filePath = path.join(uploadDir, storedName);
-
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      await fs.writeFile(filePath, buffer);
-
-      questionDocx = `/uploads/classroom-tests/${storedName}`;
 
       const converted = await mammoth.convertToHtml({ buffer });
       questionHtml = converted.value?.trim() || null;
@@ -203,6 +186,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           { status: 400 },
         );
       }
+
+      // Deployed environments may not allow writing back into the app filesystem.
+      // The assignment flow only needs the rendered HTML for students to view and submit.
+      questionDocx = null;
     }
 
     const assignment = await prisma.classroomAssignment.create({
