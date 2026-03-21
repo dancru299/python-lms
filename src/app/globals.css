@@ -387,19 +387,48 @@ h6 {
 
 .assignment-docx-preview {
   overflow-x: auto;
+  overflow-y: hidden;
   border-radius: 1rem;
+  padding-bottom: 0.75rem;
+  scrollbar-gutter: stable both-edges;
 }
 
 .assignment-docx-preview .assignment-docx-wrapper {
-  padding: 0 0 1.5rem;
+  width: max-content;
+  min-width: 100%;
+  padding: 1rem 1rem 1.5rem !important;
+  display: flex !important;
+  flex-flow: column nowrap !important;
+  align-items: center !important;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%) !important;
+  box-sizing: border-box;
 }
 
 .assignment-docx-preview .assignment-docx {
   color: #111827;
+  line-height: 1.6 !important;
 }
 
 .assignment-docx-preview .assignment-docx-wrapper > section.assignment-docx {
-  margin: 0 auto 1.5rem;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  margin: 0 auto 1.5rem !important;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12) !important;
   border-radius: 0.6rem;
+}
+
+.assignment-docx-preview section.assignment-docx > article {
+  line-height: 1.6 !important;
+}
+
+.assignment-docx-preview section.assignment-docx p,
+.assignment-docx-preview section.assignment-docx li {
+  line-height: 1.6 !important;
+}
+
+.assignment-docx-preview section.assignment-docx p + p {
+  margin-top: 0.15rem;
+}
+
+.assignment-docx-preview section.assignment-docx p[style*="text-align:center"],
+.assignment-docx-preview section.assignment-docx p[style*="text-align: center"] {
+  text-align: center !important;
 }
