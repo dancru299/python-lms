@@ -29,6 +29,29 @@ async function verifyTeacherAccess(classroomId: string) {
   return { session, classroom };
 }
 
+async function parseUploadedDocx(file: FormDataEntryValue | null) {
+  if (!file || typeof file === "string") {
+    return null;
+  }
+
+  if (!file.name.toLowerCase().endsWith(".docx")) {
+    throw new Error("invalid_docx_file");
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const converted = await convertDocxToHtml(buffer);
+
+  if (!converted.html) {
+    throw new Error("empty_docx_content");
+  }
+
+  return {
+    questionHtml: converted.html,
+    questionDocx: buffer.toString("base64"),
+  };
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -117,9 +140,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let questionDocx: string | null = null;
     let answerTemplate: string | null = null;
     let durationMinutes: number | null = null;
+    const uploadedQuestionDocx = formData.get("questionDocx");
 
     if (type === "homework") {
-      if (exerciseId) {
+      if (uploadedQuestionDocx) {
+        try {
+          const parsedDocx = await parseUploadedDocx(uploadedQuestionDocx);
+          if (!parsedDocx) {
+            return NextResponse.json(
+              { error: "Vui lòng tải lên file đề .docx cho BTVN" },
+              { status: 400 },
+            );
+          }
+
+          questionHtml = parsedDocx.questionHtml;
+          questionDocx = parsedDocx.questionDocx;
+        } catch (error) {
+          if (error instanceof Error && error.message === "invalid_docx_file") {
+            return NextResponse.json(
+              { error: "Chỉ chấp nhận file .docx" },
+              { status: 400 },
+            );
+          }
+
+          return NextResponse.json(
+            { error: "Không thể chuyển file .docx sang nội dung hiển thị" },
+            { status: 400 },
+          );
+        }
+      } else if (exerciseId) {
         const exercise = await prisma.exercise.findUnique({
           where: { id: exerciseId },
           select: {
@@ -148,11 +197,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           String(formData.get("answerTemplate") || "").trim() || null;
       }
 
-      if (!questionHtml) {
-        return NextResponse.json(
-          { error: "BTVN c?n có n?i dung d?" },
-          { status: 400 },
-        );
+        if (!questionHtml) {
+          return NextResponse.json(
+            { error: "BTVN c?n có n?i dung d?" },
+            { status: 400 },
+          );
       }
     }
 
@@ -165,29 +214,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const file = formData.get("questionDocx");
-      if (!file || typeof file === "string") {
+      if (!uploadedQuestionDocx) {
         return NextResponse.json(
           { error: "Vui lòng t?i lên file d? .docx" },
           { status: 400 },
         );
       }
 
-      if (!file.name.toLowerCase().endsWith(".docx")) {
-        return NextResponse.json(
-          { error: "Ch? ch?p nh?n file .docx" },
-          { status: 400 },
-        );
-      }
+      try {
+        const parsedDocx = await parseUploadedDocx(uploadedQuestionDocx);
+        if (!parsedDocx) {
+          return NextResponse.json(
+            { error: "Vui lòng t?i lên file d? .docx" },
+            { status: 400 },
+          );
+        }
 
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+        questionHtml = parsedDocx.questionHtml;
+        questionDocx = parsedDocx.questionDocx;
+      } catch (error) {
+        if (error instanceof Error && error.message === "invalid_docx_file") {
+          return NextResponse.json(
+            { error: "Ch? ch?p nh?n file .docx" },
+            { status: 400 },
+          );
+        }
 
-      const converted = await convertDocxToHtml(buffer);
-      questionHtml = converted.html || null;
-      questionDocx = buffer.toString("base64");
-
-      if (!questionHtml) {
         return NextResponse.json(
           { error: "Không th? chuy?n file .docx sang n?i dung hi?n th?" },
           { status: 400 },

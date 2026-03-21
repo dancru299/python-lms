@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
 export interface ClassroomStudentItem {
@@ -54,10 +54,10 @@ export default function ClassroomDetailClient({
 
   const [homeworkForm, setHomeworkForm] = useState({
     lessonId: "",
-    exerciseId: "",
     title: "",
     description: "",
     maxScore: 10,
+    file: null as File | null,
   });
 
   const [testForm, setTestForm] = useState({
@@ -68,11 +68,6 @@ export default function ClassroomDetailClient({
     maxScore: 10,
     file: null as File | null,
   });
-
-  const selectedLesson = useMemo(
-    () => lessons.find((lesson) => lesson.id === homeworkForm.lessonId),
-    [lessons, homeworkForm.lessonId]
-  );
 
   const appendAssignment = (created: {
     id: string;
@@ -106,8 +101,8 @@ export default function ClassroomDetailClient({
       alert("Vui lòng chọn bài giảng cho BTVN");
       return;
     }
-    if (!homeworkForm.exerciseId) {
-      alert("Vui lòng chọn bài tập về nhà có sẵn để giao cho lớp");
+    if (!homeworkForm.file) {
+      alert("Vui lòng tải lên file đề BTVN .docx");
       return;
     }
 
@@ -116,10 +111,10 @@ export default function ClassroomDetailClient({
       const formData = new FormData();
       formData.set("type", "homework");
       formData.set("lessonId", homeworkForm.lessonId);
-      formData.set("exerciseId", homeworkForm.exerciseId);
       formData.set("title", homeworkForm.title);
       formData.set("description", homeworkForm.description);
       formData.set("maxScore", String(homeworkForm.maxScore || 10));
+      formData.set("questionDocx", homeworkForm.file);
 
       const res = await fetch(`/api/admin/classrooms/${classroomId}/assignments`, {
         method: "POST",
@@ -135,10 +130,10 @@ export default function ClassroomDetailClient({
       appendAssignment(data.assignment);
       setHomeworkForm({
         lessonId: "",
-        exerciseId: "",
         title: "",
         description: "",
         maxScore: 10,
+        file: null,
       });
       alert("Đã giao BTVN thành công");
     } catch {
@@ -236,7 +231,7 @@ export default function ClassroomDetailClient({
               <select
                 className="input"
                 value={homeworkForm.lessonId}
-                onChange={(e) => setHomeworkForm((prev) => ({ ...prev, lessonId: e.target.value, exerciseId: "" }))}
+                onChange={(e) => setHomeworkForm((prev) => ({ ...prev, lessonId: e.target.value }))}
               >
                 <option value="">-- Chọn bài giảng --</option>
                 {lessons.map((lesson) => (
@@ -247,20 +242,13 @@ export default function ClassroomDetailClient({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bài tập có sẵn</label>
-              <select
+              <label className="block text-sm font-medium text-gray-700 mb-1">Đề bài BTVN (.docx)</label>
+              <input
+                type="file"
+                accept=".docx"
                 className="input"
-                value={homeworkForm.exerciseId}
-                onChange={(e) => setHomeworkForm((prev) => ({ ...prev, exerciseId: e.target.value }))}
-                disabled={!selectedLesson}
-              >
-                <option value="">-- Chọn bài tập --</option>
-                {selectedLesson?.exercises.map((exercise) => (
-                  <option key={exercise.id} value={exercise.id}>
-                    {exercise.title}
-                  </option>
-                ))}
-              </select>
+                onChange={(e) => setHomeworkForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề BTVN</label>
