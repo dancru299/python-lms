@@ -101,7 +101,7 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
           <h2 className="text-3xl font-semibold text-gray-900 mb-4 border-b-2 border-orange-500 pb-2">
             Đề Bài
           </h2>
-          <div className="min-h-[70vh] text-gray-800 prose max-w-none">
+          <div className="assignment-rich min-h-[70vh] text-gray-800">
             {assignment.questionHtml ? (
               <ClientOnlyNoCopyHtml html={assignment.questionHtml} />
             ) : (

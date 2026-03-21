@@ -92,7 +92,7 @@ export default async function ClassroomAssignmentDetailPage({
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-3">Đề bài</h2>
           <div
-            className="prose max-w-none text-gray-800"
+            className="assignment-rich text-gray-800"
             dangerouslySetInnerHTML={{
               __html:
                 assignment.questionHtml || "<p>Chưa có nội dung đề bài.</p>",

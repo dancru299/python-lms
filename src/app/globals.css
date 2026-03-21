@@ -190,3 +190,116 @@ h6 {
   background-color: #fee2e2;
   color: #dc2626;
 }
+
+.assignment-rich {
+  color: #1f2937;
+  font-family: "Aptos", "Calibri", "Segoe UI", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.assignment-rich h1,
+.assignment-rich h2,
+.assignment-rich h3,
+.assignment-rich h4 {
+  color: #0f172a;
+  font-family: "Aptos Display", "Calibri", "Segoe UI", Arial, sans-serif;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.assignment-rich h1 {
+  font-size: 2rem;
+}
+
+.assignment-rich h2 {
+  font-size: 1.5rem;
+}
+
+.assignment-rich h3 {
+  font-size: 1.25rem;
+}
+
+.assignment-rich h4 {
+  font-size: 1.05rem;
+}
+
+.assignment-rich p,
+.assignment-rich ul,
+.assignment-rich ol,
+.assignment-rich blockquote,
+.assignment-rich .docx-table-wrap,
+.assignment-rich figure {
+  margin-bottom: 1rem;
+}
+
+.assignment-rich ul,
+.assignment-rich ol {
+  padding-left: 1.5rem;
+}
+
+.assignment-rich li + li {
+  margin-top: 0.35rem;
+}
+
+.assignment-rich strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.assignment-rich em {
+  font-style: italic;
+}
+
+.assignment-rich blockquote {
+  border-left: 4px solid #cbd5e1;
+  background: #f8fafc;
+  padding: 0.85rem 1rem;
+  color: #334155;
+}
+
+.assignment-rich .docx-subtitle {
+  color: #64748b;
+  font-size: 1.05rem;
+}
+
+.assignment-rich .docx-empty {
+  min-height: 0.9rem;
+}
+
+.assignment-rich .docx-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dbe1ea;
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.assignment-rich table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.assignment-rich th,
+.assignment-rich td {
+  border: 1px solid #dbe1ea;
+  padding: 0.75rem 0.9rem;
+  vertical-align: top;
+}
+
+.assignment-rich th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.assignment-rich figure.docx-image {
+  display: flex;
+  justify-content: center;
+}
+
+.assignment-rich img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+}

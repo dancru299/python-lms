@@ -1,7 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCookieSessionUser } from "@/lib/cookie-session";
-import mammoth from "mammoth";
+import { convertDocxToHtml } from "@/lib/docx-html";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -177,8 +177,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      const converted = await mammoth.convertToHtml({ buffer });
-      questionHtml = converted.value?.trim() || null;
+      const converted = await convertDocxToHtml(buffer);
+      questionHtml = converted.html || null;
 
       if (!questionHtml) {
         return NextResponse.json(
