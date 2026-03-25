@@ -41,6 +41,7 @@ export default function NotificationInbox({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notificationId }),
+      keepalive: true,
     });
   }
 
@@ -52,10 +53,9 @@ export default function NotificationInbox({
     setBusyId(item.id);
     try {
       if (!item.isRead) {
-        await markAsRead(item.id);
+        void markAsRead(item.id);
       }
       router.push(item.link);
-      router.refresh();
     } finally {
       setBusyId(null);
     }

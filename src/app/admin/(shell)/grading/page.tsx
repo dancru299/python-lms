@@ -1,7 +1,7 @@
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { requireTeacher } from "@/lib/session";
-import TeacherChrome from "@/components/teacher/TeacherChrome";
+import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 
 export default async function GradingPage() {
   const session = await requireTeacher();
@@ -16,10 +16,7 @@ export default async function GradingPage() {
   });
 
   return (
-    <TeacherChrome
-      active="grading"
-      userName={session.name}
-      role={session.role as "teacher" | "admin"}
+    <TeacherPageFrame
       title="Khu chấm bài"
       subtitle="Hàng chờ được tách thành khu làm việc riêng để giáo viên nhìn rõ thứ tự ưu tiên, học sinh nộp bài và số điểm tối đa trước khi mở từng bài."
       summaryPills={[
@@ -183,6 +180,6 @@ export default async function GradingPage() {
           </div>
         </section>
       </div>
-    </TeacherChrome>
+    </TeacherPageFrame>
   );
 }

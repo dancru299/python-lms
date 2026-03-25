@@ -1,14 +1,58 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import prisma from "@/lib/prisma";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
-import TeacherChrome from "@/components/teacher/TeacherChrome";
+import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import { requireTeacher } from "@/lib/session";
+
+function NotificationsFallback() {
+  return (
+    <section className="card rounded-[1.5rem] p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="h-6 w-40 animate-pulse rounded-xl bg-slate-200" />
+          <div className="mt-2 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+        </div>
+        <div className="h-4 w-24 animate-pulse rounded-full bg-slate-200" />
+      </div>
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 animate-pulse rounded-2xl bg-slate-200" />
+              <div className="min-w-0 flex-1">
+                <div className="h-5 w-3/4 animate-pulse rounded-full bg-slate-200" />
+                <div className="mt-2 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+                <div className="mt-2 h-4 w-2/3 animate-pulse rounded-full bg-slate-100" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+async function ClassroomNotificationsSection({ userId }: { userId: string }) {
+  const notifications = await prisma.notification.findMany({
+    where: { userId, isRead: false },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+  });
+
+  return (
+    <NotificationInbox
+      emptyMessage="Chưa có thông báo mới liên quan tới lớp học."
+      notifications={notifications}
+    />
+  );
+}
 
 export default async function ClassroomsPage() {
   const session = await requireTeacher();
   const classroomFilter = session.role === "admin" ? {} : { teacherId: session.userId };
 
-  const [classrooms, notifications] = await Promise.all([
+  const [classrooms, notificationCount] = await Promise.all([
     prisma.classroom.findMany({
       where: classroomFilter,
       include: {
@@ -22,10 +66,8 @@ export default async function ClassroomsPage() {
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.notification.findMany({
+    prisma.notification.count({
       where: { userId: session.userId, isRead: false },
-      orderBy: { createdAt: "desc" },
-      take: 8,
     }),
   ]);
 
@@ -33,17 +75,13 @@ export default async function ClassroomsPage() {
   const totalAssignments = classrooms.reduce((sum, classroom) => sum + classroom._count.assignments, 0);
 
   return (
-    <TeacherChrome
-      active="classrooms"
-      userName={session.name}
-      role={session.role as "teacher" | "admin"}
+    <TeacherPageFrame
       title="Quản lý lớp học"
       subtitle="Trang lớp học được rút gọn về danh sách lớp và khu thông báo. Khi có bài mới, học sinh nộp bài hay bài cần xử lý, bạn đi qua thông báo để mở đúng nơi cần làm."
-      notificationCount={notifications.length}
       summaryPills={[
         { label: "Số lớp", value: classrooms.length, tone: "indigo" },
         { label: "Tổng học sinh", value: totalStudents, tone: "amber" },
-        { label: "Thông báo mới", value: notifications.length, tone: "slate" },
+        { label: "Thông báo mới", value: notificationCount, tone: "slate" },
       ]}
       primaryAction={
         session.role === "admin"
@@ -127,12 +165,11 @@ export default async function ClassroomsPage() {
         </section>
 
         <div id="thong-bao">
-          <NotificationInbox
-            emptyMessage="Chưa có thông báo mới liên quan tới lớp học."
-            notifications={notifications}
-          />
+          <Suspense fallback={<NotificationsFallback />}>
+            <ClassroomNotificationsSection userId={session.userId} />
+          </Suspense>
         </div>
       </div>
-    </TeacherChrome>
+    </TeacherPageFrame>
   );
 }

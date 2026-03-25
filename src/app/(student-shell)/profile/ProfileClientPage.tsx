@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import StudentChrome from "@/components/student/StudentChrome";
+import { useState } from "react";
+import StudentPageFrame from "@/components/student/StudentPageFrame";
 
 interface UserProfile {
   id: string;
@@ -18,20 +18,31 @@ interface UserProfile {
   } | null;
 }
 
-export default function ProfilePage() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    age: "",
-    gender: "",
-    gradeLevel: "",
-    school: "",
-    phone: "",
-  });
+interface ProfileClientPageProps {
+  initialUser: UserProfile;
+}
 
-  useEffect(() => {
+function buildInitialForm(user: UserProfile) {
+  return {
+    name: user.name || "",
+    age: user.profile?.age ? String(user.profile.age) : "",
+    gender: user.profile?.gender || "",
+    gradeLevel: user.profile?.gradeLevel || "",
+    school: user.profile?.school || "",
+    phone: user.profile?.phone || "",
+  };
+}
+
+export default function ProfileClientPage({
+  initialUser,
+}: ProfileClientPageProps) {
+  const loading = false;
+  const setLoading = (_value: boolean) => undefined;
+  const [saving, setSaving] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(initialUser);
+  const [form, setForm] = useState(() => buildInitialForm(initialUser));
+
+  if (false) {
     async function loadProfile() {
       try {
         const res = await fetch("/api/profile");
@@ -58,7 +69,7 @@ export default function ProfilePage() {
     }
 
     loadProfile();
-  }, []);
+  }
 
   const handleSave = async () => {
     if (!user || user.role !== "student") {
@@ -127,9 +138,7 @@ export default function ProfilePage() {
   const editable = user.role === "student";
 
   return (
-    <StudentChrome
-      active="profile"
-      userName={user.name}
+    <StudentPageFrame
       title="Hồ sơ cá nhân"
       subtitle="Các trường thông tin được chia theo nhóm rõ ràng để bạn cập nhật nhanh, đồng thời giữ được góc nhìn tổng quan về vai trò và trạng thái tài khoản."
       summaryPills={[
@@ -370,6 +379,6 @@ export default function ProfilePage() {
           )}
         </aside>
       </div>
-    </StudentChrome>
+    </StudentPageFrame>
   );
 }

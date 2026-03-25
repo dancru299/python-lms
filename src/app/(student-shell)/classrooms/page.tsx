@@ -1,9 +1,53 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import prisma from "@/lib/prisma";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
-import StudentChrome from "@/components/student/StudentChrome";
+import StudentPageFrame from "@/components/student/StudentPageFrame";
 import { requireAuth } from "@/lib/session";
+
+function NotificationsFallback() {
+  return (
+    <section className="card rounded-[1.5rem] p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="h-6 w-40 animate-pulse rounded-xl bg-slate-200" />
+          <div className="mt-2 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+        </div>
+        <div className="h-4 w-24 animate-pulse rounded-full bg-slate-200" />
+      </div>
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 animate-pulse rounded-2xl bg-slate-200" />
+              <div className="min-w-0 flex-1">
+                <div className="h-5 w-3/4 animate-pulse rounded-full bg-slate-200" />
+                <div className="mt-2 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+                <div className="mt-2 h-4 w-2/3 animate-pulse rounded-full bg-slate-100" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+async function StudentClassroomNotificationsSection({ userId }: { userId: string }) {
+  const notifications = await prisma.notification.findMany({
+    where: { userId, isRead: false },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+  });
+
+  return (
+    <NotificationInbox
+      emptyMessage="Chưa có thông báo mới liên quan tới lớp học."
+      notifications={notifications}
+    />
+  );
+}
 
 export default async function StudentClassroomsPage() {
   const session = await requireAuth();
@@ -12,7 +56,7 @@ export default async function StudentClassroomsPage() {
     redirect(session.role === "admin" || session.role === "teacher" ? "/admin/classrooms" : "/");
   }
 
-  const [classroomEnrollments, notifications] = await Promise.all([
+  const [classroomEnrollments, notificationCount] = await Promise.all([
     prisma.classroomStudent.findMany({
       where: { studentId: session.userId },
       include: {
@@ -25,10 +69,8 @@ export default async function StudentClassroomsPage() {
       },
       orderBy: { joinedAt: "desc" },
     }),
-    prisma.notification.findMany({
+    prisma.notification.count({
       where: { userId: session.userId, isRead: false },
-      orderBy: { createdAt: "desc" },
-      take: 8,
     }),
   ]);
 
@@ -38,9 +80,7 @@ export default async function StudentClassroomsPage() {
   );
 
   return (
-    <StudentChrome
-      active="classrooms"
-      userName={session.name}
+    <StudentPageFrame
       title="Lớp học của tôi"
       subtitle="Danh sách lớp được giữ gọn để bạn mở nhanh lớp đang học, còn các việc phát sinh sẽ đi qua thông báo để tránh phải dò trong nhiều khối thông tin."
       summaryPills={[
@@ -48,7 +88,7 @@ export default async function StudentClassroomsPage() {
         { label: "Tổng bài tập", value: totalAssignments, tone: "amber" },
         {
           label: "Thông báo mới",
-          value: notifications.length,
+          value: notificationCount,
           tone: "slate",
         },
       ]}
@@ -115,12 +155,11 @@ export default async function StudentClassroomsPage() {
         </section>
 
         <div id="thong-bao">
-          <NotificationInbox
-            emptyMessage="Chưa có thông báo mới liên quan tới lớp học."
-            notifications={notifications}
-          />
+          <Suspense fallback={<NotificationsFallback />}>
+            <StudentClassroomNotificationsSection userId={session.userId} />
+          </Suspense>
         </div>
       </div>
-    </StudentChrome>
+    </StudentPageFrame>
   );
 }

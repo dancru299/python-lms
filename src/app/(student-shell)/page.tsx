@@ -1,15 +1,142 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
-import StudentChrome from "@/components/student/StudentChrome";
+import StudentPageFrame from "@/components/student/StudentPageFrame";
 
 function getDifficultyLabel(level: string) {
   if (level === "beginner") return "Cơ bản";
   if (level === "intermediate") return "Trung bình";
   if (level === "advanced") return "Nâng cao";
   return level;
+}
+
+function NotificationsFallback() {
+  return (
+    <section className="card rounded-[1.5rem] p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="h-6 w-40 animate-pulse rounded-xl bg-slate-200" />
+          <div className="mt-2 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+        </div>
+        <div className="h-4 w-24 animate-pulse rounded-full bg-slate-200" />
+      </div>
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 animate-pulse rounded-2xl bg-slate-200" />
+              <div className="min-w-0 flex-1">
+                <div className="h-5 w-3/4 animate-pulse rounded-full bg-slate-200" />
+                <div className="mt-2 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+                <div className="mt-2 h-4 w-2/3 animate-pulse rounded-full bg-slate-100" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ClassroomsFallback() {
+  return (
+    <section className="card rounded-[1.5rem] p-5">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-40 animate-pulse rounded-xl bg-slate-200" />
+        <div className="h-4 w-24 animate-pulse rounded-full bg-slate-200" />
+      </div>
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="h-5 w-2/3 animate-pulse rounded-full bg-slate-200" />
+                <div className="mt-2 h-4 w-32 animate-pulse rounded-full bg-slate-100" />
+              </div>
+              <div className="h-6 w-16 animate-pulse rounded-full bg-slate-200" />
+            </div>
+            <div className="mt-3 h-4 w-40 animate-pulse rounded-full bg-slate-100" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+async function StudentNotificationsSection({ userId }: { userId: string }) {
+  const notifications = await prisma.notification.findMany({
+    where: { userId, isRead: false },
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      message: true,
+      link: true,
+      isRead: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+
+  return <NotificationInbox emptyMessage="Hiện chưa có thông báo nào cần xử lý." notifications={notifications} />;
+}
+
+async function StudentClassroomsSection({ userId }: { userId: string }) {
+  const classroomEnrollments = await prisma.classroomStudent.findMany({
+    where: { studentId: userId },
+    include: {
+      classroom: {
+        include: {
+          teacher: { select: { name: true } },
+          _count: { select: { assignments: true } },
+        },
+      },
+    },
+    orderBy: { joinedAt: "desc" },
+    take: 4,
+  });
+
+  return (
+    <section id="lop-hoc" className="card rounded-[1.5rem] p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-slate-900">Lớp học nổi bật</h2>
+        <Link href="/classrooms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+          Mở danh sách
+        </Link>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {classroomEnrollments.length > 0 ? (
+          classroomEnrollments.map((item) => (
+            <Link
+              key={item.id}
+              href={`/classrooms/${item.classroom.id}`}
+              className="block rounded-2xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:bg-slate-50"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">{item.classroom.name}</div>
+                  <div className="mt-1 text-sm text-slate-500">GV: {item.classroom.teacher.name}</div>
+                </div>
+                <span className="badge badge-primary font-mono">{item.classroom.code}</span>
+              </div>
+              <div className="mt-3 text-sm text-slate-500">
+                {item.classroom._count.assignments} bài tập được giao
+              </div>
+            </Link>
+          ))
+        ) : (
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+            Chưa có lớp học nào để hiển thị.
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default async function HomePage() {
@@ -107,49 +234,48 @@ export default async function HomePage() {
     redirect("/admin");
   }
 
-  const [chapters, userProgress, submissions, notifications, classroomEnrollments] = await Promise.all([
+  const [chapters, userProgress, submissions, notificationCount, classroomCount] = await Promise.all([
     prisma.chapter.findMany({
       where: { isLocked: false },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        icon: true,
+        color: true,
         lessons: {
           where: { isLocked: false, isPublished: true },
           orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            title: true,
+            duration: true,
+            difficulty: true,
+          },
         },
       },
       orderBy: { sortOrder: "asc" },
     }),
     prisma.userProgress.findMany({
       where: { userId: session.userId },
+      select: {
+        lessonId: true,
+        completed: true,
+      },
     }),
     prisma.submission.findMany({
       where: { userId: session.userId },
-      include: {
-        exercise: {
-          include: {
-            lesson: true,
-          },
-        },
+      select: {
+        status: true,
+        score: true,
       },
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    prisma.notification.findMany({
+    prisma.notification.count({
       where: { userId: session.userId, isRead: false },
-      orderBy: { createdAt: "desc" },
-      take: 5,
     }),
-    prisma.classroomStudent.findMany({
+    prisma.classroomStudent.count({
       where: { studentId: session.userId },
-      include: {
-        classroom: {
-          include: {
-            teacher: { select: { name: true } },
-            _count: { select: { assignments: true } },
-          },
-        },
-      },
-      orderBy: { joinedAt: "desc" },
-      take: 4,
     }),
   ]);
 
@@ -189,15 +315,13 @@ export default async function HomePage() {
     chapterProgress.find((chapter) => chapter.firstRemainingLesson)?.firstRemainingLesson || null;
 
   return (
-    <StudentChrome
-      active="home"
-      userName={session.name}
+    <StudentPageFrame
       title="Bảng điều khiển học tập"
       subtitle="Theo dõi tiến độ, mở nhanh lớp học, xem bài chờ chấm và nắm các đầu việc quan trọng trong cùng một nơi."
       summaryPills={[
         { label: "Tiến độ tổng", value: `${progressPercent}%`, tone: "indigo" },
-        { label: "Lớp đang theo học", value: classroomEnrollments.length, tone: "emerald" },
-        { label: "Thông báo mới", value: notifications.length, tone: "amber" },
+        { label: "Lớp đang theo học", value: classroomCount, tone: "emerald" },
+        { label: "Thông báo mới", value: notificationCount, tone: "amber" },
       ]}
       primaryAction={
         nextLesson
@@ -382,49 +506,16 @@ export default async function HomePage() {
 
         <div className="space-y-6">
           <section id="thong-bao">
-            <NotificationInbox
-              emptyMessage="Hiện chưa có thông báo nào cần xử lý."
-              notifications={notifications}
-            />
+            <Suspense fallback={<NotificationsFallback />}>
+              <StudentNotificationsSection userId={session.userId} />
+            </Suspense>
           </section>
 
-          <section id="lop-hoc" className="card rounded-[1.5rem] p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Lớp học nổi bật</h2>
-              <Link href="/classrooms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                Mở danh sách
-              </Link>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {classroomEnrollments.length > 0 ? (
-                classroomEnrollments.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`/classrooms/${item.classroom.id}`}
-                    className="block rounded-2xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:bg-slate-50"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-semibold text-slate-900">{item.classroom.name}</div>
-                        <div className="mt-1 text-sm text-slate-500">GV: {item.classroom.teacher.name}</div>
-                      </div>
-                      <span className="badge badge-primary font-mono">{item.classroom.code}</span>
-                    </div>
-                    <div className="mt-3 text-sm text-slate-500">
-                      {item.classroom._count.assignments} bài tập được giao
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-                  Chưa có lớp học nào để hiển thị.
-                </div>
-              )}
-            </div>
-          </section>
+          <Suspense fallback={<ClassroomsFallback />}>
+            <StudentClassroomsSection userId={session.userId} />
+          </Suspense>
         </div>
       </div>
-    </StudentChrome>
+    </StudentPageFrame>
   );
 }
