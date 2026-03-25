@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import prisma from "@/lib/prisma";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
 import StudentPageFrame from "@/components/student/StudentPageFrame";
+import { getUnreadNotificationCount } from "@/lib/notifications";
 import { requireAuth } from "@/lib/session";
 
 function NotificationsFallback() {
@@ -35,11 +36,13 @@ function NotificationsFallback() {
 }
 
 async function StudentClassroomNotificationsSection({ userId }: { userId: string }) {
-  const notifications = await prisma.notification.findMany({
-    where: { userId, isRead: false },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+  const notifications = await prisma.notification
+    .findMany({
+      where: { userId, isRead: false },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    })
+    .catch(() => []);
 
   return (
     <NotificationInbox
@@ -69,9 +72,7 @@ export default async function StudentClassroomsPage() {
       },
       orderBy: { joinedAt: "desc" },
     }),
-    prisma.notification.count({
-      where: { userId: session.userId, isRead: false },
-    }),
+    getUnreadNotificationCount(session.userId),
   ]);
 
   const totalAssignments = classroomEnrollments.reduce(

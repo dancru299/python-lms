@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import prisma from "@/lib/prisma";
+import { getUnreadNotificationCount } from "@/lib/notifications";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import { requireTeacher } from "@/lib/session";
@@ -34,11 +35,13 @@ function NotificationsFallback() {
 }
 
 async function ClassroomNotificationsSection({ userId }: { userId: string }) {
-  const notifications = await prisma.notification.findMany({
-    where: { userId, isRead: false },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+  const notifications = await prisma.notification
+    .findMany({
+      where: { userId, isRead: false },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    })
+    .catch(() => []);
 
   return (
     <NotificationInbox
@@ -52,24 +55,27 @@ export default async function ClassroomsPage() {
   const session = await requireTeacher();
   const classroomFilter = session.role === "admin" ? {} : { teacherId: session.userId };
 
-  const [classrooms, notificationCount] = await Promise.all([
-    prisma.classroom.findMany({
-      where: classroomFilter,
-      include: {
-        teacher: { select: { name: true } },
-        students: {
-          include: {
-            student: { select: { name: true, email: true } },
+  const [classroomsData, notificationCount] = await Promise.all([
+    prisma.classroom
+      .findMany({
+        where: classroomFilter,
+        include: {
+          teacher: { select: { name: true } },
+          students: {
+            include: {
+              student: { select: { name: true, email: true } },
+            },
           },
+          _count: { select: { assignments: true } },
         },
-        _count: { select: { assignments: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.notification.count({
-      where: { userId: session.userId, isRead: false },
-    }),
+        orderBy: { createdAt: "desc" },
+      })
+      .catch(() => null),
+    getUnreadNotificationCount(session.userId),
   ]);
+
+  const loadFailed = classroomsData === null;
+  const classrooms = classroomsData ?? [];
 
   const totalStudents = classrooms.reduce((sum, classroom) => sum + classroom.students.length, 0);
   const totalAssignments = classrooms.reduce((sum, classroom) => sum + classroom._count.assignments, 0);
@@ -111,7 +117,20 @@ export default async function ClassroomsPage() {
             </p>
           </div>
 
-          {classrooms.length === 0 ? (
+          {loadFailed ? (
+            <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-5 text-amber-800">
+              <div className="flex items-start gap-3">
+                <i className="fa-solid fa-triangle-exclamation mt-1"></i>
+                <div>
+                  <div className="font-semibold">Không thể tải danh sách lớp học lúc này</div>
+                  <p className="mt-2 text-sm leading-6 text-amber-700">
+                    Ứng dụng đang không kết nối được tới cơ sở dữ liệu. Màn hình được giữ ở trạng thái an toàn để
+                    tránh trắng trang, nhưng dữ liệu lớp học tạm thời chưa hiển thị.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : classrooms.length === 0 ? (
             <div className="card rounded-[1.5rem] p-10 text-center text-slate-500">
               <i className="fa-solid fa-users-slash text-4xl text-slate-300"></i>
               <p className="mt-4">Chưa có lớp học nào.</p>

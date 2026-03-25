@@ -102,13 +102,14 @@ export function useTeacherShellPageChrome() {
 export default function TeacherShell({
   userName,
   role,
-  notificationCount = 0,
+  notificationCount: initialNotificationCount = 0,
   active,
   children,
 }: TeacherShellProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pageChrome, setPageChrome] = useState<TeacherShellPageChrome>(defaultPageChrome);
+  const [notificationCount, setNotificationCount] = useState(initialNotificationCount);
   const resolvedActive = active ?? resolveActiveTeacherNav(pathname);
 
   useEffect(() => {
@@ -123,6 +124,39 @@ export default function TeacherShell({
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+
+    async function loadNotificationCount() {
+      try {
+        const response = await fetch("/api/notifications?summaryOnly=1", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+        if (isMounted && typeof data.unreadCount === "number") {
+          setNotificationCount(data.unreadCount);
+        }
+      } catch {
+        // Keep the shell usable even when notifications cannot be refreshed.
+      }
+    }
+
+    setNotificationCount(initialNotificationCount);
+    loadNotificationCount();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [initialNotificationCount, pathname]);
 
   const navItems: Array<{ key: TeacherNavKey; href: string; label: string; icon: string }> = [
     { key: "overview", href: "/admin", label: "Tổng quan", icon: "fa-chart-line" },

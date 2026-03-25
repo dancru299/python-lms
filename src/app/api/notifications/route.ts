@@ -20,11 +20,21 @@ async function getCurrentUser() {
 }
 
 // GET - Get user's notifications
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const summaryOnly = request.nextUrl.searchParams.get("summaryOnly") === "1";
+
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const unreadCount = await prisma.notification.count({
+      where: { userId: user.userId, isRead: false },
+    });
+
+    if (summaryOnly) {
+      return NextResponse.json({ unreadCount });
     }
 
     const notifications = await prisma.notification.findMany({
@@ -33,12 +43,12 @@ export async function GET() {
       take: 20,
     });
 
-    const unreadCount = await prisma.notification.count({
-      where: { userId: user.userId, isRead: false },
-    });
-
     return NextResponse.json({ notifications, unreadCount });
   } catch (error) {
+    if (summaryOnly) {
+      return NextResponse.json({ unreadCount: 0 });
+    }
+
     console.error("Get notifications error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

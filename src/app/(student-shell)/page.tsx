@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { getUnreadNotificationCount } from "@/lib/notifications";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
 import StudentPageFrame from "@/components/student/StudentPageFrame";
 
@@ -67,20 +68,22 @@ function ClassroomsFallback() {
 }
 
 async function StudentNotificationsSection({ userId }: { userId: string }) {
-  const notifications = await prisma.notification.findMany({
-    where: { userId, isRead: false },
-    select: {
-      id: true,
-      type: true,
-      title: true,
-      message: true,
-      link: true,
-      isRead: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
+  const notifications = await prisma.notification
+    .findMany({
+      where: { userId, isRead: false },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        message: true,
+        link: true,
+        isRead: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    })
+    .catch(() => []);
 
   return <NotificationInbox emptyMessage="Hiện chưa có thông báo nào cần xử lý." notifications={notifications} />;
 }
@@ -271,9 +274,7 @@ export default async function HomePage() {
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    prisma.notification.count({
-      where: { userId: session.userId, isRead: false },
-    }),
+    getUnreadNotificationCount(session.userId),
     prisma.classroomStudent.count({
       where: { studentId: session.userId },
     }),

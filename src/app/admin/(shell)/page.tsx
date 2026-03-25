@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import prisma from "@/lib/prisma";
+import { getUnreadNotificationCount } from "@/lib/notifications";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import { requireTeacher } from "@/lib/session";
@@ -153,20 +154,22 @@ async function AdminPendingSubmissionsSection() {
 }
 
 async function AdminNotificationsSection({ userId }: { userId: string }) {
-  const notifications = await prisma.notification.findMany({
-    where: { userId, isRead: false },
-    select: {
-      id: true,
-      type: true,
-      title: true,
-      message: true,
-      link: true,
-      isRead: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+  const notifications = await prisma.notification
+    .findMany({
+      where: { userId, isRead: false },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        message: true,
+        link: true,
+        isRead: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    })
+    .catch(() => []);
 
   return (
     <NotificationInbox
@@ -186,9 +189,7 @@ export default async function AdminPage() {
       prisma.lesson.count(),
       prisma.submission.count({ where: { status: "pending" } }),
       prisma.user.count({ where: { role: "student" } }),
-      prisma.notification.count({
-        where: { userId: session.userId, isRead: false },
-      }),
+      getUnreadNotificationCount(session.userId),
       prisma.classroom.count({ where: classroomFilter }),
     ]);
 
