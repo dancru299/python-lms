@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
+import TeacherShell from "@/components/teacher/TeacherShell";
 import ClassroomForm from "../ClassroomForm";
 
 export default async function NewClassroomPage() {
@@ -9,5 +10,9 @@ export default async function NewClassroomPage() {
     redirect("/admin/classrooms");
   }
 
-  return <ClassroomForm mode="create" canChangeTeacher canDelete={false} />;
+  return (
+    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
+      <ClassroomForm mode="create" canChangeTeacher canDelete={false} />
+    </TeacherShell>
+  );
 }

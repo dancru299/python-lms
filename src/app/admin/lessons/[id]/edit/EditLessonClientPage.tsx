@@ -430,7 +430,7 @@ export default function EditLessonClientPage({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Đang tải bài giảng...</p>
@@ -443,9 +443,9 @@ export default function EditLessonClientPage({
   const homeworkExercises = exercises.filter((e) => e.type === "homework");
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-0">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      <header className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 border-b border-gray-200 bg-white shadow-sm sm:-mx-6 sm:-mt-6 lg:-mx-8 lg:-mt-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">

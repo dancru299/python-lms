@@ -88,19 +88,50 @@ h6 {
 
 /* Animation utilities */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  opacity: 0;
+  animation: fadeUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.3s ease forwards;
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
 }
+.animate-float { animation: float 5s ease-in-out infinite; }
+
+@keyframes blob {
+  0%, 100% { transform: scale(1) translate(0, 0); }
+  33%       { transform: scale(1.08) translate(18px, -18px); }
+  66%       { transform: scale(0.96) translate(-12px, 12px); }
+}
+.animate-blob { animation: blob 9s ease-in-out infinite; }
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+.animate-gradient-text {
+  background-size: 200% 200%;
+  animation: gradientShift 5s ease infinite;
+}
+
+/* Scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-visible { opacity: 1; transform: none; }
 
 /* Button styles */
 .btn {
@@ -108,35 +139,62 @@ h6 {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   border-radius: 0.5rem;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-primary {
   background-color: #6366f1;
   color: white;
+  box-shadow: 0 1px 2px 0 rgb(99 102 241 / 0.3);
 }
 
 .btn-primary:hover {
   background-color: #4f46e5;
-  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -2px rgb(99 102 241 / 0.35);
+}
+
+.btn-primary:active {
+  background-color: #4338ca;
+  box-shadow: none;
 }
 
 .btn-secondary {
   background-color: white;
   color: #374151;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
 }
 
 .btn-secondary:hover {
   background-color: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.btn-secondary:active {
+  background-color: #f3f4f6;
+}
+
+.btn-ghost-dark {
+  background-color: transparent;
+  color: #94a3b8;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.btn-ghost-dark:hover {
+  background-color: rgb(255 255 255 / 0.06);
+  color: #e2e8f0;
 }
 
 .btn-success {
   background-color: #22c55e;
   color: white;
+  box-shadow: 0 1px 2px 0 rgb(34 197 94 / 0.3);
 }
 
 .btn-success:hover {
@@ -146,6 +204,7 @@ h6 {
 .btn-danger {
   background-color: #ef4444;
   color: white;
+  box-shadow: 0 1px 2px 0 rgb(239 68 68 / 0.3);
 }
 
 .btn-danger:hover {
@@ -155,49 +214,57 @@ h6 {
 /* Card styles */
 .card {
   background-color: white;
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
 }
 
 /* Input styles */
 .input {
   width: 100%;
-  padding: 0.625rem 1rem;
-  border: 1px solid #d1d5db;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #e5e7eb;
   border-radius: 0.5rem;
-  transition: all 0.2s;
+  font-size: 0.875rem;
+  color: #111827;
+  background-color: white;
+  transition: all 0.15s ease;
+}
+
+.input::placeholder {
+  color: #9ca3af;
 }
 
 .input:focus {
   outline: none;
   border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 0.12);
 }
 
 /* Badge styles */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.125rem 0.625rem;
+  padding: 0.2rem 0.6rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .badge-primary {
-  background-color: #e0e7ff;
+  background-color: #ede9fe;
   color: #4338ca;
 }
 
 .badge-success {
   background-color: #dcfce7;
-  color: #16a34a;
+  color: #15803d;
 }
 
 .badge-warning {
-  background-color: #fef9c3;
-  color: #ca8a04;
+  background-color: #fef3c7;
+  color: #b45309;
 }
 
 .badge-danger {

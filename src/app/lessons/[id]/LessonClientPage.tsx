@@ -2,6 +2,17 @@
 
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const PythonCodeEditor = dynamic(() => import("@/components/PythonCodeEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[340px] items-center justify-center rounded-xl border border-gray-700 bg-[#1e1e1e] text-sm text-gray-400">
+      <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+      Đang tải trình soạn thảo…
+    </div>
+  ),
+});
 
 export interface Section {
   id: string;
@@ -73,6 +84,11 @@ export interface LessonProgressSummary {
   percent: number;
   timeSpent: number;
   tabs: LessonProgressTab[];
+}
+
+export interface SiblingLesson {
+  id: string;
+  title: string;
 }
 
 const TAB_COMPLETION_SECONDS = 60;
@@ -167,14 +183,55 @@ function getDifficultyMeta(difficulty: string) {
   }
 }
 
+function AuthModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        onClick={onClose}
+        aria-label="Đóng"
+      />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100"
+        >
+          <i className="fa-solid fa-xmark text-sm"></i>
+        </button>
+        <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50">
+          <i className="fa-solid fa-paper-plane text-2xl text-purple-500"></i>
+        </div>
+        <h3 className="text-xl font-bold text-slate-900">Đăng nhập để nộp bài</h3>
+        <p className="mt-2 text-sm text-slate-500">
+          Tạo tài khoản miễn phí hoặc đăng nhập để nộp bài và nhận phản hồi chấm điểm từ giáo viên.
+        </p>
+        <div className="mt-6 space-y-2.5">
+          <Link href="/login" className="btn btn-primary w-full justify-center">
+            <i className="fa-solid fa-right-to-bracket"></i>
+            Đăng nhập
+          </Link>
+          <Link href="/register" className="btn btn-secondary w-full justify-center">
+            <i className="fa-solid fa-user-plus"></i>
+            Tạo tài khoản miễn phí
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface LessonClientPageProps {
   initialLesson: Lesson;
   initialUser: UserSession | null;
+  prevLesson?: SiblingLesson | null;
+  nextLesson?: SiblingLesson | null;
 }
 
 export default function LessonClientPage({
   initialLesson,
   initialUser,
+  prevLesson,
+  nextLesson,
 }: LessonClientPageProps) {
   const [lesson, setLesson] = useState(initialLesson);
   const [lessonProgress, setLessonProgress] = useState(initialLesson.progress);
@@ -183,6 +240,7 @@ export default function LessonClientPage({
   const [submissions, setSubmissions] = useState<Record<string, string>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const user = initialUser;
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const loading = false;
   const segmentStartedAtRef = useRef<number | null>(null);
   const progressQueueRef = useRef(Promise.resolve());
@@ -425,14 +483,14 @@ export default function LessonClientPage({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <Link
-              href="/"
+              href={user ? "/" : "/library"}
               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 transition hover:bg-slate-200"
             >
               <i className="fa-solid fa-arrow-left text-xs"></i>
-              Dashboard
+              {user ? "Dashboard" : "Thư viện"}
             </Link>
             <i className="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-            <Link href="/#lo-trinh" className="font-medium text-slate-600 transition hover:text-indigo-600">
+            <Link href={user ? "/#lo-trinh" : "/library"} className="font-medium text-slate-600 transition hover:text-indigo-600">
               {lesson.chapter.title}
             </Link>
             <i className="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
@@ -822,22 +880,39 @@ export default function LessonClientPage({
                       {/* Show graded result */}
                       {isGraded && exercise.mySubmission && (
                         <div className="mt-4 space-y-4">
-                          <div className="p-4 bg-white rounded-lg border border-purple-200">
-                            <h4 className="font-bold text-gray-700 mb-2">📝 Bài làm của bạn:</h4>
-                            <pre className="code-block">{exercise.mySubmission.content}</pre>
+                          <div>
+                            <p className="mb-2 text-sm font-semibold text-gray-600">
+                              <i className="fa-solid fa-code mr-1.5 text-purple-500"></i>
+                              Bài làm của bạn:
+                            </p>
+                            <PythonCodeEditor
+                              defaultValue={exercise.mySubmission.content}
+                              onChange={() => {}}
+                              readOnly
+                            />
                           </div>
-                          
+
                           {exercise.mySubmission.feedback && (
-                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                              <h4 className="font-bold text-blue-700 mb-2">💬 Nhận xét của giáo viên:</h4>
+                            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                              <h4 className="mb-2 font-bold text-blue-700">
+                                <i className="fa-solid fa-comment-dots mr-2"></i>
+                                Nhận xét của giáo viên:
+                              </h4>
                               <p className="text-gray-700">{exercise.mySubmission.feedback}</p>
                             </div>
                           )}
 
                           {exercise.answer && (
-                            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                              <h4 className="font-bold text-green-700 mb-2">💡 Đáp án mẫu:</h4>
-                              <pre className="code-block">{exercise.answer}</pre>
+                            <div>
+                              <p className="mb-2 text-sm font-semibold text-green-700">
+                                <i className="fa-solid fa-lightbulb mr-1.5"></i>
+                                Đáp án mẫu:
+                              </p>
+                              <PythonCodeEditor
+                                defaultValue={exercise.answer}
+                                onChange={() => {}}
+                                readOnly
+                              />
                             </div>
                           )}
                         </div>
@@ -858,29 +933,55 @@ export default function LessonClientPage({
 
                       {/* Submission Form - Only for students who haven't submitted */}
                       {!hasSubmitted && !isTeacher && (
-                        <div className="mt-4 p-4 bg-white rounded-lg border border-purple-200">
-                          <h4 className="font-bold text-gray-700 mb-3">
-                            <i className="fa-solid fa-paper-plane mr-2 text-purple-600"></i>
-                            Nộp bài làm
-                          </h4>
-                          <textarea
-                            value={submissions[exercise.id] || ""}
-                            onChange={(e) => setSubmissions(prev => ({ ...prev, [exercise.id]: e.target.value }))}
-                            placeholder="Viết code hoặc câu trả lời của bạn ở đây..."
-                            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm min-h-[150px] focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          />
+                        user ? (
+                          <div className="mt-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-bold text-gray-700">
+                                <i className="fa-solid fa-code mr-2 text-purple-600"></i>
+                                Bài làm của bạn
+                              </h4>
+                              <span className="text-xs text-gray-400">
+                                Nhấn <kbd className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-600">▶ Chạy</kbd> để kiểm tra trước khi nộp
+                              </span>
+                            </div>
+                            <PythonCodeEditor
+                              defaultValue={submissions[exercise.id] || ""}
+                              onChange={(code) => setSubmissions(prev => ({ ...prev, [exercise.id]: code }))}
+                            />
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs text-gray-400">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                Code sẽ được gửi đến giảng viên để chấm điểm
+                              </p>
+                              <button
+                                onClick={() => handleSubmit(exercise.id, exercise.points)}
+                                disabled={submittingId === exercise.id}
+                                className="btn btn-success disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {submittingId === exercise.id ? (
+                                  <><i className="fa-solid fa-spinner fa-spin"></i> Đang nộp…</>
+                                ) : (
+                                  <><i className="fa-solid fa-paper-plane"></i> Nộp bài</>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                           <button
-                            onClick={() => handleSubmit(exercise.id, exercise.points)}
-                            disabled={submittingId === exercise.id}
-                            className="mt-3 btn btn-success"
+                            onClick={() => setShowAuthModal(true)}
+                            className="mt-4 flex w-full items-center justify-between rounded-2xl border-2 border-dashed border-purple-200 bg-purple-50/50 px-5 py-4 text-left transition hover:border-purple-300 hover:bg-purple-50"
                           >
-                            {submittingId === exercise.id ? (
-                              <><i className="fa-solid fa-spinner fa-spin mr-2"></i> Đang nộp...</>
-                            ) : (
-                              <><i className="fa-solid fa-paper-plane mr-2"></i> Nộp bài</>
-                            )}
+                            <div>
+                              <div className="font-medium text-slate-700">Nộp bài làm</div>
+                              <div className="mt-0.5 text-sm text-slate-400">
+                                Đăng nhập để nộp bài và nhận phản hồi từ giáo viên
+                              </div>
+                            </div>
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-100">
+                              <i className="fa-solid fa-right-to-bracket text-sm text-purple-500"></i>
+                            </div>
                           </button>
-                        </div>
+                        )
                       )}
 
                       {/* Teacher notice */}
@@ -900,15 +1001,58 @@ export default function LessonClientPage({
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-4 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <Link href="/" className="text-indigo-600 hover:text-indigo-700 font-medium">
-            <i className="fa-solid fa-arrow-left mr-2"></i>Quay lại Dashboard
-          </Link>
-          <p className="text-gray-500 text-sm">🐍 Python LMS - Made with ❤️ by AnhDuc Team</p>
+      {/* Footer — lesson navigation */}
+      <footer className="border-t border-gray-200 bg-white py-4 mt-auto">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Prev */}
+            {prevLesson ? (
+              <Link
+                href={`/lessons/${prevLesson.id}`}
+                className="group flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm transition hover:border-indigo-300 hover:bg-indigo-50 max-w-[45%]"
+              >
+                <i className="fa-solid fa-arrow-left shrink-0 text-gray-400 transition group-hover:text-indigo-500"></i>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 group-hover:text-indigo-400">Bài trước</div>
+                  <div className="truncate font-medium text-gray-700 group-hover:text-indigo-700">{prevLesson.title}</div>
+                </div>
+              </Link>
+            ) : (
+              <Link
+                href={user ? "/" : "/library"}
+                className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                <i className="fa-solid fa-arrow-left"></i>
+                {user ? "Dashboard" : "Thư viện"}
+              </Link>
+            )}
+
+            {/* Next */}
+            {nextLesson ? (
+              <Link
+                href={`/lessons/${nextLesson.id}`}
+                className="group flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm transition hover:border-indigo-300 hover:bg-indigo-50 max-w-[45%] text-right"
+              >
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 group-hover:text-indigo-400">Bài tiếp theo</div>
+                  <div className="truncate font-medium text-gray-700 group-hover:text-indigo-700">{nextLesson.title}</div>
+                </div>
+                <i className="fa-solid fa-arrow-right shrink-0 text-gray-400 transition group-hover:text-indigo-500"></i>
+              </Link>
+            ) : (
+              <Link
+                href={user ? "/" : "/library"}
+                className="flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+              >
+                <i className="fa-solid fa-circle-check"></i>
+                Hoàn thành chương
+              </Link>
+            )}
+          </div>
         </div>
       </footer>
+
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
 
       <style jsx global>{`
         /* ===== LESSON CONTENT TYPOGRAPHY ===== */

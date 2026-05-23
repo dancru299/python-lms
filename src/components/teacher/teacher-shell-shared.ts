@@ -5,7 +5,8 @@ export type TeacherNavKey =
   | "lessons"
   | "chapters"
   | "classrooms"
-  | "users";
+  | "users"
+  | "settings";
 export type PillTone = "indigo" | "emerald" | "amber" | "slate";
 
 export interface SummaryPill {

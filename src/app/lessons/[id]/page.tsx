@@ -14,6 +14,7 @@ import { processCodeBlocks, renderExerciseHtml } from "@/lib/lesson-html";
 import LessonClientPage, {
   type Lesson,
   type UserSession,
+  type SiblingLesson,
 } from "./LessonClientPage";
 
 interface PageProps {
@@ -84,6 +85,24 @@ export default async function LessonPage({ params }: PageProps) {
       notFound();
     }
 
+    // Fetch sibling lessons in same chapter for prev/next navigation
+    const chapterLessons = await runDatabaseOperation(() =>
+      prisma.lesson.findMany({
+        where: { chapterId: lesson.chapterId, isPublished: true },
+        select: { id: true, title: true, sortOrder: true },
+        orderBy: { sortOrder: "asc" },
+      })
+    );
+    const currentIndex = chapterLessons.findIndex((l) => l.id === id);
+    const prevLesson: SiblingLesson | null =
+      currentIndex > 0
+        ? { id: chapterLessons[currentIndex - 1].id, title: chapterLessons[currentIndex - 1].title }
+        : null;
+    const nextLesson: SiblingLesson | null =
+      currentIndex < chapterLessons.length - 1
+        ? { id: chapterLessons[currentIndex + 1].id, title: chapterLessons[currentIndex + 1].title }
+        : null;
+
     const lessonTabs = buildLessonProgressTabs(lesson);
     let progress = null;
 
@@ -135,7 +154,12 @@ export default async function LessonPage({ params }: PageProps) {
       : null;
 
     return (
-      <LessonClientPage initialLesson={clientLesson} initialUser={initialUser} />
+      <LessonClientPage
+        initialLesson={clientLesson}
+        initialUser={initialUser}
+        prevLesson={prevLesson}
+        nextLesson={nextLesson}
+      />
     );
   } catch (error) {
     if (isDatabaseUnavailableError(error)) {

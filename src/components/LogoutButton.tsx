@@ -3,15 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function LogoutButton() {
+export default function LogoutButton({ className = "btn btn-secondary" }: { className?: string }) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    if (loggingOut) {
-      return;
-    }
-
+    if (loggingOut) return;
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -22,11 +19,7 @@ export default function LogoutButton() {
   };
 
   return (
-    <button
-      onClick={handleLogout}
-      disabled={loggingOut}
-      className="btn btn-secondary text-sm"
-    >
+    <button onClick={handleLogout} disabled={loggingOut} className={className}>
       <i className="fa-solid fa-right-from-bracket"></i>
       {loggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
     </button>

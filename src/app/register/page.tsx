@@ -11,7 +11,7 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "student", // student or teacher
+    role: "student",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,6 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
-    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError("Mật khẩu xác nhận không khớp");
       return;
@@ -52,14 +51,10 @@ export default function RegisterPage() {
         return;
       }
 
-      // Auto login after registration
       const loginRes = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
       });
 
       if (loginRes.ok) {
@@ -72,7 +67,7 @@ export default function RegisterPage() {
       } else {
         router.push("/login");
       }
-    } catch (err) {
+    } catch {
       setError("Đã xảy ra lỗi, vui lòng thử lại");
     } finally {
       setLoading(false);
@@ -80,69 +75,111 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <span className="text-4xl">🐍</span>
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Python LMS
-            </span>
-          </Link>
+    <div className="flex min-h-screen">
+      {/* Left branding panel */}
+      <div className="hidden lg:flex lg:w-[46%] lg:flex-col lg:justify-between bg-[linear-gradient(135deg,_#312e81_0%,_#4f46e5_45%,_#7c3aed_100%)] px-12 py-10 text-white">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+              <i className="fa-solid fa-graduation-cap text-white"></i>
+            </div>
+            <span className="text-lg font-bold">Python LMS</span>
+          </div>
         </div>
 
-        {/* Register Card */}
-        <div className="card p-8">
-          <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">
-            Tạo tài khoản
-          </h1>
+        <div>
+          <blockquote className="text-2xl font-semibold leading-snug text-white/95">
+            "Bắt đầu hành trình học Python với lộ trình có cấu trúc và sự hỗ trợ từ giáo viên."
+          </blockquote>
+          <div className="mt-8 space-y-4">
+            {[
+              { icon: "fa-circle-check", text: "Tạo tài khoản miễn phí trong vài giây" },
+              { icon: "fa-book-open", text: "Truy cập bài giảng ngay sau khi đăng ký" },
+              { icon: "fa-comments", text: "Nhận phản hồi từ giáo viên theo từng bài" },
+            ].map((item) => (
+              <div key={item.text} className="flex items-center gap-3 text-sm text-indigo-100">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                  <i className={`fa-solid ${item.icon} text-[11px]`}></i>
+                </div>
+                {item.text}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-indigo-300">
+          © {new Date().getFullYear()} Python LMS. Hệ thống học tập trực tuyến.
+        </p>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50 px-5 py-10 sm:px-10">
+        {/* Mobile logo */}
+        <div className="mb-8 flex items-center gap-3 lg:hidden">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600">
+            <i className="fa-solid fa-graduation-cap text-white"></i>
+          </div>
+          <span className="text-xl font-bold text-slate-900">Python LMS</span>
+        </div>
+
+        <div className="w-full max-w-sm">
+          <div className="mb-7">
+            <h1 className="text-2xl font-bold text-slate-900">Tạo tài khoản</h1>
+            <p className="mt-1.5 text-sm text-slate-500">
+              Đã có tài khoản?{" "}
+              <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
+                Đăng nhập
+              </Link>
+            </p>
+          </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              <i className="fa-solid fa-circle-exclamation mr-2"></i>
-              {error}
+            <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <i className="fa-solid fa-circle-exclamation mt-0.5 shrink-0"></i>
+              <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Role Selection */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Role selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Bạn là
-              </label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Bạn là</label>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: "student" })}
-                  className={`p-4 rounded-xl border-2 transition-all ${
-                    formData.role === "student"
-                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className="text-2xl mb-1">🎓</div>
-                  <div className="font-medium">Học sinh</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: "teacher" })}
-                  className={`p-4 rounded-xl border-2 transition-all ${
-                    formData.role === "teacher"
-                      ? "border-purple-500 bg-purple-50 text-purple-700"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className="text-2xl mb-1">👨‍🏫</div>
-                  <div className="font-medium">Giáo viên</div>
-                </button>
+                {[
+                  { value: "student", label: "Học sinh", icon: "fa-graduation-cap", color: "indigo" },
+                  { value: "teacher", label: "Giáo viên", icon: "fa-chalkboard-user", color: "purple" },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, role: option.value })}
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-all ${
+                      formData.role === option.value
+                        ? option.color === "indigo"
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                          : "border-purple-500 bg-purple-50 text-purple-700"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                        formData.role === option.value
+                          ? option.color === "indigo"
+                            ? "bg-indigo-100 text-indigo-600"
+                            : "bg-purple-100 text-purple-600"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      <i className={`fa-solid ${option.icon} text-sm`}></i>
+                    </div>
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Họ và tên
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Họ và tên</label>
               <input
                 type="text"
                 className="input"
@@ -154,9 +191,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
               <input
                 type="email"
                 className="input"
@@ -168,9 +203,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mật khẩu
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Mật khẩu</label>
               <input
                 type="password"
                 className="input"
@@ -182,7 +215,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
                 Xác nhận mật khẩu
               </label>
               <input
@@ -198,7 +231,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -214,22 +247,15 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Đã có tài khoản?{" "}
-              <Link href="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">
-                Đăng nhập
-              </Link>
-            </p>
+          <div className="mt-8">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600"
+            >
+              <i className="fa-solid fa-arrow-left"></i>
+              Quay lại trang chủ
+            </Link>
           </div>
-        </div>
-
-        {/* Back to home */}
-        <div className="text-center mt-6">
-          <Link href="/" className="text-gray-500 hover:text-gray-700 text-sm">
-            <i className="fa-solid fa-arrow-left mr-2"></i>
-            Quay lại trang chủ
-          </Link>
         </div>
       </div>
     </div>

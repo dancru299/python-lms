@@ -1,4 +1,4 @@
-export type StudentNavKey = "home" | "classrooms" | "profile";
+export type StudentNavKey = "home" | "classrooms" | "profile" | "library";
 export type PillTone = "indigo" | "emerald" | "amber" | "slate";
 
 export interface SummaryPill {

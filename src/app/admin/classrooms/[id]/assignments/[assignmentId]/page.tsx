@@ -2,6 +2,8 @@
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import TeacherShell from "@/components/teacher/TeacherShell";
+import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import AssignmentQuestionPreview from "@/components/AssignmentQuestionPreview";
 import GradeClassroomSubmissionForm from "./GradeClassroomSubmissionForm";
 
@@ -63,33 +65,30 @@ export default async function ClassroomAssignmentDetailPage({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/admin/classrooms/${classroomId}`}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <i className="fa-solid fa-arrow-left"></i>
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                {assignment.title}
-              </h1>
-              <p className="text-sm text-gray-500">
-                {assignment.type === "test" ? "Bài kiểm tra" : "Bài tập về nhà"}{" "}
-                • {assignment.classroom.name}
-              </p>
-            </div>
-          </div>
-          <span className="badge badge-primary">
-            {assignment.maxScore} điểm
-          </span>
-        </div>
-      </header>
+    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
+      <>
+        <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
+          <Link href="/admin" className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition hover:bg-slate-100 hover:text-slate-700">
+            <i className="fa-solid fa-chart-line text-xs"></i>
+            Tổng quan
+          </Link>
+          <i className="fa-solid fa-chevron-right text-[10px] text-slate-300"></i>
+          <Link href="/admin/classrooms" className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition hover:bg-slate-100 hover:text-slate-700">
+            Lớp học
+          </Link>
+          <i className="fa-solid fa-chevron-right text-[10px] text-slate-300"></i>
+          <Link href={`/admin/classrooms/${classroomId}`} className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition hover:bg-slate-100 hover:text-slate-700">
+            {assignment.classroom.name}
+          </Link>
+          <i className="fa-solid fa-chevron-right text-[10px] text-slate-300"></i>
+          <span className="font-medium text-slate-700 max-w-xs truncate">{assignment.title}</span>
+        </nav>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <TeacherPageFrame
+          title={assignment.title}
+          subtitle={`${assignment.type === "test" ? "Bài kiểm tra" : "Bài tập về nhà"} · ${assignment.classroom.name} · ${assignment.maxScore} điểm`}
+        >
+        <div className="space-y-6">
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-3">Đề bài</h2>
           <div className="assignment-rich text-gray-800">
@@ -175,7 +174,9 @@ export default async function ClassroomAssignmentDetailPage({
             )}
           </div>
         </div>
-      </main>
-    </div>
+        </div>
+        </TeacherPageFrame>
+      </>
+    </TeacherShell>
   );
 }
