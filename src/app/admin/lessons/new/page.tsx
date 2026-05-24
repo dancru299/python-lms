@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { requireTeacher } from "@/lib/session";
+import { getLessonGenerationClientConfig } from "@/lib/ai/lesson-generation";
 import NewLessonClientPage from "./NewLessonClientPage";
 
 interface PageProps {
@@ -9,7 +10,7 @@ interface PageProps {
 export default async function NewLessonPage({ searchParams }: PageProps) {
   await requireTeacher();
 
-  const [{ chapterId }, chapters] = await Promise.all([
+  const [{ chapterId }, chapters, aiConfig] = await Promise.all([
     searchParams,
     prisma.chapter.findMany({
       select: {
@@ -18,12 +19,14 @@ export default async function NewLessonPage({ searchParams }: PageProps) {
       },
       orderBy: { sortOrder: "asc" },
     }),
+    Promise.resolve(getLessonGenerationClientConfig()),
   ]);
 
   return (
     <NewLessonClientPage
       initialChapters={chapters}
       initialChapterId={chapterId ?? ""}
+      initialAiConfig={aiConfig}
     />
   );
 }

@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import type {
+  LessonAiClientConfig,
+  LessonAiProvider,
+} from "@/lib/ai/provider-types";
 
 interface Section {
   id: string;
@@ -42,6 +46,7 @@ interface Lesson {
 
 interface EditLessonClientPageProps {
   initialChapters: Chapter[];
+  initialAiConfig: LessonAiClientConfig;
   initialLesson: Lesson;
 }
 
@@ -137,6 +142,7 @@ print(my_variable)
 
 export default function EditLessonClientPage({
   initialChapters,
+  initialAiConfig,
   initialLesson,
 }: EditLessonClientPageProps) {
   const router = useRouter();
@@ -154,6 +160,16 @@ export default function EditLessonClientPage({
   const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
   const [aiContent, setAiContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
+    initialAiConfig.defaultProvider
+  );
+  const [aiModel, setAiModel] = useState(() => {
+    const defaultOption = initialAiConfig.providers.find(
+      (provider) => provider.value === initialAiConfig.defaultProvider
+    );
+
+    return defaultOption?.defaultModel || "";
+  });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -187,6 +203,46 @@ export default function EditLessonClientPage({
       answerVisible: exercise.answerVisible,
     }))
   );
+  const selectedAiProvider =
+    initialAiConfig.providers.find((provider) => provider.value === aiProvider) ||
+    initialAiConfig.providers[0];
+
+  const handleAiProviderChange = (provider: LessonAiProvider) => {
+    setAiProvider(provider);
+    const providerOption = initialAiConfig.providers.find(
+      (option) => option.value === provider
+    );
+
+    if (providerOption) {
+      setAiModel(providerOption.defaultModel);
+    }
+  };
+
+  const readAiErrorMessage = async (response: Response) => {
+    try {
+      const payload = await response.json();
+      const errorMessage =
+        typeof payload?.error === "string" ? payload.error.trim() : "";
+      const detailMessage =
+        typeof payload?.details === "string" ? payload.details.trim() : "";
+
+      if (errorMessage && detailMessage && errorMessage !== detailMessage) {
+        return `${errorMessage}\nChi tiết: ${detailMessage}`;
+      }
+
+      if (detailMessage) {
+        return detailMessage;
+      }
+
+      if (errorMessage) {
+        return errorMessage;
+      }
+    } catch {
+      // Fall through to the generic fallback below.
+    }
+
+    return "Lỗi khi gọi AI API";
+  };
 
   // Load lesson data
   if (false) {
@@ -335,34 +391,36 @@ export default function EditLessonClientPage({
       const res = await fetch("/api/admin/lessons/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: aiContent })
+        body: JSON.stringify({
+          content: aiContent,
+          provider: aiProvider,
+          model: aiModel,
+        })
       });
       
       if (!res.ok) {
-        throw new Error("Lỗi khi gọi API AI");
+        throw new Error(await readAiErrorMessage(res));
       }
       
       const data = await res.json();
       
-      if (data.lessonInfo) {
-        setFormData(prev => ({
-          ...prev,
-          title: data.lessonInfo.title || prev.title,
-          duration: data.lessonInfo.duration || prev.duration,
-          difficulty: data.lessonInfo.difficulty || prev.difficulty,
-          objectives: {
-            knowledge: data.lessonInfo.objectiveKnowledge || prev.objectives.knowledge,
-            skills: data.lessonInfo.objectiveSkills || prev.objectives.skills,
-            attitude: data.lessonInfo.objectiveAttitude || prev.objectives.attitude
-          }
-        }));
-      }
+      setFormData(prev => ({
+        ...prev,
+        title: data.title || prev.title,
+        duration: Number(data.duration) || prev.duration,
+        difficulty: data.difficulty || prev.difficulty,
+        objectives: {
+          knowledge: data.objectives?.knowledge || prev.objectives.knowledge,
+          skills: data.objectives?.skills || prev.objectives.skills,
+          attitude: data.objectives?.attitude || prev.objectives.attitude
+        }
+      }));
       
       if (data.sections && data.sections.length > 0) {
-        const mappedSections = data.sections.map((s: any) => ({
+        const mappedSections = data.sections.map((s: any, idx: number) => ({
           id: `ai-sec-${Date.now()}-${Math.random()}`,
-          title: s.title,
-          content: s.content
+          title: s.title || `Phần ${idx + 1}`,
+          content: s.content || ""
         }));
         setSections(mappedSections);
       }
@@ -375,8 +433,8 @@ export default function EditLessonClientPage({
           question: e.question,
           answer: e.answer,
           difficulty: e.difficulty as "easy" | "medium" | "hard",
-          points: e.points,
-          answerVisible: e.answerVisible || false
+          points: Number(e.points) || 10,
+          answerVisible: Boolean(e.answerVisible ?? e.type === "practice")
         }));
         setExercises(mappedExercises);
       }
@@ -385,8 +443,11 @@ export default function EditLessonClientPage({
       setCreationMode("manual");
       
     } catch (error) {
-      console.error(error);
-      alert("Quá trình AI tạo bài giảng gặp lỗi. Vui lòng thử lại.");
+      console.warn("AI generation request failed:", error);
+      alert(
+        "Quá trình AI tạo bài giảng gặp lỗi.\n" +
+          (error instanceof Error ? error.message : "Vui lòng thử lại.")
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -514,9 +575,60 @@ export default function EditLessonClientPage({
               AI Trợ Lý Soạn Bài Giảng
             </h2>
             <p className="text-gray-500 mb-6">
-              Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Hệ thống AI (Gemini) sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn. Nội dung cũ sẽ bị ghi đè các tham số nếu sinh thành công.
+              Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Bạn có thể chọn provider và model phù hợp, hệ thống AI sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn. Nội dung cũ sẽ bị ghi đè các tham số nếu sinh thành công.
             </p>
             
+            <div className="mb-4 grid gap-4 rounded-2xl border border-purple-100 bg-white/80 p-4 md:grid-cols-[1fr_1.4fr]">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Provider AI
+                </label>
+                <select
+                  value={aiProvider}
+                  onChange={(event) =>
+                    handleAiProviderChange(event.target.value as LessonAiProvider)
+                  }
+                  className="input"
+                >
+                  {initialAiConfig.providers.map((provider) => (
+                    <option
+                      key={provider.value}
+                      value={provider.value}
+                      disabled={!provider.configured}
+                    >
+                      {provider.label}
+                      {provider.configured ? "" : " (chÆ°a cáº¥u hÃ¬nh key)"}
+                    </option>
+                  ))}
+                </select>
+                {selectedAiProvider ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {selectedAiProvider.description}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Model
+                </label>
+                <input
+                  type="text"
+                  value={aiModel}
+                  onChange={(event) => setAiModel(event.target.value)}
+                  className="input"
+                  placeholder={selectedAiProvider?.defaultModel || "Nháº­p tÃªn model"}
+                />
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Gá»£i Ã½: {selectedAiProvider?.defaultModel || "Nháº­p model báº¡n muá»‘n dÃ¹ng"}.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Báº¡n cÃ³ thá»ƒ nháº­p "ChatGPT", "GPT-5" hoáº·c "Gemini", há»‡ thá»‘ng
+                  sáº½ tá»± map sang provider phÃ¹ há»£p náº¿u Ä‘Ã£ cÃ³ API key.
+                </p>
+              </div>
+            </div>
+
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mb-4">
               <RichTextEditor
                 apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY}
@@ -547,7 +659,7 @@ export default function EditLessonClientPage({
               </div>
               <button 
                 onClick={handleAIGenerate}
-                disabled={isGenerating || !aiContent}
+                disabled={isGenerating || !aiContent || !aiModel.trim()}
                 className="btn btn-primary whitespace-nowrap bg-gradient-to-r from-purple-600 to-indigo-600 border-none shadow-md hover:shadow-lg disabled:opacity-70"
               >
                 {isGenerating ? (

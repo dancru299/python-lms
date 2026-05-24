@@ -4,6 +4,10 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import type {
+  LessonAiClientConfig,
+  LessonAiProvider,
+} from "@/lib/ai/provider-types";
 
 interface Section {
   id: string;
@@ -19,6 +23,7 @@ interface Exercise {
   answer: string;
   difficulty: "easy" | "medium" | "hard";
   points: number;
+  answerVisible: boolean;
 }
 
 interface Chapter {
@@ -29,6 +34,7 @@ interface Chapter {
 interface NewLessonClientPageProps {
   initialChapters: Chapter[];
   initialChapterId: string;
+  initialAiConfig: LessonAiClientConfig;
 }
 
 const RichTextEditor = dynamic(
@@ -232,6 +238,7 @@ print(solution)
 function NewLessonContent({
   initialChapters,
   initialChapterId,
+  initialAiConfig,
 }: NewLessonClientPageProps) {
   const router = useRouter();
   const chapterIdParam = initialChapterId;
@@ -239,6 +246,16 @@ function NewLessonContent({
   const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
   const [aiContent, setAiContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
+    initialAiConfig.defaultProvider
+  );
+  const [aiModel, setAiModel] = useState(() => {
+    const defaultOption = initialAiConfig.providers.find(
+      (provider) => provider.value === initialAiConfig.defaultProvider
+    );
+
+    return defaultOption?.defaultModel || "";
+  });
   const editorRef = useRef<any>(null);
 
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
@@ -267,6 +284,46 @@ function NewLessonContent({
   ]);
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const selectedAiProvider =
+    initialAiConfig.providers.find((provider) => provider.value === aiProvider) ||
+    initialAiConfig.providers[0];
+
+  const handleAiProviderChange = (provider: LessonAiProvider) => {
+    setAiProvider(provider);
+    const providerOption = initialAiConfig.providers.find(
+      (option) => option.value === provider
+    );
+
+    if (providerOption) {
+      setAiModel(providerOption.defaultModel);
+    }
+  };
+
+  const readAiErrorMessage = async (response: Response) => {
+    try {
+      const payload = await response.json();
+      const errorMessage =
+        typeof payload?.error === "string" ? payload.error.trim() : "";
+      const detailMessage =
+        typeof payload?.details === "string" ? payload.details.trim() : "";
+
+      if (errorMessage && detailMessage && errorMessage !== detailMessage) {
+        return `${errorMessage}\nChi tiết: ${detailMessage}`;
+      }
+
+      if (detailMessage) {
+        return detailMessage;
+      }
+
+      if (errorMessage) {
+        return errorMessage;
+      }
+    } catch {
+      // Fall through to the generic fallback below.
+    }
+
+    return "Lỗi khi gọi AI API";
+  };
 
   // Load chapters
   if (false) {
@@ -351,11 +408,16 @@ function NewLessonContent({
         answer: "",
         difficulty: "easy",
         points: type === "homework" ? 20 : 10,
+        answerVisible: type === "practice",
       },
     ]);
   };
 
-  const updateExercise = (id: string, field: string, value: string | number) => {
+  const updateExercise = (
+    id: string,
+    field: string,
+    value: string | number | boolean
+  ) => {
     setExercises(exercises.map((e) => (e.id === id ? { ...e, [field]: value } : e)));
   };
 
@@ -374,12 +436,15 @@ function NewLessonContent({
       const res = await fetch("/api/admin/lessons/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: aiContent }),
+        body: JSON.stringify({
+          content: aiContent,
+          provider: aiProvider,
+          model: aiModel,
+        }),
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Lỗi khi gọi AI API");
+        throw new Error(await readAiErrorMessage(res));
       }
 
       const generatedData = await res.json();
@@ -388,7 +453,7 @@ function NewLessonContent({
       setFormData((prev) => ({
         ...prev,
         title: generatedData.title || prev.title,
-        duration: parseInt(generatedData.duration) || 120,
+        duration: Number(generatedData.duration) || 120,
         difficulty: generatedData.difficulty || "beginner",
         objectives: {
           knowledge: generatedData.objectives?.knowledge || "",
@@ -398,7 +463,11 @@ function NewLessonContent({
       }));
 
       // Update Sections
-      if (generatedData.sections && Array.isArray(generatedData.sections)) {
+      if (
+        generatedData.sections &&
+        Array.isArray(generatedData.sections) &&
+        generatedData.sections.length > 0
+      ) {
         const newSections = generatedData.sections.map((sec: any, idx: number) => ({
           id: `sec-ai-${Date.now()}-${idx}`,
           title: sec.title || `Phần ${idx + 1}`,
@@ -408,7 +477,11 @@ function NewLessonContent({
       }
 
       // Update Exercises
-      if (generatedData.exercises && Array.isArray(generatedData.exercises)) {
+      if (
+        generatedData.exercises &&
+        Array.isArray(generatedData.exercises) &&
+        generatedData.exercises.length > 0
+      ) {
         const newExercises = generatedData.exercises.map((ex: any, idx: number) => ({
           id: `ex-ai-${Date.now()}-${idx}`,
           type: ex.type || "practice",
@@ -416,8 +489,8 @@ function NewLessonContent({
           question: ex.question || "",
           answer: ex.answer || "",
           difficulty: ex.difficulty || "medium",
-          points: parseInt(ex.points) || 10,
-          answerVisible: ex.answerVisible || false,
+          points: Number(ex.points) || 10,
+          answerVisible: Boolean(ex.answerVisible ?? ex.type === "practice"),
         }));
         setExercises(newExercises);
       }
@@ -427,7 +500,7 @@ function NewLessonContent({
 
     } catch (error: any) {
       alert("Đã xảy ra lỗi khi tạo bằng AI: " + error.message);
-      console.error(error);
+      console.warn("AI generation request failed:", error);
     } finally {
       setIsGenerating(false);
     }
@@ -544,8 +617,59 @@ function NewLessonContent({
               AI Trợ Lý Soạn Bài Giảng
             </h2>
             <p className="text-gray-500 mb-6">
-              Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Hệ thống AI (Gemini) sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn.
+              Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Bạn có thể chọn provider và model phù hợp, hệ thống AI sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn.
             </p>
+
+            <div className="mb-6 grid gap-4 rounded-2xl border border-purple-100 bg-white/80 p-4 md:grid-cols-[1fr_1.4fr]">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Provider AI
+                </label>
+                <select
+                  value={aiProvider}
+                  onChange={(event) =>
+                    handleAiProviderChange(event.target.value as LessonAiProvider)
+                  }
+                  className="input"
+                >
+                  {initialAiConfig.providers.map((provider) => (
+                    <option
+                      key={provider.value}
+                      value={provider.value}
+                      disabled={!provider.configured}
+                    >
+                      {provider.label}
+                      {provider.configured ? "" : " (chÆ°a cáº¥u hÃ¬nh key)"}
+                    </option>
+                  ))}
+                </select>
+                {selectedAiProvider ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {selectedAiProvider.description}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Model
+                </label>
+                <input
+                  type="text"
+                  value={aiModel}
+                  onChange={(event) => setAiModel(event.target.value)}
+                  className="input"
+                  placeholder={selectedAiProvider?.defaultModel || "Nháº­p tÃªn model"}
+                />
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Gá»£i Ã½: {selectedAiProvider?.defaultModel || "Nháº­p model báº¡n muá»‘n dÃ¹ng"}.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Báº¡n cÃ³ thá»ƒ nháº­p "ChatGPT", "GPT-5" hoáº·c "Gemini", há»‡ thá»‘ng
+                  sáº½ tá»± map sang provider phÃ¹ há»£p náº¿u Ä‘Ã£ cÃ³ API key.
+                </p>
+              </div>
+            </div>
 
             <div className="border border-gray-300 rounded-lg overflow-hidden mb-6">
               <RichTextEditor
@@ -578,7 +702,7 @@ function NewLessonContent({
               </div>
               <button
                 onClick={handleAiGenerate}
-                disabled={isGenerating}
+                disabled={isGenerating || !aiModel.trim()}
                 className="btn btn-primary whitespace-nowrap bg-gradient-to-r from-purple-600 to-indigo-600 border-none shadow-md hover:shadow-lg disabled:opacity-70"
               >
                 {isGenerating ? (
@@ -1007,7 +1131,7 @@ function ExerciseEditor({
 }: {
   exercise: Exercise;
   index: number;
-  onUpdate: (id: string, field: string, value: string | number) => void;
+  onUpdate: (id: string, field: string, value: string | number | boolean) => void;
   onRemove: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -1030,6 +1154,15 @@ function ExerciseEditor({
           />
         </div>
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1 text-xs" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={exercise.answerVisible}
+              onChange={(e) => onUpdate(exercise.id, "answerVisible", e.target.checked)}
+              className="w-4 h-4"
+            />
+            Hiá»‡n Ä‘Ã¡p Ã¡n
+          </label>
           <select
             value={exercise.difficulty}
             onChange={(e) => { e.stopPropagation(); onUpdate(exercise.id, "difficulty", e.target.value); }}

@@ -1,98 +1,114 @@
 import { NextResponse } from "next/server";
+import { generateLessonDraft } from "@/lib/ai/lesson-generation";
+import {
+  type LessonAiProvider,
+  isLessonAiProvider,
+} from "@/lib/ai/provider-types";
 import { requireTeacher } from "@/lib/session";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const PROVIDER_LABELS: Record<LessonAiProvider, string> = {
+  gemini: "Google Gemini",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  groq: "Groq",
+  deepseek: "DeepSeek",
+  qwen: "Qwen / DashScope",
+};
+
+function getErrorStatus(error: unknown): number {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  ) {
+    return (error as { status: number }).status;
+  }
+
+  return 500;
+}
+
+function getErrorProvider(error: unknown): LessonAiProvider | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "provider" in error &&
+    typeof (error as { provider?: unknown }).provider === "string"
+  ) {
+    const provider = (error as { provider: string }).provider;
+    return isLessonAiProvider(provider) ? provider : null;
+  }
+
+  return null;
+}
+
+function getPublicErrorMessage(
+  status: number,
+  details: string,
+  provider: LessonAiProvider | null
+): string {
+  const providerLabel = provider ? PROVIDER_LABELS[provider] : "Provider AI";
+
+  if (
+    details.includes("API key") ||
+    details.includes("base URL") ||
+    details.includes("chưa được cấu hình")
+  ) {
+    return `${providerLabel} chưa được cấu hình đầy đủ.`;
+  }
+
+  switch (status) {
+    case 400:
+      return `Yêu cầu gửi tới ${providerLabel} không hợp lệ.`;
+    case 401:
+      return `API key của ${providerLabel} không hợp lệ hoặc đã hết hiệu lực.`;
+    case 403:
+      return `Tài khoản hiện không có quyền dùng model này trên ${providerLabel}.`;
+    case 404:
+      return `Model AI không tồn tại hoặc chưa khả dụng trên ${providerLabel}.`;
+    case 429:
+      return `${providerLabel} đang hết quota hoặc đã chạm giới hạn tạm thời.`;
+    default:
+      return "Không thể tạo bản nháp bài giảng bằng AI.";
+  }
+}
 
 export async function POST(req: Request) {
   try {
     await requireTeacher();
 
-    const { content } = await req.json();
+    const { content, provider, model } = await req.json();
 
-    if (!content) {
-      return NextResponse.json({ error: "Content is required" }, { status: 400 });
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    if (typeof content !== "string" || !content.trim()) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY is not configured in .env" },
-        { status: 500 }
+        { error: "Nội dung nguồn là bắt buộc." },
+        { status: 400 }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const { draft, meta } = await generateLessonDraft({
+      content,
+      provider,
+      model,
+    });
 
-    const prompt = `
-Bạn là 1 chuyên gia, 1 thầy giáo có nhiều năm kinh nghiệm trong việc giảng dạy, trước đây bạn từng là 1 lập trình viên giỏi nữa. Bây giờ bạn đang nhận 1 công việc là giảng viên tại 1 trung tâm và bạn đảm nhiệm môn lập trình python, ngoài ra bạn còn
-là một trợ lý ảo am hiểu giáo dục. Hãy nhận nội dung văn bản thô (có thể kèm HTML/Rich Text) sau đó phân tích và chuyển nó thành cấu trúc bài giảng.
+    return NextResponse.json({
+      ...draft,
+      meta,
+    });
+  } catch (error: unknown) {
+    const details = error instanceof Error ? error.message : "Unknown error";
+    const status = getErrorStatus(error);
+    const provider = getErrorProvider(error);
+    console.error("Lesson generation error:", error);
 
-**Nhiệm vụ:** Trích xuất và định dạng dữ liệu trả về 100% bằng chuẩn JSON theo cấu trúc sau. TUYỆT ĐỐI KHÔNG thêm Markdown code block như \`\`\`json, chỉ trả về chuỗi JSON thuần túy để parse trực tiếp.
-{
-  "title": "[Tên bài giảng ngắn gọn, súc tích rút ra từ nội dung]",
-  "duration": [Ước lượng tổng thời gian học tính bằng phút, ví dụ: 60, 90, 120. Trả về số nguyên],
-  "difficulty": "[beginner hoặc intermediate hoặc advanced]",
-  "objectives": {
-    "knowledge": "[1-2 câu tóm tắt nhanh kiến thức sẽ học được]",
-    "skills": "[1-2 câu tóm tắt kỹ năng người học sẽ làm được]",
-    "attitude": "[1 câu tóm tắt thái độ/mindset đạt được]"
-  },
-  "sections": [
-    {
-      "title": "[Tên của Tab nội dung, ví dụ: Khái niệm, Cách dùng, Thực hành...]",
-      "content": "[Đoạn mã HTML chứa nội dung chi tiết. Lưu ý: Sử dụng thẻ <h2>, <h3>, <ul>, <li>, <p>. Đối với các đoạn code Python, bắt buộc bọc trong <div class=\\\"code-block\\\"> nội dung code </div>. KHÔNG DÙNG Markdown trong khu vực này, CHỈ DÙNG HTML hợp lệ]"
-    }
-  ],
-  "exercises": [
-     {
-       "type": "practice",
-       "title": "Tên bài tập ngắn",
-       "question": "Mô tả yêu cầu bài tập (HTML format, có thể dùng div class=code-block nếu cần hiện code mẫu)",
-       "answer": "Code giải mẫu thuần túy của bài tập (không cần html)",
-       "points": 10,
-       "difficulty": "easy"
-     }
-  ]
-}
-
-**Yêu cầu:** 
-- Phân chia nội dung thành ít nhất 2-3 "sections" (Tab) hợp lý, chẳng hạn: Khái niệm, Cú pháp, Ví dụ/Thực hành.
-- Nếu nội dung có đề cập bài tập, hãy chuyển vào mảng "exercises". Nếu không có, tạo 1 bài tập đơn giản liên quan.
-- Chắc chắn rằng mảng sections chứa các object có "title" và "content" (HTML).
-- **QUAN TRỌNG:** Trong phần \`content\` và \`question\`, nếu có code Python, hãy bọc trong \`<div class="code-block">code_day_du</div>\`. KHÔNG ĐƯỢC dùng các thanh ngang (----) hay placeholder để giả lập code. PHẢI LÀ CODE THỰC TẾ.
-- KHÔNG BỌC KẾT QUẢ BẰNG \`\`\`json ... \`\`\`. CHỈ TRẢ VỀ CHUỖI BẮT ĐẦU BẰNG { VÀ KẾT THÚC BẰNG }.
-- Trả về tiếng Việt.
-
-**Nội dung thô cần xử lý:**
----
-- Trường "question" trong mảng "exercises" phải là HTML có cấu trúc rõ ràng, không được trả về dạng text thô sạch dòng.
-- Với bài "practice": bắt buộc có ít nhất 1 đoạn mở bài, 1 heading cho đề bài, 1 danh sách <ol> hoặc <ul> cho yêu cầu/các bước, và 1 phần nêu rõ kết quả cần đạt.
-- Với bài "homework": bắt buộc có 1 heading mở bài, 1 phần "Nhiệm vụ" hoặc "Yêu cầu", và 1 phần "Tiêu chí hoàn thành" hoặc "Đầu ra cần nộp". Mức độ chăm chút phải tương đương các section khác.
-- Nếu có code minh họa trong "question", phải dùng <div class="code-block">...</div>, không dùng Markdown code fence.
-- Trường "answer" chỉ chứa đáp án mẫu thuần túy hoặc code thuần túy, không bê nguyên HTML.
-${content}
----
-    `;
-
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
-
-    // Try to handle potential markdown formatting if the model disobeys
-    let cleanJson = responseText;
-    if (cleanJson.startsWith('```json')) {
-      cleanJson = cleanJson.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-    } else if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```\n?/, '').replace(/\n?```$/, '');
-    }
-
-    const parsedJson = JSON.parse(cleanJson);
-
-    return NextResponse.json(parsedJson);
-  } catch (error: any) {
-    console.error("Gemini Error:", error);
     return NextResponse.json(
-      { error: "Lỗi kết nối AI hoặc xử lý nội dung", details: error.message },
-      { status: 500 }
+      {
+        error: getPublicErrorMessage(status, details, provider),
+        details,
+        provider,
+      },
+      { status }
     );
   }
 }

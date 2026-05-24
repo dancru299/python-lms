@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { requireTeacher } from "@/lib/session";
+import { getLessonGenerationClientConfig } from "@/lib/ai/lesson-generation";
 import EditLessonClientPage from "./EditLessonClientPage";
 
 interface PageProps {
@@ -12,7 +13,7 @@ export default async function EditLessonPage({ params }: PageProps) {
 
   await requireTeacher();
 
-  const [chapters, lesson] = await Promise.all([
+  const [chapters, lesson, aiConfig] = await Promise.all([
     prisma.chapter.findMany({
       select: {
         id: true,
@@ -25,8 +26,9 @@ export default async function EditLessonPage({ params }: PageProps) {
       include: {
         sections: { orderBy: { sortOrder: "asc" } },
         exercises: { orderBy: { sortOrder: "asc" } },
-      },
-    }),
+        },
+      }),
+    Promise.resolve(getLessonGenerationClientConfig()),
   ]);
 
   if (!lesson) {
@@ -36,6 +38,7 @@ export default async function EditLessonPage({ params }: PageProps) {
   return (
     <EditLessonClientPage
       initialChapters={chapters}
+      initialAiConfig={aiConfig}
       initialLesson={{
         ...lesson,
         exercises: lesson.exercises.map((exercise) => ({

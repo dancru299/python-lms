@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
+import prisma from "@/lib/prisma";
+import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
 
-// Helper to get session and verify teacher role
 async function verifyTeacher() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session");
@@ -20,7 +20,6 @@ async function verifyTeacher() {
   }
 }
 
-// GET - List all chapters with lessons for admin
 export async function GET() {
   try {
     const session = await verifyTeacher();
@@ -43,11 +42,13 @@ export async function GET() {
     return NextResponse.json(chapters);
   } catch (error) {
     console.error("Get lessons error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
-// POST - Create new lesson
 export async function POST(request: NextRequest) {
   try {
     const session = await verifyTeacher();
@@ -55,58 +56,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { chapterId, title, duration, difficulty, objectives, sections, exercises } = body;
+    const payload = normalizeLessonMutationPayload(await request.json());
 
-    if (!chapterId || !title) {
+    if (!payload.chapterId || !payload.title) {
       return NextResponse.json(
         { error: "Chương học và tên bài giảng là bắt buộc" },
         { status: 400 }
       );
     }
 
-    // Get next sort order
     const lastLesson = await prisma.lesson.findFirst({
-      where: { chapterId },
+      where: { chapterId: payload.chapterId },
       orderBy: { sortOrder: "desc" },
     });
     const nextOrder = (lastLesson?.sortOrder ?? -1) + 1;
 
-    // Create lesson with sections and exercises
     const lesson = await prisma.lesson.create({
       data: {
-        chapterId,
-        title,
-        duration: duration || 120,
-        difficulty: difficulty || "beginner",
+        chapterId: payload.chapterId,
+        title: payload.title,
+        duration: payload.duration,
+        difficulty: payload.difficulty,
         sortOrder: nextOrder,
-        objectiveKnowledge: objectives?.knowledge || null,
-        objectiveSkills: objectives?.skills || null,
-        objectiveAttitude: objectives?.attitude || null,
+        objectiveKnowledge: payload.objectives.knowledge || null,
+        objectiveSkills: payload.objectives.skills || null,
+        objectiveAttitude: payload.objectives.attitude || null,
         sections: {
-          create: (sections || []).map((s: { title: string; content: string }, i: number) => ({
-            title: s.title,
-            content: s.content,
-            sortOrder: i,
+          create: payload.sections.map((section, index) => ({
+            title: section.title,
+            content: section.content,
+            sortOrder: index,
           })),
         },
         exercises: {
-          create: (exercises || []).map((e: {
-            type: string;
-            title: string;
-            question: string;
-            answer: string;
-            difficulty: string;
-            points: number;
-          }, i: number) => ({
-            type: e.type || "practice",
-            title: e.title,
-            question: e.question,
-            answer: e.answer,
-            difficulty: e.difficulty || "easy",
-            points: e.points || 10,
-            sortOrder: i,
-            answerVisible: e.type === "practice", // Practice visible, homework not
+          create: payload.exercises.map((exercise, index) => ({
+            type: exercise.type,
+            title: exercise.title,
+            question: exercise.question,
+            answer: exercise.answer,
+            difficulty: exercise.difficulty,
+            points: exercise.points,
+            sortOrder: index,
+            answerVisible: exercise.answerVisible,
           })),
         },
       },
