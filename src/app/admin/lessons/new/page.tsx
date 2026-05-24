@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { requireTeacher } from "@/lib/session";
 import { getLessonGenerationClientConfig } from "@/lib/ai/lesson-generation";
+import TeacherShell from "@/components/teacher/TeacherShell";
 import NewLessonClientPage from "./NewLessonClientPage";
 
 interface PageProps {
@@ -8,25 +9,24 @@ interface PageProps {
 }
 
 export default async function NewLessonPage({ searchParams }: PageProps) {
-  await requireTeacher();
+  const session = await requireTeacher();
+  const aiConfig = getLessonGenerationClientConfig();
 
-  const [{ chapterId }, chapters, aiConfig] = await Promise.all([
+  const [{ chapterId }, chapters] = await Promise.all([
     searchParams,
     prisma.chapter.findMany({
-      select: {
-        id: true,
-        title: true,
-      },
+      select: { id: true, title: true },
       orderBy: { sortOrder: "asc" },
     }),
-    Promise.resolve(getLessonGenerationClientConfig()),
   ]);
 
   return (
-    <NewLessonClientPage
-      initialChapters={chapters}
-      initialChapterId={chapterId ?? ""}
-      initialAiConfig={aiConfig}
-    />
+    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
+      <NewLessonClientPage
+        initialChapters={chapters}
+        initialChapterId={chapterId ?? ""}
+        initialAiConfig={aiConfig}
+      />
+    </TeacherShell>
   );
 }

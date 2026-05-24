@@ -16,13 +16,16 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@heroicons/react": "^2.2.0",
+    "@monaco-editor/react": "^4.7.0",
     "@prisma/client": "^5.22.0",
     "@tinymce/tinymce-react": "^6.3.0",
+    "@types/nodemailer": "^8.0.0",
     "autoprefixer": "^10.4.23",
     "docx-preview": "^0.3.7",
     "mammoth": "^1.12.0",
     "next": "^16.1.7",
     "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.6.0"

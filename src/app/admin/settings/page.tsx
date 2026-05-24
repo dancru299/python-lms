@@ -1,19 +1,20 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/session";
 import prisma from "@/lib/prisma";
-import { requireTeacher } from "@/lib/session";
 import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
-import AdminChaptersClientPage from "./AdminChaptersClientPage";
+import SettingsClientPage from "./SettingsClientPage";
 
-export default async function AdminChaptersPage() {
-  const session = await requireTeacher();
+export default async function AdminSettingsPage() {
+  const session = await requireAdmin();
 
-  const chapters = await prisma.chapter.findMany({
-    include: {
-      _count: { select: { lessons: true } },
-    },
-    orderBy: { sortOrder: "asc" },
-  });
+  const rawSettings = await (prisma as any).setting
+    .findMany({ orderBy: { key: "asc" } })
+    .catch(() => []);
+
+  const initialSettings: Record<string, string> = Object.fromEntries(
+    rawSettings.map((s: { key: string; value: string }) => [s.key, s.value])
+  );
 
   return (
     <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
@@ -27,14 +28,14 @@ export default async function AdminChaptersPage() {
             Tổng quan
           </Link>
           <i className="fa-solid fa-chevron-right text-[10px] text-slate-300"></i>
-          <span className="font-medium text-slate-700">Chương học</span>
+          <span className="font-medium text-slate-700">Cài đặt</span>
         </nav>
 
         <TeacherPageFrame
-          title="Quản lý Chương học"
-          subtitle={`${chapters.length} chương · Tổ chức lộ trình và cấu trúc nội dung bài học`}
+          title="Cài đặt hệ thống"
+          subtitle="Cấu hình tên, tính năng và hành vi toàn hệ thống"
         >
-          <AdminChaptersClientPage initialChapters={chapters} />
+          <SettingsClientPage initialSettings={initialSettings} />
         </TeacherPageFrame>
       </>
     </TeacherShell>

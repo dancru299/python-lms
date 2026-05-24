@@ -164,7 +164,7 @@ export default function ClassroomForm({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
           <div className="mx-auto h-12 w-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
           <p className="mt-4 text-sm text-gray-500">Đang tải dữ liệu lớp học...</p>
@@ -174,8 +174,8 @@ export default function ClassroomForm({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
+    <div className="min-h-0">
+      <header className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 border-b border-gray-200 bg-white sm:-mx-6 sm:-mt-6 lg:-mx-8 lg:-mt-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             <Link href="/admin/classrooms" className="text-gray-600 hover:text-gray-900">
@@ -223,7 +223,7 @@ export default function ClassroomForm({
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl space-y-6">
         <div className="card p-6">
           <h2 className="text-lg font-bold text-gray-900">Thông tin lớp học</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -337,7 +337,7 @@ export default function ClassroomForm({
             )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

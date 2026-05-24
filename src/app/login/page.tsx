@@ -29,13 +29,12 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect based on role
       if (data.user.role === "teacher" || data.user.role === "admin") {
         router.push("/admin");
       } else {
         router.push("/");
       }
-    } catch (err) {
+    } catch {
       setError("Đã xảy ra lỗi, vui lòng thử lại");
     } finally {
       setLoading(false);
@@ -43,36 +42,74 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <span className="text-4xl">🐍</span>
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Python LMS
-            </span>
-          </Link>
+    <div className="flex min-h-screen">
+      {/* Left branding panel */}
+      <div className="hidden lg:flex lg:w-[46%] lg:flex-col lg:justify-between bg-[linear-gradient(135deg,_#312e81_0%,_#4f46e5_45%,_#7c3aed_100%)] px-12 py-10 text-white">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+              <i className="fa-solid fa-graduation-cap text-white"></i>
+            </div>
+            <span className="text-lg font-bold">Python LMS</span>
+          </div>
         </div>
 
-        {/* Login Card */}
-        <div className="card p-8">
-          <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">
-            Đăng nhập
-          </h1>
+        <div>
+          <blockquote className="text-2xl font-semibold leading-snug text-white/95">
+            "Học Python theo lộ trình rõ ràng, theo dõi tiến độ và nhận phản hồi nhanh."
+          </blockquote>
+          <div className="mt-8 space-y-4">
+            {[
+              { icon: "fa-route", text: "Lộ trình học theo chương, theo bài" },
+              { icon: "fa-pen-ruler", text: "Chấm bài và phản hồi trực tuyến" },
+              { icon: "fa-users-rectangle", text: "Quản lý lớp học tập trung" },
+            ].map((item) => (
+              <div key={item.text} className="flex items-center gap-3 text-sm text-indigo-100">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                  <i className={`fa-solid ${item.icon} text-[11px]`}></i>
+                </div>
+                {item.text}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-indigo-300">
+          © {new Date().getFullYear()} Python LMS. Hệ thống học tập trực tuyến.
+        </p>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50 px-5 py-10 sm:px-10">
+        {/* Mobile logo */}
+        <div className="mb-8 flex items-center gap-3 lg:hidden">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600">
+            <i className="fa-solid fa-graduation-cap text-white"></i>
+          </div>
+          <span className="text-xl font-bold text-slate-900">Python LMS</span>
+        </div>
+
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-slate-900">Đăng nhập</h1>
+            <p className="mt-1.5 text-sm text-slate-500">
+              Chưa có tài khoản?{" "}
+              <Link href="/register" className="font-medium text-indigo-600 hover:text-indigo-700">
+                Đăng ký ngay
+              </Link>
+            </p>
+          </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              <i className="fa-solid fa-circle-exclamation mr-2"></i>
-              {error}
+            <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <i className="fa-solid fa-circle-exclamation mt-0.5 shrink-0"></i>
+              <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
               <input
                 type="email"
                 className="input"
@@ -84,13 +121,11 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">
-                  Mật khẩu
-                </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">Mật khẩu</label>
                 <Link
                   href="/forgot-password"
-                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
                 >
                   Quên mật khẩu?
                 </Link>
@@ -108,7 +143,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -124,22 +159,15 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Chưa có tài khoản?{" "}
-              <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-medium">
-                Đăng ký ngay
-              </Link>
-            </p>
+          <div className="mt-8">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600"
+            >
+              <i className="fa-solid fa-arrow-left"></i>
+              Quay lại trang chủ
+            </Link>
           </div>
-        </div>
-
-        {/* Back to home */}
-        <div className="text-center mt-6">
-          <Link href="/" className="text-gray-500 hover:text-gray-700 text-sm">
-            <i className="fa-solid fa-arrow-left mr-2"></i>
-            Quay lại trang chủ
-          </Link>
         </div>
       </div>
     </div>
