@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed:programs": "npx tsx prisma/seed-program-meta.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

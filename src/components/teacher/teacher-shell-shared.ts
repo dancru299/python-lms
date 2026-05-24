@@ -2,6 +2,7 @@ export type TeacherNavKey =
   | "overview"
   | "grading"
   | "submissions"
+  | "programs"
   | "lessons"
   | "chapters"
   | "classrooms"

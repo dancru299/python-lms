@@ -41,6 +41,7 @@ const TeacherShellPageChromeContext = createContext<TeacherShellPageChromeContex
 function resolveActiveTeacherNav(pathname: string): TeacherNavKey {
   if (pathname.startsWith("/admin/grading")) return "grading";
   if (pathname.startsWith("/admin/submissions")) return "submissions";
+  if (pathname.startsWith("/admin/programs")) return "programs";
   if (pathname.startsWith("/admin/lessons")) return "lessons";
   if (pathname.startsWith("/admin/chapters")) return "chapters";
   if (pathname.startsWith("/admin/classrooms")) return "classrooms";
@@ -79,6 +80,7 @@ function Sidebar({
     { key: "overview", href: "/admin", label: "Tổng quan", icon: "fa-chart-line" },
     { key: "grading", href: "/admin/grading", label: "Chấm bài", icon: "fa-pen-ruler" },
     { key: "submissions", href: "/admin/submissions", label: "Bài tập", icon: "fa-file-signature" },
+    { key: "programs", href: "/admin/programs", label: "Chương trình", icon: "fa-route" },
     { key: "lessons", href: "/admin/lessons", label: "Bài giảng", icon: "fa-book-open" },
     { key: "chapters", href: "/admin/chapters", label: "Chương học", icon: "fa-layer-group" },
     { key: "classrooms", href: "/admin/classrooms", label: "Lớp học", icon: "fa-users-rectangle" },
@@ -127,7 +129,7 @@ function Sidebar({
               pendingClassName="opacity-75"
               spinnerClassName="ml-auto"
               prefetch={
-                ["overview", "grading", "lessons", "classrooms"].includes(item.key)
+                ["overview", "grading", "programs", "lessons", "classrooms"].includes(item.key)
                   ? "viewport"
                   : "intent"
               }
