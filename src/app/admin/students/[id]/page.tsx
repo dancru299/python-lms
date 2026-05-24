@@ -2,7 +2,6 @@ import { requireTeacher } from "@/lib/session";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 
 interface PageProps {
@@ -10,8 +9,7 @@ interface PageProps {
 }
 
 export default async function AdminStudentProfilePage({ params }: PageProps) {
-  const session = await requireTeacher();
-  const { id } = await params;
+  const [session, { id }] = await Promise.all([requireTeacher(), params]);
 
   const student = await prisma.user.findUnique({
     where: { id },
@@ -43,8 +41,7 @@ export default async function AdminStudentProfilePage({ params }: PageProps) {
   const classroomNames = student.studentClassrooms.map((sc) => sc.classroom.name).join(", ");
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link
             href="/admin"
@@ -125,7 +122,6 @@ export default async function AdminStudentProfilePage({ params }: PageProps) {
             )}
           </div>
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }

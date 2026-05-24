@@ -1,13 +1,9 @@
 import Link from "next/link";
 import prisma from "@/lib/prisma";
-import { requireTeacher } from "@/lib/session";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import AdminLessonsClientPage from "./AdminLessonsClientPage";
 
 export default async function AdminLessonsPage() {
-  const session = await requireTeacher();
-
   const chapters = await prisma.chapter.findMany({
     include: {
       lessons: {
@@ -23,8 +19,7 @@ export default async function AdminLessonsPage() {
   const totalLessons = chapters.reduce((sum, ch) => sum + ch.lessons.length, 0);
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link
             href="/admin"
@@ -44,7 +39,6 @@ export default async function AdminLessonsPage() {
         >
           <AdminLessonsClientPage initialChapters={chapters} />
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }

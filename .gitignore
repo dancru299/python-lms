@@ -1,5 +1,12 @@
 node_modules
 .next
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+python_lms*.sql
+tsc_output*.txt
+tsconfig.tsbuildinfo
 # Keep environment variables out of version control
 .env
 

@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import prisma from "@/lib/prisma";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import SettingsClientPage from "./SettingsClientPage";
 
 export default async function AdminSettingsPage() {
-  const session = await requireAdmin();
+  await requireAdmin();
 
   const rawSettings = await (prisma as any).setting
     .findMany({ orderBy: { key: "asc" } })
@@ -17,8 +16,7 @@ export default async function AdminSettingsPage() {
   );
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link
             href="/admin"
@@ -37,7 +35,6 @@ export default async function AdminSettingsPage() {
         >
           <SettingsClientPage initialSettings={initialSettings} />
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }

@@ -29,19 +29,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const unreadCount = await prisma.notification.count({
+    const unreadCountPromise = prisma.notification.count({
       where: { userId: user.userId, isRead: false },
     });
 
     if (summaryOnly) {
+      const unreadCount = await unreadCountPromise;
       return NextResponse.json({ unreadCount });
     }
 
-    const notifications = await prisma.notification.findMany({
-      where: { userId: user.userId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
+    const [unreadCount, notifications] = await Promise.all([
+      unreadCountPromise,
+      prisma.notification.findMany({
+        where: { userId: user.userId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+    ]);
 
     return NextResponse.json({ notifications, unreadCount });
   } catch (error) {

@@ -2,27 +2,16 @@ import { notFound, redirect } from "next/navigation";
 import { requireTeacher } from "@/lib/session";
 import prisma from "@/lib/prisma";
 import Link from "next/link";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import GradingForm from "./GradingForm";
-import dynamic from "next/dynamic";
-
-const PythonCodeEditor = dynamic(() => import("@/components/PythonCodeEditor"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[200px] items-center justify-center rounded-xl border border-gray-700 bg-[#1e1e1e] text-sm text-gray-400">
-      <i className="fa-solid fa-spinner fa-spin mr-2"></i>Đang tải…
-    </div>
-  ),
-});
+import ReadOnlyPythonCodeEditor from "./ReadOnlyPythonCodeEditor";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function GradingDetailPage({ params }: PageProps) {
-  const { id } = await params;
-  const session = await requireTeacher();
+  const [{ id }, session] = await Promise.all([params, requireTeacher()]);
 
   const submission = await prisma.submission.findUnique({
     where: { id },
@@ -45,8 +34,7 @@ export default async function GradingDetailPage({ params }: PageProps) {
   }
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link
             href="/admin"
@@ -118,12 +106,7 @@ export default async function GradingDetailPage({ params }: PageProps) {
                 <i className="fa-solid fa-code mr-2 text-indigo-500"></i>
                 Bài làm của học sinh
               </p>
-              {/* @ts-ignore — server component cannot pass onChange to client component; use readOnly pattern */}
-              <PythonCodeEditor
-                defaultValue={submission.content}
-                onChange={() => {}}
-                readOnly
-              />
+              <ReadOnlyPythonCodeEditor defaultValue={submission.content} />
             </div>
 
             {/* Model answer */}
@@ -133,12 +116,7 @@ export default async function GradingDetailPage({ params }: PageProps) {
                   <i className="fa-solid fa-lightbulb mr-2 text-yellow-500"></i>
                   Đáp án mẫu
                 </p>
-                {/* @ts-ignore */}
-                <PythonCodeEditor
-                  defaultValue={submission.exercise.answer}
-                  onChange={() => {}}
-                  readOnly
-                />
+                <ReadOnlyPythonCodeEditor defaultValue={submission.exercise.answer} />
               </div>
             )}
 
@@ -156,7 +134,6 @@ export default async function GradingDetailPage({ params }: PageProps) {
             </div>
           </div>
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }

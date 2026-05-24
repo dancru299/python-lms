@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============ USERS ============
@@ -24,7 +25,7 @@ model User {
   // Relations
   submissions                    Submission[]
   progress                       UserProgress[]
-  lessonTabProgress             UserLessonTabProgress[]
+  lessonTabProgress              UserLessonTabProgress[]
   notifications                  Notification[]
   teacherClassrooms              Classroom[]                     @relation("TeacherClassrooms")
   studentClassrooms              ClassroomStudent[]              @relation("StudentClassrooms")
@@ -56,7 +57,7 @@ model Lesson {
   chapterId   String
   title       String
   slug        String?
-  content     String? @db.LongText
+  content     String? @db.Text
   duration    Int     @default(60)
   difficulty  String  @default("beginner")
   sortOrder   Int     @default(0)
@@ -72,7 +73,7 @@ model Lesson {
   updatedAt DateTime @updatedAt
 
   // Relations
-  chapter     Chapter               @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  chapter     Chapter                 @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   sections    Section[]
   exercises   Exercise[]
   progress    UserProgress[]
@@ -87,7 +88,7 @@ model Section {
   id        String   @id @default(cuid())
   lessonId  String
   title     String
-  content   String? @db.LongText
+  content   String?  @db.Text
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -104,8 +105,8 @@ model Exercise {
   lessonId      String
   type          String    @default("practice")
   title         String
-  question      String? @db.Text
-  answer        String? @db.LongText
+  question      String?   @db.Text
+  answer        String?   @db.Text
   difficulty    String    @default("easy")
   points        Int       @default(10)
   sortOrder     Int       @default(0)
@@ -126,12 +127,12 @@ model Submission {
   id         String    @id @default(cuid())
   exerciseId String
   userId     String
-  content    String  @db.LongText
-  files      String? @db.Text
-  status     String  @default("pending")
+  content    String    @db.Text
+  files      String?   @db.Text
+  status     String    @default("pending")
   score      Float?
   maxScore   Int?
-  feedback   String? @db.Text
+  feedback   String?   @db.Text
   gradedAt   DateTime?
   gradedBy   String?
   createdAt  DateTime  @default(now())
@@ -166,16 +167,16 @@ model UserProgress {
 }
 
 model UserLessonTabProgress {
-  id         String   @id @default(cuid())
-  userId     String
-  lessonId   String
-  tabId      String
-  completed  Boolean  @default(false)
-  timeSpent  Int      @default(0)
-  lastAccess DateTime @default(now())
+  id          String    @id @default(cuid())
+  userId      String
+  lessonId    String
+  tabId       String
+  completed   Boolean   @default(false)
+  timeSpent   Int       @default(0)
+  lastAccess  DateTime  @default(now())
   completedAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -191,7 +192,7 @@ model Notification {
   userId    String
   type      String // submission_graded, new_submission, etc.
   title     String
-  message   String @db.Text
+  message   String   @db.Text
   link      String?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -260,9 +261,9 @@ model ClassroomAssignment {
   description     String?
   type            String   @default("homework") // homework, test
   durationMinutes Int?
-  questionHtml    String? @db.LongText
-  questionDocx    String? @db.LongText
-  answerTemplate  String? @db.Text
+  questionHtml    String?  @db.Text
+  questionDocx    String?  @db.Text
+  answerTemplate  String?  @db.Text
   maxScore        Int      @default(10)
   isPublished     Boolean  @default(true)
   createdBy       String?
@@ -285,10 +286,10 @@ model ClassroomAssignmentSubmission {
   id           String    @id @default(cuid())
   assignmentId String
   studentId    String
-  content      String  @db.LongText
-  status       String  @default("submitted") // submitted, graded
+  content      String    @db.Text
+  status       String    @default("submitted") // submitted, graded
   score        Float?
-  feedback     String? @db.Text
+  feedback     String?   @db.Text
   gradedAt     DateTime?
   gradedBy     String?
   createdAt    DateTime  @default(now())

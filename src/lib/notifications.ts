@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
+import { cache } from "react";
 
-export async function getUnreadNotificationCount(userId: string) {
+export const getUnreadNotificationCount = cache(async (userId: string) => {
   try {
     return await prisma.notification.count({
       where: { userId, isRead: false },
@@ -8,4 +9,4 @@ export async function getUnreadNotificationCount(userId: string) {
   } catch {
     return 0;
   }
-}
+});

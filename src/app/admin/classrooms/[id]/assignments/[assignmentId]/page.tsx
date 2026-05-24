@@ -2,7 +2,6 @@
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import AssignmentQuestionPreview from "@/components/AssignmentQuestionPreview";
 import GradeClassroomSubmissionForm from "./GradeClassroomSubmissionForm";
@@ -14,8 +13,10 @@ interface PageProps {
 export default async function ClassroomAssignmentDetailPage({
   params,
 }: PageProps) {
-  const session = await requireTeacher();
-  const { id: classroomId, assignmentId } = await params;
+  const [session, { id: classroomId, assignmentId }] = await Promise.all([
+    requireTeacher(),
+    params,
+  ]);
 
   const assignment = await prisma.classroomAssignment.findUnique({
     where: { id: assignmentId },
@@ -65,8 +66,7 @@ export default async function ClassroomAssignmentDetailPage({
   }
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link href="/admin" className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition hover:bg-slate-100 hover:text-slate-700">
             <i className="fa-solid fa-chart-line text-xs"></i>
@@ -176,7 +176,6 @@ export default async function ClassroomAssignmentDetailPage({
         </div>
         </div>
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }

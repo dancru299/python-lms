@@ -1,12 +1,11 @@
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import AdminUsersClientPage from "./AdminUsersClientPage";
 
 export default async function AdminUsersPage() {
-  const session = await requireAdmin();
+  await requireAdmin();
 
   const users = await prisma.user.findMany({
     select: {
@@ -24,8 +23,7 @@ export default async function AdminUsersPage() {
   const teacherCount = users.filter((u) => u.role === "teacher").length;
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link
             href="/admin"
@@ -49,7 +47,6 @@ export default async function AdminUsersPage() {
             }))}
           />
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }

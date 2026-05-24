@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
+export type RoutePrefetchMode = "viewport" | "intent" | false;
+
 interface RouteFeedbackLinkProps {
   href: string;
   className: string;
@@ -11,6 +13,7 @@ interface RouteFeedbackLinkProps {
   children: ReactNode;
   onClick?: () => void;
   spinnerClassName?: string;
+  prefetch?: RoutePrefetchMode;
 }
 
 function isModifiedEvent(event: MouseEvent<HTMLAnchorElement>) {
@@ -24,17 +27,14 @@ export default function RouteFeedbackLink({
   children,
   onClick,
   spinnerClassName = "text-current/70",
+  prefetch = "intent",
 }: RouteFeedbackLinkProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, setIsPending] = useState(false);
   const isHashLink = href.startsWith("#");
-
-  useEffect(() => {
-    if (!isHashLink) {
-      router.prefetch(href);
-    }
-  }, [href, isHashLink, router]);
+  const shouldPrefetchOnIntent = prefetch !== false && !isHashLink;
+  const shouldPrefetchInViewport = prefetch === "viewport" && !isHashLink;
 
   useEffect(() => {
     if (pathname === href) {
@@ -43,7 +43,7 @@ export default function RouteFeedbackLink({
   }, [href, pathname]);
 
   const prefetchRoute = () => {
-    if (!isHashLink) {
+    if (shouldPrefetchOnIntent) {
       router.prefetch(href);
     }
   };
@@ -62,7 +62,7 @@ export default function RouteFeedbackLink({
   return (
     <Link
       href={href}
-      prefetch={!isHashLink}
+      prefetch={shouldPrefetchInViewport}
       onClick={handleClick}
       onMouseEnter={prefetchRoute}
       onFocus={prefetchRoute}

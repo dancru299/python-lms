@@ -1,158 +1,95 @@
-# 🚀 Hướng Dẫn Deploy Python LMS lên iNET Cloud Hosting
+# Deploy Python LMS voi Supabase Postgres
 
-## Thời gian: 20-30 phút
+Du an nay dung Prisma ORM va da duoc chuyen sang Supabase Postgres. Khuyen nghi deploy app tren Vercel/Node hosting, database tren Supabase.
 
----
+## 1. Tao Supabase project
 
-## Bước 1: Tạo Database MySQL trên iNET
+1. Tao project moi trong Supabase.
+2. Vao **Project Settings -> Database -> Connection string**.
+3. Lay 2 connection strings:
+   - **Transaction pooler**, port `6543`, dung cho runtime/serverless.
+   - **Session pooler**, port `5432`, dung cho Prisma migration/admin tooling.
 
-1. Đăng nhập **cPanel** của hosting iNET
-2. Vào **MySQL® Databases**
-3. Tạo database mới: `python_lms`
-4. Tạo user mới với mật khẩu mạnh
-5. **Add User to Database** → chọn **ALL PRIVILEGES**
-6. Ghi nhớ thông tin:
-   ```
-   Host: localhost (hoặc IP server)
-   Database: ten_cpanel_python_lms
-   User: ten_cpanel_user
-   Password: your_password
-   Port: 3306
-   ```
+Neu chi dung Prisma, co the tat Supabase Data API trong API Settings de giam be mat van hanh.
 
-> [!NOTE]
-> Trên cPanel, tên database và user thường có prefix là tên tài khoản cPanel, ví dụ: `cpanel123_python_lms`
+## 2. Environment variables
 
----
-
-## Bước 2: Cấu hình Environment Variables
-
-Tạo file `.env` trong thư mục dự án trên hosting:
+Dat cac bien sau trong `.env` local va trong dashboard deploy:
 
 ```env
-DATABASE_URL="mysql://ten_cpanel_user:your_password@localhost:3306/ten_cpanel_python_lms"
+DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR-PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR-PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres"
 SESSION_SECRET="your-super-secret-random-key-32-chars"
 ```
 
----
+Ghi chu:
 
-## Bước 3: Setup Node.js App trên cPanel
+- `DATABASE_URL` la runtime URL. Neu dung Vercel/serverless, hay dung transaction pooler port `6543`.
+- `?pgbouncer=true` giup Prisma tuong thich voi transaction pooling.
+- `DIRECT_URL` la session/direct URL de `prisma migrate deploy` chay schema changes.
 
-1. Vào cPanel → **Setup Node.js App**
-2. Click **CREATE APPLICATION**
-3. Cấu hình:
-   - **Node.js version**: 18.x hoặc 20.x
-   - **Application mode**: Production
-   - **Application root**: đường dẫn đến thư mục dự án (vd: `python-lms`)
-   - **Application startup file**: `node_modules/.bin/next` hoặc tạo file `server.js`
-4. Click **CREATE**
+## 3. Tao schema tren Supabase
 
-### Tạo file server.js (nếu cần):
-
-```javascript
-const { createServer } = require("http");
-const { parse } = require("url");
-const next = require("next");
-
-const dev = false;
-const hostname = "0.0.0.0";
-const port = process.env.PORT || 3000;
-
-const app = next({ dev, hostname, port });
-const handle = app.getRequestHandler();
-
-app.prepare().then(() => {
-  createServer(async (req, res) => {
-    const parsedUrl = parse(req.url, true);
-    await handle(req, res, parsedUrl);
-  }).listen(port, (err) => {
-    if (err) throw err;
-    console.log(`> Ready on http://${hostname}:${port}`);
-  });
-});
-```
-
----
-
-## Bước 4: Upload Code & Cài đặt
-
-### Cách 1: Qua Terminal trên cPanel
+Lan dau setup database moi:
 
 ```bash
-# Vào thư mục dự án
-cd ~/python-lms
-
-# Clone code từ GitHub
-git clone https://github.com/YOUR_USERNAME/python-lms.git .
-
-# Cài đặt dependencies
 npm install
-
-# Generate Prisma Client
 npx prisma generate
+npm run db:deploy
+npm run db:seed
+```
 
-# Tạo tables trong MySQL database
-npx prisma db push
+Sau nay khi deploy schema moi:
 
-# Build Next.js
+```bash
+npm run db:deploy
+```
+
+Khong dung `prisma migrate dev` tren production. Len production chi dung `prisma migrate deploy`.
+
+## 4. Deploy app
+
+Build command:
+
+```bash
 npm run build
-
-# (Tùy chọn) Seed dữ liệu mẫu
-npx tsx prisma/seed.ts
 ```
 
-### Cách 2: Upload qua File Manager
+Start command neu chay Node server rieng:
 
-1. Build ở local: `npm run build`
-2. Nén thư mục dự án (trừ `node_modules`)
-3. Upload lên cPanel File Manager
-4. Giải nén và chạy `npm install` qua Terminal
-
----
-
-## Bước 5: Tạo tài khoản Admin
-
-1. Truy cập `https://your-domain.com/register`
-2. Đăng ký tài khoản đầu tiên
-3. Vào **phpMyAdmin** trên cPanel, chạy SQL:
-
-```sql
-UPDATE User SET role = 'admin' WHERE email = 'your-email@example.com';
+```bash
+npm run start
 ```
 
----
+Tren Vercel, dat env vars trong **Project Settings -> Environment Variables**. Chay `npm run db:deploy` tu local/CI truoc khi deploy ban build moi co schema thay doi.
 
-## ✅ Xong!
+## 5. Du lieu cu tu MySQL
 
-Ứng dụng đã online tại: `https://your-domain.com`
+Schema da chuyen tu MySQL sang Postgres, nen du lieu cu khong tu dong sang Supabase. Co 2 cach:
 
----
+- Neu chap nhan database moi: chay `npm run db:seed`.
+- Neu can giu du lieu cu: export tu MySQL thanh CSV/SQL, chuyen kieu du lieu sang Postgres, roi import vao Supabase theo dung thu tu bang va foreign key.
 
-## 🔧 Troubleshooting
+## 6. Troubleshooting
 
-### Lỗi "Cannot find module '@prisma/client'"
+### Prisma bao loi prepared statements / PgBouncer
 
-→ Chạy `npx prisma generate` trên server
+Kiem tra `DATABASE_URL` co port `6543` va query `?pgbouncer=true`.
 
-### Lỗi Database connection
+### Migration khong chay
 
-→ Kiểm tra DATABASE_URL trong file `.env`, đảm bảo user/password/database đúng
+Kiem tra `DIRECT_URL` dang dung port `5432` va user co quyen tao/sua schema.
 
-### Lỗi Build failed
+### App ket noi DB timeout
 
-→ Chạy `npm run build` ở local để kiểm tra lỗi trước khi deploy
+Kiem tra Supabase project con active, password dung, region/PROJECT_REF dung, va env vars da duoc set trong moi truong deploy.
 
-### Lỗi 503 / Application not starting
+### Khong thay bang trong Supabase
 
-→ Kiểm tra Node.js version trong cPanel (cần >= 18.x)
-→ Kiểm tra file startup (`server.js`) đã đúng chưa
+Chay:
 
----
+```bash
+npm run db:deploy
+```
 
-## 📝 Lưu ý quan trọng
-
-1. **Node.js Version**: Cần ít nhất Node.js 18.x
-2. **MySQL**: Sử dụng MySQL có sẵn trên cPanel (miễn phí)
-3. **Custom Domain**: Cấu hình domain trong cPanel → Domains
-4. **SSL**: Bật SSL miễn phí qua cPanel → SSL/TLS hoặc Let's Encrypt
-5. **Cập nhật code**: Qua SSH/Terminal chạy `git pull && npm install && npm run build`, sau đó restart app trong cPanel
+Sau do refresh Supabase Table Editor.

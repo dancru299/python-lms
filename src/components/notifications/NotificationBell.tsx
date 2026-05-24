@@ -24,11 +24,13 @@ function getIcon(type: string) {
 interface NotificationBellProps {
   initialCount?: number;
   theme?: "dark" | "light";
+  onCountChange?: (count: number) => void;
 }
 
 export default function NotificationBell({
   initialCount = 0,
   theme = "dark",
+  onCountChange,
 }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(initialCount);
@@ -54,11 +56,13 @@ export default function NotificationBell({
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/notifications");
+      const res = await fetch("/api/notifications", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        const unreadCount = data.unreadCount ?? 0;
         setItems(data.notifications ?? []);
-        setCount(data.unreadCount ?? 0);
+        setCount(unreadCount);
+        onCountChange?.(unreadCount);
       }
     } finally {
       setLoading(false);
@@ -68,7 +72,7 @@ export default function NotificationBell({
   function toggle() {
     const next = !open;
     setOpen(next);
-    if (next && items.length === 0) load();
+    if (next) load();
   }
 
   async function handleClick(item: NotificationItem) {
@@ -81,7 +85,11 @@ export default function NotificationBell({
         keepalive: true,
       });
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)));
-      setCount((c) => Math.max(0, c - 1));
+      setCount((current) => {
+        const next = Math.max(0, current - 1);
+        onCountChange?.(next);
+        return next;
+      });
     }
     setOpen(false);
     router.push(item.link);
@@ -95,6 +103,7 @@ export default function NotificationBell({
     });
     setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
     setCount(0);
+    onCountChange?.(0);
   }
 
   const isDark = theme === "dark";

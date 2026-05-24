@@ -45,6 +45,7 @@ function resolveActiveTeacherNav(pathname: string): TeacherNavKey {
   if (pathname.startsWith("/admin/chapters")) return "chapters";
   if (pathname.startsWith("/admin/classrooms")) return "classrooms";
   if (pathname.startsWith("/admin/users")) return "users";
+  if (pathname.startsWith("/admin/settings")) return "settings";
   return "overview";
 }
 
@@ -60,14 +61,21 @@ function Sidebar({
   notificationCount,
   resolvedActive,
   onNavClick,
+  onCountChange,
 }: {
   userName: string;
   role: "teacher" | "admin";
   notificationCount: number;
   resolvedActive: TeacherNavKey;
   onNavClick?: () => void;
+  onCountChange?: (count: number) => void;
 }) {
-  const navItems: Array<{ key: TeacherNavKey; href: string; label: string; icon: string }> = [
+  const navItems: Array<{
+    key: TeacherNavKey;
+    href: string;
+    label: string;
+    icon: string;
+  }> = [
     { key: "overview", href: "/admin", label: "Tổng quan", icon: "fa-chart-line" },
     { key: "grading", href: "/admin/grading", label: "Chấm bài", icon: "fa-pen-ruler" },
     { key: "submissions", href: "/admin/submissions", label: "Bài tập", icon: "fa-file-signature" },
@@ -118,6 +126,11 @@ function Sidebar({
               }`}
               pendingClassName="opacity-75"
               spinnerClassName="ml-auto"
+              prefetch={
+                ["overview", "grading", "lessons", "classrooms"].includes(item.key)
+                  ? "viewport"
+                  : "intent"
+              }
             >
               <i className={`fa-solid ${item.icon} w-4 shrink-0 text-center text-[13px]`}></i>
               <span className="flex-1">{item.label}</span>
@@ -133,7 +146,11 @@ function Sidebar({
 
       {/* Notifications + User + Logout */}
       <div className="border-t border-slate-700/60 px-3 py-3 space-y-0.5">
-        <NotificationBell initialCount={notificationCount} theme="dark" />
+        <NotificationBell
+          initialCount={notificationCount}
+          theme="dark"
+          onCountChange={onCountChange}
+        />
         <div className="mt-2 flex items-center gap-2.5 rounded-lg px-2 py-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/20">
             <i className="fa-solid fa-user text-[10px] text-indigo-300"></i>
@@ -170,9 +187,13 @@ export default function TeacherShell({
 
   useEffect(() => {
     let isMounted = true;
-    const controller = new AbortController();
+    let controller: AbortController | null = null;
 
     async function loadNotificationCount() {
+      if (document.visibilityState !== "visible") return;
+      controller?.abort();
+      controller = new AbortController();
+
       try {
         const response = await fetch("/api/notifications?summaryOnly=1", {
           cache: "no-store",
@@ -189,13 +210,16 @@ export default function TeacherShell({
     }
 
     setNotificationCount(initialNotificationCount);
-    loadNotificationCount();
+    const intervalId = window.setInterval(loadNotificationCount, 60_000);
+    document.addEventListener("visibilitychange", loadNotificationCount);
 
     return () => {
       isMounted = false;
-      controller.abort();
+      controller?.abort();
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", loadNotificationCount);
     };
-  }, [initialNotificationCount, pathname]);
+  }, [initialNotificationCount]);
 
   const contextValue = useMemo(() => ({ setPageChrome }), []);
 
@@ -210,6 +234,7 @@ export default function TeacherShell({
             role={role}
             notificationCount={notificationCount}
             resolvedActive={resolvedActive}
+            onCountChange={setNotificationCount}
           />
         </aside>
 
@@ -229,6 +254,7 @@ export default function TeacherShell({
                 notificationCount={notificationCount}
                 resolvedActive={resolvedActive}
                 onNavClick={() => setMobileOpen(false)}
+                onCountChange={setNotificationCount}
               />
             </aside>
           </div>

@@ -2,7 +2,6 @@
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import TeacherShell from "@/components/teacher/TeacherShell";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import ClassroomDetailClient from "./ClassroomDetailClient";
 import type {
@@ -16,8 +15,7 @@ interface PageProps {
 }
 
 export default async function ClassroomDetailPage({ params }: PageProps) {
-  const session = await requireTeacher();
-  const { id } = await params;
+  const [session, { id }] = await Promise.all([requireTeacher(), params]);
   const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "short",
     timeStyle: "short",
@@ -121,8 +119,7 @@ export default async function ClassroomDetailPage({ params }: PageProps) {
   }));
 
   return (
-    <TeacherShell userName={session.name} role={session.role as "teacher" | "admin"}>
-      <>
+    <>
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500">
           <Link
             href="/admin"
@@ -154,7 +151,6 @@ export default async function ClassroomDetailPage({ params }: PageProps) {
             initialAssignments={assignmentItems}
           />
         </TeacherPageFrame>
-      </>
-    </TeacherShell>
+    </>
   );
 }
