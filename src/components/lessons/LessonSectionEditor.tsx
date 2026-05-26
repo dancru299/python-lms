@@ -226,6 +226,14 @@ export default function LessonSectionEditor({
         >
           H3
         </button>
+        <button
+          type="button"
+          onClick={() => insertContent(`<hr data-canvas-break />`)}
+          className="rounded bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
+        >
+          <i className="fa-solid fa-clapperboard mr-1"></i>
+          Canvas moi
+        </button>
         <div className="ml-auto flex rounded-lg bg-gray-100 p-1 text-xs">
           <button
             type="button"
@@ -1187,6 +1195,47 @@ function LessonBlockBuilder({
                   <i className="fa-solid fa-trash"></i>
                 </button>
               </div>
+            </div>
+
+            <div className="mb-3 grid gap-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-xs md:grid-cols-[auto_minmax(160px,1fr)_auto_auto] md:items-center">
+              <label className="flex items-center gap-2 font-semibold text-violet-800">
+                <input
+                  type="checkbox"
+                  checked={!!block.canvasBreakBefore}
+                  onChange={(event) =>
+                    updateBlock(block.id, { canvasBreakBefore: event.target.checked } as never)
+                  }
+                />
+                Canvas moi
+              </label>
+              <input
+                value={block.canvasTitle || ""}
+                onChange={(event) =>
+                  updateBlock(block.id, { canvasTitle: event.target.value } as never)
+                }
+                className="input py-1 text-xs"
+                placeholder="Tieu de canvas rieng"
+              />
+              <label className="flex items-center gap-2 font-semibold text-violet-800">
+                <input
+                  type="checkbox"
+                  checked={block.reveal !== false}
+                  onChange={(event) =>
+                    updateBlock(block.id, { reveal: event.target.checked } as never)
+                  }
+                />
+                Reveal
+              </label>
+              <select
+                value={block.canvasRole || "main"}
+                onChange={(event) =>
+                  updateBlock(block.id, { canvasRole: event.target.value as never } as never)
+                }
+                className="input py-1 text-xs"
+              >
+                <option value="main">Noi dung</option>
+                <option value="note">Ghi chu</option>
+              </select>
             </div>
 
             {block.type === "rich_text" && (

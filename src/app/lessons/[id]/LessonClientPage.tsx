@@ -1,10 +1,14 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import LessonContentRenderer from "@/components/lessons/LessonContentRenderer";
-import type { LessonMediaView } from "@/lib/lessons/lesson-media";
+import TeachingCanvasRenderer from "@/components/lessons/TeachingCanvasRenderer";
+import { buildTeachingCanvases } from "@/lib/lessons/teaching-canvas";
+import type {
+  LessonContentBlock,
+  LessonMediaView,
+} from "@/lib/lessons/lesson-media";
 
 const PythonCodeEditor = dynamic(() => import("@/components/PythonCodeEditor"), {
   ssr: false,
@@ -22,6 +26,7 @@ export interface Section {
   content: string;
   sortOrder: number;
   renderedContent?: string;
+  contentBlocks?: LessonContentBlock[] | null;
 }
 
 interface Submission {
@@ -464,6 +469,14 @@ export default function LessonClientPage({
     lessonProgress && lessonProgress.totalTabs > 0
       ? Math.round(100 / lessonProgress.totalTabs)
       : 0;
+  const teachingCanvasesBySection = useMemo(() => {
+    return new Map(
+      lesson.sections.map((section) => [
+        section.id,
+        buildTeachingCanvases(section),
+      ])
+    );
+  }, [lesson.sections]);
 
   useEffect(() => {
     if (lessonTabs.some((tab) => tab.id === activeTab)) {
@@ -505,10 +518,15 @@ export default function LessonClientPage({
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap justify-center sm:justify-start gap-2 py-3">
+      {/* Main Content */}
+      <main className="flex-grow">
+        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8">
+          <aside className="lesson-tab-rail">
+            <div className="lesson-tab-rail-header">
+              <span>Chủ đề</span>
+              <strong>{lessonTabs.length}</strong>
+            </div>
+            <div className="lesson-tab-list">
             {lessonTabs.map((tab) => {
               const tabState = lessonProgress?.tabs.find((item) => item.id === tab.id);
 
@@ -518,36 +536,29 @@ export default function LessonClientPage({
                   onClick={() => {
                     startTransition(() => setActiveTab(tab.id));
                   }}
-                  className={`flex items-center gap-2 text-sm sm:text-base font-medium py-2 px-4 rounded-lg transition-all duration-200 ${
+                  className={`lesson-tab-button ${
                     activeTab === tab.id
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
-                      : "bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700"
+                      ? "lesson-tab-button-active"
+                      : ""
                   }`}
                 >
                   <span>{tab.label}</span>
                   {tabState?.completed ? (
-                    <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-xs font-bold ${
-                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
-                    }`}>
+                    <span className="lesson-tab-status lesson-tab-status-done">
                       <i className="fa-solid fa-check"></i>
                     </span>
                   ) : isStudent && tabState ? (
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-white text-slate-500"
-                    }`}>
+                    <span className="lesson-tab-status">
                       {Math.min(tabState.timeSpent, TAB_COMPLETION_SECONDS)}s/60s
                     </span>
                   ) : null}
                 </button>
               );
             })}
-          </div>
-        </div>
-      </nav>
+            </div>
+          </aside>
 
-      {/* Main Content */}
-      <main className="flex-grow">
-        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="lesson-workspace min-w-0">
           {isStudent && lessonProgress && (
             <section className="mx-4 mb-6 rounded-[1.75rem] border border-emerald-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -714,14 +725,16 @@ export default function LessonClientPage({
           {/* Section Tabs */}
           {lesson.sections.map((section) => (
             activeTab === `section-${section.id}` && (
-              <div key={section.id} className="px-4 py-6 bg-white rounded-lg shadow-lg animate-fade-in">
-                {section.renderedContent ? (
-                  <LessonContentRenderer
-                    html={section.renderedContent}
+              <div key={section.id} className="animate-fade-in">
+                {section.renderedContent || section.contentBlocks?.length ? (
+                  <TeachingCanvasRenderer
+                    sectionId={section.id}
+                    sectionTitle={section.title}
+                    canvases={teachingCanvasesBySection.get(section.id) || []}
                     media={lesson.media}
                   />
                 ) : (
-                  <div className="lesson-content text-center py-12 text-gray-500">
+                  <div className="rounded-2xl bg-white py-12 text-center text-gray-500 shadow-lg">
                     <i className="fa-solid fa-file-lines text-4xl mb-4"></i>
                     <p>Nội dung đang được cập nhật...</p>
                   </div>
@@ -1002,6 +1015,7 @@ export default function LessonClientPage({
             </div>
           )}
 
+          </div>
         </div>
       </main>
 
@@ -1059,6 +1073,407 @@ export default function LessonClientPage({
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
 
       <style jsx global>{`
+        .lesson-tab-rail {
+          position: sticky;
+          top: 1rem;
+          align-self: start;
+          max-height: calc(100vh - 2rem);
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+          border-radius: 1rem;
+          background: rgba(255, 255, 255, 0.94);
+          box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+        }
+
+        .lesson-tab-rail-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          border-bottom: 1px solid #e2e8f0;
+          padding: 0.95rem 1rem;
+          color: #475569;
+          font-size: 0.76rem;
+          font-weight: 800;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+
+        .lesson-tab-rail-header strong {
+          display: inline-flex;
+          min-width: 2rem;
+          justify-content: center;
+          border-radius: 999px;
+          background: #eef2ff;
+          padding: 0.2rem 0.55rem;
+          color: #4338ca;
+          letter-spacing: 0;
+        }
+
+        .lesson-tab-list {
+          display: flex;
+          max-height: calc(100vh - 6rem);
+          flex-direction: column;
+          gap: 0.45rem;
+          overflow-y: auto;
+          padding: 0.75rem;
+        }
+
+        .lesson-tab-button {
+          display: flex;
+          min-height: 3.2rem;
+          width: 100%;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          border-radius: 0.75rem;
+          border: 1px solid transparent;
+          padding: 0.75rem 0.85rem;
+          color: #334155;
+          text-align: left;
+          font-size: 0.92rem;
+          font-weight: 700;
+          line-height: 1.35;
+          transition:
+            background 160ms ease,
+            border-color 160ms ease,
+            color 160ms ease,
+            box-shadow 160ms ease;
+        }
+
+        .lesson-tab-button:hover {
+          border-color: #c7d2fe;
+          background: #f8fafc;
+          color: #3730a3;
+        }
+
+        .lesson-tab-button-active {
+          border-color: #4f46e5;
+          background: #4f46e5;
+          color: white;
+          box-shadow: 0 12px 30px rgba(79, 70, 229, 0.25);
+        }
+
+        .lesson-tab-status {
+          flex: 0 0 auto;
+          border-radius: 999px;
+          background: #f1f5f9;
+          padding: 0.25rem 0.5rem;
+          color: #64748b;
+          font-size: 0.68rem;
+          font-weight: 800;
+          line-height: 1;
+        }
+
+        .lesson-tab-button-active .lesson-tab-status {
+          background: rgba(255, 255, 255, 0.18);
+          color: white;
+        }
+
+        .lesson-tab-status-done {
+          display: inline-flex;
+          height: 1.55rem;
+          min-width: 1.55rem;
+          align-items: center;
+          justify-content: center;
+          background: #dcfce7;
+          color: #15803d;
+        }
+
+        .teaching-canvas-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .teaching-canvas-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          border: 1px solid #dbeafe;
+          border-radius: 1rem;
+          background: white;
+          padding: 1rem 1.15rem;
+          box-shadow: 0 16px 36px rgba(15, 23, 42, 0.07);
+        }
+
+        .teaching-canvas-kicker {
+          color: #2563eb;
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+        }
+
+        .teaching-canvas-toolbar h2 {
+          margin-top: 0.25rem;
+          color: #0f172a;
+          font-size: clamp(1.25rem, 2vw, 1.85rem);
+          font-weight: 850;
+          line-height: 1.2;
+        }
+
+        .teaching-canvas-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+        }
+
+        .teaching-canvas-controls button {
+          display: inline-flex;
+          height: 2.65rem;
+          width: 2.65rem;
+          align-items: center;
+          justify-content: center;
+          border-radius: 0.75rem;
+          border: 1px solid #cbd5e1;
+          background: white;
+          color: #334155;
+          transition:
+            background 160ms ease,
+            border-color 160ms ease,
+            color 160ms ease,
+            transform 160ms ease;
+        }
+
+        .teaching-canvas-controls button:hover:not(:disabled) {
+          border-color: #4f46e5;
+          background: #eef2ff;
+          color: #3730a3;
+          transform: translateY(-1px);
+        }
+
+        .teaching-canvas-controls button:disabled {
+          cursor: not-allowed;
+          opacity: 0.35;
+        }
+
+        .teaching-canvas {
+          display: grid;
+          min-height: 560px;
+          grid-template-columns: minmax(0, 1fr) 280px;
+          gap: 1rem;
+          border: 1px solid #dbeafe;
+          border-radius: 1.1rem;
+          background: #f8fbff;
+          padding: 1rem;
+          box-shadow: 0 22px 55px rgba(15, 23, 42, 0.09);
+        }
+
+        .teaching-canvas-main {
+          min-width: 0;
+          border-radius: 0.9rem;
+          border: 1px solid #e2e8f0;
+          background: white;
+          padding: clamp(1.2rem, 3vw, 2.4rem);
+        }
+
+        .teaching-canvas-count {
+          display: inline-flex;
+          margin-bottom: 1rem;
+          border-radius: 999px;
+          background: #e0f2fe;
+          padding: 0.35rem 0.75rem;
+          color: #0369a1;
+          font-size: 0.74rem;
+          font-weight: 850;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+
+        .teaching-canvas-main > h3 {
+          margin-bottom: 1.15rem;
+          color: #0f172a;
+          font-size: clamp(1.9rem, 4vw, 3.35rem);
+          font-weight: 850;
+          line-height: 1.08;
+        }
+
+        .teaching-canvas .lesson-content {
+          color: #334155;
+        }
+
+        .teaching-canvas .lesson-content h2,
+        .teaching-canvas .lesson-content h3 {
+          margin-top: 1rem;
+        }
+
+        .teaching-canvas .lesson-content p,
+        .teaching-canvas .lesson-content li {
+          font-size: 1.02rem;
+        }
+
+        .teaching-canvas .lesson-content .code-block,
+        .teaching-canvas .lesson-content pre,
+        .teaching-canvas .code-block {
+          font-size: 0.95rem;
+          line-height: 1.7;
+        }
+
+        .teaching-reveal-list {
+          display: grid;
+          gap: 0.9rem;
+          margin-top: 1.25rem;
+        }
+
+        .teaching-reveal-step {
+          display: grid;
+          grid-template-columns: 2.1rem minmax(0, 1fr);
+          align-items: start;
+          gap: 0.85rem;
+          border-radius: 0.9rem;
+          border: 1px solid #dbeafe;
+          background: #f8fafc;
+          padding: 0.9rem 1rem;
+        }
+
+        .teaching-reveal-index {
+          display: inline-flex;
+          height: 2.1rem;
+          width: 2.1rem;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: #2563eb;
+          color: white;
+          font-size: 0.9rem;
+          font-weight: 900;
+        }
+
+        .teaching-reveal-text {
+          margin: 0;
+          color: #0f172a;
+          font-size: clamp(1.1rem, 2vw, 1.5rem);
+          font-weight: 700;
+          line-height: 1.55;
+        }
+
+        .teaching-reveal-text .word {
+          display: inline-block;
+        }
+
+        .teaching-reveal-text .word-animate {
+          animation: teaching-word-in 420ms both cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .teaching-reveal-empty {
+          display: flex;
+          min-height: 5rem;
+          align-items: center;
+          justify-content: center;
+          gap: 0.65rem;
+          border-radius: 0.9rem;
+          border: 1px dashed #bfdbfe;
+          background: #eff6ff;
+          color: #2563eb;
+          font-size: 0.95rem;
+          font-weight: 800;
+        }
+
+        .teaching-canvas-notes {
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          gap: 0.9rem;
+          border-radius: 0.9rem;
+          border: 1px solid #e2e8f0;
+          background: #fefce8;
+          padding: 1rem;
+          color: #713f12;
+        }
+
+        .teaching-notes-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: #92400e;
+          font-size: 0.75rem;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .teaching-canvas-notes p {
+          margin: 0;
+          color: #713f12;
+          font-size: 0.95rem;
+          line-height: 1.7;
+        }
+
+        .teaching-canvas-strip {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.45rem;
+          justify-content: center;
+        }
+
+        .teaching-canvas-strip button {
+          display: inline-flex;
+          height: 2rem;
+          min-width: 2rem;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          border: 1px solid #cbd5e1;
+          background: white;
+          color: #475569;
+          font-size: 0.78rem;
+          font-weight: 850;
+        }
+
+        .teaching-canvas-strip button.active {
+          border-color: #4f46e5;
+          background: #4f46e5;
+          color: white;
+        }
+
+        @keyframes teaching-word-in {
+          from {
+            opacity: 0;
+            transform: translateY(0.45rem);
+            filter: blur(3px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+        }
+
+        @media (max-width: 1023px) {
+          .lesson-tab-rail {
+            position: static;
+            max-height: none;
+          }
+
+          .lesson-tab-list {
+            max-height: none;
+            overflow-y: visible;
+          }
+
+          .teaching-canvas {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .teaching-canvas-toolbar {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .teaching-canvas-controls {
+            width: 100%;
+            justify-content: flex-end;
+          }
+
+          .teaching-canvas {
+            min-height: auto;
+            padding: 0.65rem;
+          }
+        }
+
         /* ===== LESSON CONTENT TYPOGRAPHY ===== */
 
         /* Headings: H2 - section title (blue accent bar) */

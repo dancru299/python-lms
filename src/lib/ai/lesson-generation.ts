@@ -271,6 +271,23 @@ function resolveCanonicalModel(
   return trimmedModel;
 }
 
+function shouldPreferInferredProvider(
+  explicitProvider: LessonAiProvider | null,
+  inferredProvider: LessonAiProvider | null
+): inferredProvider is LessonAiProvider {
+  if (!inferredProvider || inferredProvider === explicitProvider) {
+    return false;
+  }
+
+  if (!explicitProvider) {
+    return true;
+  }
+
+  // OpenRouter is an aggregator, so keep it when the hint is an OpenAI-family
+  // model such as gpt-5. Provider-family aliases like "Gemini" still remap.
+  return !(explicitProvider === "openrouter" && inferredProvider === "openai");
+}
+
 function resolveRequestedProvider(
   providerInput?: string,
   modelInput?: string
@@ -279,11 +296,7 @@ function resolveRequestedProvider(
     providerInput && isLessonAiProvider(providerInput) ? providerInput : null;
   const inferredProvider = inferProviderFromModel(modelInput);
 
-  if (explicitProvider && explicitProvider !== "gemini") {
-    return explicitProvider;
-  }
-
-  if (inferredProvider && inferredProvider !== explicitProvider) {
+  if (shouldPreferInferredProvider(explicitProvider, inferredProvider)) {
     if (!getProviderApiKey(inferredProvider)) {
       throw new ProviderRequestError(
         `Model "${modelInput?.trim()}" thuộc provider "${inferredProvider}" nhưng provider này chưa được cấu hình API key.`,

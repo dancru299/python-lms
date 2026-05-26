@@ -11,7 +11,10 @@ import {
   summarizeLessonProgress,
 } from "@/lib/lesson-progress";
 import { processCodeBlocks, renderExerciseHtml } from "@/lib/lesson-html";
-import { serializeLessonMedia } from "@/lib/lessons/lesson-media";
+import {
+  serializeLessonMedia,
+  type LessonContentBlock,
+} from "@/lib/lessons/lesson-media";
 import LessonClientPage, {
   type Lesson,
   type UserSession,
@@ -130,6 +133,9 @@ export default async function LessonPage({ params }: PageProps) {
       sections: lesson.sections.map((section) => ({
         ...section,
         renderedContent: section.content ? processCodeBlocks(section.content) : "",
+        contentBlocks: Array.isArray(section.contentBlocks)
+          ? (section.contentBlocks as unknown as LessonContentBlock[])
+          : null,
       })),
       media: lesson.media.map(serializeLessonMedia),
       exercises: lesson.exercises.map(({ submissions, ...exercise }) => {

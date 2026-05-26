@@ -74,17 +74,31 @@ export interface StepGuideItem {
   caption?: string;
 }
 
+export type LessonCanvasBlockRole = "main" | "note";
+
+export interface LessonCanvasBlockOptions {
+  canvasBreakBefore?: boolean;
+  canvasTitle?: string;
+  reveal?: boolean;
+  canvasRole?: LessonCanvasBlockRole;
+}
+
 export type LessonContentBlock =
-  | { id: string; type: "rich_text"; html: string }
-  | { id: string; type: "image"; mediaId: string }
-  | { id: string; type: "step_guide"; title: string; steps: StepGuideItem[] }
-  | { id: string; type: "code"; language?: string; code: string }
-  | {
+  | ({ id: string; type: "rich_text"; html: string } & LessonCanvasBlockOptions)
+  | ({ id: string; type: "image"; mediaId: string } & LessonCanvasBlockOptions)
+  | ({
+      id: string;
+      type: "step_guide";
+      title: string;
+      steps: StepGuideItem[];
+    } & LessonCanvasBlockOptions)
+  | ({ id: string; type: "code"; language?: string; code: string } & LessonCanvasBlockOptions)
+  | ({
       id: string;
       type: "callout";
       tone: "info" | "warning" | "success";
       html: string;
-    };
+    } & LessonCanvasBlockOptions);
 
 export function isLessonMediaMimeType(value: string): value is LessonMediaMimeType {
   return (LESSON_MEDIA_ALLOWED_MIME_TYPES as readonly string[]).includes(value);
