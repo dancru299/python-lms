@@ -370,6 +370,7 @@ function buildSystemPrompt(): string {
     "All user-facing prose must be in Vietnamese.",
     'Lesson section "content" and exercise "question" must be valid HTML.',
     'When showing code, always wrap it in <div class="code-block">...</div>.',
+    "When a concept needs a screenshot or visual aid, insert a lesson image placeholder div instead of inventing an image URL.",
     'Exercise "answer" must be plain text or plain code, never HTML.',
     "If the source has no exercise, create one relevant practice exercise.",
     "Keep the structure concise, practical, and classroom-ready.",
@@ -411,6 +412,8 @@ function buildUserPrompt(content: string): string {
     "- Create 2-5 sections when the source is rich enough.",
     "- Section titles should be short and suitable for lesson tabs.",
     "- Keep HTML clean. Use h2, h3, p, ul, ol, li, table, thead, tbody, tr, th, td, strong, em, code, div when needed.",
+    '- Use image placeholders when a screen, UI location, diagram, or visual sequence would help: <div class="lesson-media-placeholder" data-placeholder-id="short-kebab-id" data-suggested-caption="Mo ta anh can chen">Can anh minh hoa: mo ta ngan</div>.',
+    "- Placeholder ids must be unique within the draft and use lowercase letters, numbers, and hyphens.",
     "- For homework, make the question more complete and outcome-driven.",
     "- For practice, keep the task shorter and suitable for immediate reinforcement.",
     "- Use realistic Python examples instead of placeholders.",
@@ -747,6 +750,49 @@ export async function generateLessonDraft(options: {
 
     return {
       draft: normalizeLessonDraft(parsed),
+      meta: {
+        provider: selection.provider,
+        model: rawResult.model,
+      },
+    };
+  } catch (error) {
+    throw toProviderRequestError(error, selection.provider);
+  }
+}
+
+export async function generateAiJsonObject(options: {
+  systemPrompt: string;
+  userPrompt: string;
+  provider?: string;
+  model?: string;
+}): Promise<{
+  json: unknown;
+  meta: {
+    provider: LessonAiProvider;
+    model: string;
+  };
+}> {
+  const selection = resolveLessonGenerationSelection(
+    options.provider,
+    options.model
+  );
+
+  try {
+    const rawResult =
+      PROVIDERS[selection.provider].kind === "gemini"
+        ? await generateWithGemini(
+            selection,
+            options.systemPrompt,
+            options.userPrompt
+          )
+        : await generateWithOpenAiCompatible(
+            selection,
+            options.systemPrompt,
+            options.userPrompt
+          );
+
+    return {
+      json: parseJsonObject(rawResult.text),
       meta: {
         provider: selection.provider,
         model: rawResult.model,

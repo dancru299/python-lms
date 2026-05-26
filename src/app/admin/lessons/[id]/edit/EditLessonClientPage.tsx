@@ -4,15 +4,29 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import LessonSectionEditor, {
+  type EditableLessonSection,
+} from "@/components/lessons/LessonSectionEditor";
+import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
 import type {
   LessonAiClientConfig,
   LessonAiProvider,
 } from "@/lib/ai/provider-types";
 
-interface Section {
+interface Section extends EditableLessonSection {
   id: string;
   title: string;
   content: string;
+  contentFormat?: string;
+  contentBlocks?: LessonContentBlock[] | null;
+}
+
+interface PersistedSection {
+  id: string;
+  title: string;
+  content: string | null;
+  contentFormat?: string;
+  contentBlocks?: unknown;
 }
 
 interface Exercise {
@@ -40,7 +54,7 @@ interface Lesson {
   objectiveKnowledge: string | null;
   objectiveSkills: string | null;
   objectiveAttitude: string | null;
-  sections: Section[];
+  sections: PersistedSection[];
   exercises: Exercise[];
 }
 
@@ -147,6 +161,7 @@ export default function EditLessonClientPage({
 }: EditLessonClientPageProps) {
   const router = useRouter();
   const lessonId = initialLesson.id;
+  const draftId = `lesson-${lessonId}-edit-draft`;
 
   const loading = false;
   const setLoading = (_value: boolean) => undefined;
@@ -189,6 +204,10 @@ export default function EditLessonClientPage({
       id: section.id,
       title: section.title,
       content: section.content || "",
+      contentFormat: section.contentFormat || "html",
+      contentBlocks: Array.isArray(section.contentBlocks)
+        ? (section.contentBlocks as LessonContentBlock[])
+        : null,
     }))
   );
   const [exercises, setExercises] = useState<Exercise[]>(
@@ -275,6 +294,10 @@ export default function EditLessonClientPage({
             id: s.id,
             title: s.title,
             content: s.content || "",
+            contentFormat: s.contentFormat || "html",
+            contentBlocks: Array.isArray(s.contentBlocks)
+              ? (s.contentBlocks as LessonContentBlock[])
+              : null,
           })));
           setExercises(lesson.exercises.map(e => ({
             id: e.id,
@@ -305,6 +328,14 @@ export default function EditLessonClientPage({
 
   const updateSection = (id: string, field: string, value: string) => {
     setSections(sections.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+  };
+
+  const updateSectionDraft = (nextSection: EditableLessonSection) => {
+    setSections((current) =>
+      current.map((section) =>
+        section.id === nextSection.id ? { ...section, ...nextSection } : section
+      )
+    );
   };
 
   const removeSection = (id: string) => {
@@ -471,6 +502,7 @@ export default function EditLessonClientPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          draftId,
           sections: sections.filter((s) => s.title.trim()),
           exercises: exercises.filter((e) => e.title.trim()),
         }),
@@ -868,7 +900,7 @@ export default function EditLessonClientPage({
                 {activeSection === section.id && (
                   <div className="p-4 border-t border-gray-200 bg-white">
                     {/* Toolbar */}
-                    <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+                    <div className="hidden">
                       <span className="text-xs text-gray-500 mr-2">Chèn:</span>
                       
                       {/* Template Button */}
@@ -905,12 +937,12 @@ export default function EditLessonClientPage({
                       </button>
                     </div>
 
-                    <textarea
-                      value={section.content}
-                      onChange={(e) => updateSection(section.id, "content", e.target.value)}
-                      placeholder="Nội dung HTML..."
-                      className="input min-h-[300px] font-mono text-sm"
-                      style={{ whiteSpace: "pre-wrap" }}
+                    <LessonSectionEditor
+                      section={section}
+                      lessonId={lessonId}
+                      draftId={draftId}
+                      onOpenTemplate={() => openTemplateModal(section.id)}
+                      onChange={updateSectionDraft}
                     />
                   </div>
                 )}

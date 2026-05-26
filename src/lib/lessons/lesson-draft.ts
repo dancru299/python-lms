@@ -21,6 +21,8 @@ export interface LessonObjectivesDraft {
 export interface LessonSectionDraft {
   title: string;
   content: string;
+  contentFormat: string;
+  contentBlocks: unknown;
 }
 
 export interface LessonExerciseDraft {
@@ -44,6 +46,7 @@ export interface LessonDraft {
 
 export interface LessonMutationPayload extends LessonDraft {
   chapterId: string;
+  draftId: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -114,7 +117,7 @@ function normalizeObjectives(
 
 function normalizeSections(value: unknown): LessonSectionDraft[] {
   return asArray(value)
-    .map((section, index) => {
+    .map((section, index): LessonSectionDraft | null => {
       const source = asRecord(section);
       if (!source) {
         return null;
@@ -122,6 +125,9 @@ function normalizeSections(value: unknown): LessonSectionDraft[] {
 
       const title = asString(source.title) || `Phần ${index + 1}`;
       const content = typeof source.content === "string" ? source.content.trim() : "";
+      const contentBlocks: unknown = Array.isArray(source.contentBlocks)
+        ? source.contentBlocks
+        : null;
 
       if (!title && !content) {
         return null;
@@ -130,6 +136,8 @@ function normalizeSections(value: unknown): LessonSectionDraft[] {
       return {
         title,
         content,
+        contentFormat: asString(source.contentFormat) || "html",
+        contentBlocks,
       };
     })
     .filter((section): section is LessonSectionDraft => section !== null);
@@ -193,6 +201,7 @@ export function normalizeLessonMutationPayload(
 
   return {
     chapterId: asString(root.chapterId),
+    draftId: asString(root.draftId),
     ...draft,
   };
 }

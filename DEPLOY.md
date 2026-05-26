@@ -19,6 +19,9 @@ Dat cac bien sau trong `.env` local va trong dashboard deploy:
 ```env
 DATABASE_URL="postgresql://postgres.PROJECT_REF:YOUR-PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
 DIRECT_URL="postgresql://postgres.PROJECT_REF:YOUR-PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres"
+SUPABASE_URL="https://PROJECT_REF.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
+SUPABASE_STORAGE_BUCKET="lesson-media"
 SESSION_SECRET="your-super-secret-random-key-32-chars"
 ```
 
@@ -27,6 +30,7 @@ Ghi chu:
 - `DATABASE_URL` la runtime URL. Neu dung Vercel/serverless, hay dung transaction pooler port `6543`.
 - `?pgbouncer=true` giup Prisma tuong thich voi transaction pooling.
 - `DIRECT_URL` la session/direct URL de `prisma migrate deploy` chay schema changes.
+- `SUPABASE_SERVICE_ROLE_KEY` chi dat o server/deploy environment, khong dua ra client.
 
 ## 3. Tao schema tren Supabase
 

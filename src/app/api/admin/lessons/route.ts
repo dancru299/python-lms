@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
+import { extractReferencedMediaIds } from "@/lib/lessons/lesson-media";
 
 async function verifyTeacher() {
   const cookieStore = await cookies();
@@ -71,40 +72,84 @@ export async function POST(request: NextRequest) {
     });
     const nextOrder = (lastLesson?.sortOrder ?? -1) + 1;
 
-    const lesson = await prisma.lesson.create({
-      data: {
-        chapterId: payload.chapterId,
-        title: payload.title,
-        duration: payload.duration,
-        difficulty: payload.difficulty,
-        sortOrder: nextOrder,
-        objectiveKnowledge: payload.objectives.knowledge || null,
-        objectiveSkills: payload.objectives.skills || null,
-        objectiveAttitude: payload.objectives.attitude || null,
-        sections: {
-          create: payload.sections.map((section, index) => ({
-            title: section.title,
-            content: section.content,
-            sortOrder: index,
-          })),
+    const referencedMediaIds = extractReferencedMediaIds(
+      payload.sections.map((section) => section.content)
+    );
+
+    const lesson = await prisma.$transaction(async (tx) => {
+      const createdLesson = await tx.lesson.create({
+        data: {
+          chapterId: payload.chapterId,
+          title: payload.title,
+          duration: payload.duration,
+          difficulty: payload.difficulty,
+          sortOrder: nextOrder,
+          objectiveKnowledge: payload.objectives.knowledge || null,
+          objectiveSkills: payload.objectives.skills || null,
+          objectiveAttitude: payload.objectives.attitude || null,
+          sections: {
+            create: payload.sections.map((section, index) => ({
+              title: section.title,
+              content: section.content,
+              contentFormat: section.contentFormat,
+              contentBlocks: section.contentBlocks as never,
+              sortOrder: index,
+            })),
+          },
+          exercises: {
+            create: payload.exercises.map((exercise, index) => ({
+              type: exercise.type,
+              title: exercise.title,
+              question: exercise.question,
+              answer: exercise.answer,
+              difficulty: exercise.difficulty,
+              points: exercise.points,
+              sortOrder: index,
+              answerVisible: exercise.answerVisible,
+            })),
+          },
         },
-        exercises: {
-          create: payload.exercises.map((exercise, index) => ({
-            type: exercise.type,
-            title: exercise.title,
-            question: exercise.question,
-            answer: exercise.answer,
-            difficulty: exercise.difficulty,
-            points: exercise.points,
-            sortOrder: index,
-            answerVisible: exercise.answerVisible,
-          })),
+        include: {
+          sections: true,
+          exercises: true,
+          media: true,
         },
-      },
-      include: {
-        sections: true,
-        exercises: true,
-      },
+      });
+
+      if (payload.draftId) {
+        await tx.lessonMedia.updateMany({
+          where: {
+            draftId: payload.draftId,
+            createdById: session.userId,
+          },
+          data: {
+            lessonId: createdLesson.id,
+            draftId: null,
+          },
+        });
+      }
+
+      if (referencedMediaIds.length > 0) {
+        await tx.lessonMedia.updateMany({
+          where: {
+            id: { in: referencedMediaIds },
+            createdById: session.userId,
+          },
+          data: {
+            lessonId: createdLesson.id,
+            draftId: null,
+          },
+        });
+      }
+
+      return tx.lesson.findUniqueOrThrow({
+        where: { id: createdLesson.id },
+        include: {
+          sections: true,
+          exercises: true,
+          media: true,
+        },
+      });
     });
 
     return NextResponse.json({

@@ -11,6 +11,7 @@ import {
   summarizeLessonProgress,
 } from "@/lib/lesson-progress";
 import { processCodeBlocks, renderExerciseHtml } from "@/lib/lesson-html";
+import { serializeLessonMedia } from "@/lib/lessons/lesson-media";
 import LessonClientPage, {
   type Lesson,
   type UserSession,
@@ -62,6 +63,7 @@ export default async function LessonPage({ params }: PageProps) {
         where: { id },
         include: {
           chapter: true,
+          media: { orderBy: { createdAt: "desc" } },
           sections: { orderBy: { sortOrder: "asc" } },
           exercises: {
             orderBy: { sortOrder: "asc" },
@@ -129,6 +131,7 @@ export default async function LessonPage({ params }: PageProps) {
         ...section,
         renderedContent: section.content ? processCodeBlocks(section.content) : "",
       })),
+      media: lesson.media.map(serializeLessonMedia),
       exercises: lesson.exercises.map(({ submissions, ...exercise }) => {
         const latestSubmission = submissions?.[0];
 

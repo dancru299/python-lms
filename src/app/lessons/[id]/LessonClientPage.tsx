@@ -3,6 +3,8 @@
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import LessonContentRenderer from "@/components/lessons/LessonContentRenderer";
+import type { LessonMediaView } from "@/lib/lessons/lesson-media";
 
 const PythonCodeEditor = dynamic(() => import("@/components/PythonCodeEditor"), {
   ssr: false,
@@ -56,6 +58,7 @@ export interface Lesson {
   chapter: { id: string; title: string; icon: string; color: string };
   sections: Section[];
   exercises: Exercise[];
+  media: LessonMediaView[];
   tabs: LessonTab[];
   progress: LessonProgressSummary | null;
 }
@@ -712,16 +715,17 @@ export default function LessonClientPage({
           {lesson.sections.map((section) => (
             activeTab === `section-${section.id}` && (
               <div key={section.id} className="px-4 py-6 bg-white rounded-lg shadow-lg animate-fade-in">
-                <div className="lesson-content">
-                  {section.renderedContent ? (
-                    <div dangerouslySetInnerHTML={{ __html: section.renderedContent }} />
-                  ) : (
-                    <div className="text-center py-12 text-gray-500">
-                      <i className="fa-solid fa-file-lines text-4xl mb-4"></i>
-                      <p>Nội dung đang được cập nhật...</p>
-                    </div>
-                  )}
-                </div>
+                {section.renderedContent ? (
+                  <LessonContentRenderer
+                    html={section.renderedContent}
+                    media={lesson.media}
+                  />
+                ) : (
+                  <div className="lesson-content text-center py-12 text-gray-500">
+                    <i className="fa-solid fa-file-lines text-4xl mb-4"></i>
+                    <p>Nội dung đang được cập nhật...</p>
+                  </div>
+                )}
               </div>
             )
           ))}

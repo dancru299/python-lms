@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -60,12 +58,12 @@ export default function RegisterPage() {
       if (loginRes.ok) {
         const loginData = await loginRes.json();
         if (loginData.user.role === "teacher" || loginData.user.role === "admin") {
-          router.push("/admin");
+          window.location.replace("/admin");
         } else {
-          router.push("/");
+          window.location.replace("/");
         }
       } else {
-        router.push("/login");
+        window.location.replace("/login");
       }
     } catch {
       setError("Đã xảy ra lỗi, vui lòng thử lại");

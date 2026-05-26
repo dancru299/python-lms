@@ -2,12 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import EbookCurriculumBuilder, {
+  type AppliedProgram,
+} from "@/components/programs/EbookCurriculumBuilder";
 
 interface LessonOption {
   id: string;
   title: string;
   duration?: number;
   difficulty?: string;
+  isPublished?: boolean;
   objectiveKnowledge?: string | null;
   objectiveSkills?: string | null;
   objectiveAttitude?: string | null;
@@ -86,6 +91,8 @@ interface Program {
 interface ProgramsClientPageProps {
   initialPrograms: Program[];
   lessonsByChapter: ChapterOption[];
+  detailMode?: boolean;
+  initialWorkspaceView?: "ebook" | "manual";
 }
 
 const emptyProgramForm = {
@@ -137,6 +144,342 @@ function difficultyLabel(difficulty?: string) {
   return "Cơ bản";
 }
 
+function ProgramPreview({
+  program,
+  allLessons,
+}: {
+  program: Program;
+  allLessons: Array<LessonOption & { chapterTitle?: string }>;
+}) {
+  const milestoneLessons = program.milestones.flatMap((milestone) => milestone.lessons);
+  const linkedLessonIds = new Set(milestoneLessons.map((link) => link.lessonId));
+  const unlinkedLessons = allLessons.filter((lesson) => !linkedLessonIds.has(lesson.id));
+  const totalOutcomes = program.milestones.reduce((sum, milestone) => sum + milestone.outcomes.length, 0);
+  const outcomesWithoutLessons = program.milestones.flatMap((milestone) =>
+    milestone.outcomes.filter((outcome) => outcome.lessons.length === 0)
+  );
+  const outcomesWithoutSkills = program.milestones.flatMap((milestone) =>
+    milestone.outcomes.filter((outcome) => outcome.skills.length === 0)
+  );
+  const milestonesWithoutLessons = program.milestones.filter((milestone) => milestone.lessons.length === 0);
+  const milestonesWithoutOutcomes = program.milestones.filter((milestone) => milestone.outcomes.length === 0);
+  const rootSkills = program.skills.filter((skill) => !skill.parentSkillId);
+  const childrenBySkill = new Map<string, Skill[]>();
+
+  program.skills.forEach((skill) => {
+    if (!skill.parentSkillId) return;
+    childrenBySkill.set(skill.parentSkillId, [...(childrenBySkill.get(skill.parentSkillId) ?? []), skill]);
+  });
+
+  const readinessChecks = [
+    {
+      label: "Roadmap có milestone",
+      passed: program.milestones.length > 0,
+      detail: `${program.milestones.length} mốc`,
+    },
+    {
+      label: "Mỗi milestone có bài học",
+      passed: milestonesWithoutLessons.length === 0,
+      detail: milestonesWithoutLessons.length ? `${milestonesWithoutLessons.length} mốc thiếu bài` : "Đủ bài học",
+    },
+    {
+      label: "Mỗi milestone có outcome",
+      passed: milestonesWithoutOutcomes.length === 0,
+      detail: milestonesWithoutOutcomes.length ? `${milestonesWithoutOutcomes.length} mốc thiếu outcome` : "Đủ outcome",
+    },
+    {
+      label: "Outcome có bài để đo",
+      passed: outcomesWithoutLessons.length === 0,
+      detail: outcomesWithoutLessons.length ? `${outcomesWithoutLessons.length} outcome chưa gắn bài` : "Đo được tiến độ",
+    },
+    {
+      label: "Outcome gắn vào skill",
+      passed: outcomesWithoutSkills.length === 0,
+      detail: outcomesWithoutSkills.length ? `${outcomesWithoutSkills.length} outcome chưa gắn skill` : "Đủ skill mapping",
+    },
+  ];
+  const readinessPercent = Math.round(
+    (readinessChecks.filter((check) => check.passed).length / readinessChecks.length) * 100
+  );
+  const firstLesson = milestoneLessons[0]?.lesson ?? null;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 bg-slate-950 px-5 py-5 text-white">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-bold">Preview chương trình</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">
+              {program.title} · xem toàn cảnh roadmap, outcome, skill tree và những chỗ còn thiếu trước khi biên soạn.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold ${
+                program.isActive ? "bg-emerald-400 text-emerald-950" : "bg-slate-700 text-slate-200"
+              }`}
+            >
+              {program.isActive ? "Active" : "Draft"}
+            </span>
+            <a href="#bien-soan" className="btn btn-secondary bg-white text-slate-900 hover:bg-slate-100">
+              <i className="fa-solid fa-pen-to-square"></i>
+              Biên soạn
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-0 xl:grid-cols-[1.45fr,0.85fr]">
+        <div className="p-5">
+          <div className="grid gap-3 md:grid-cols-4">
+            {[
+              { label: "Milestone", value: program.milestones.length, icon: "fa-flag-checkered" },
+              { label: "Bài trong roadmap", value: milestoneLessons.length, icon: "fa-book-open" },
+              { label: "Outcome", value: totalOutcomes, icon: "fa-bullseye" },
+              { label: "Skill node", value: program.skills.length, icon: "fa-diagram-project" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{item.label}</span>
+                  <i className={`fa-solid ${item.icon} text-slate-400`}></i>
+                </div>
+                <div className="mt-2 text-2xl font-bold text-slate-900">{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900">Bản đồ roadmap</h3>
+              <span className="text-sm font-semibold text-slate-400">{readinessPercent}% sẵn sàng</span>
+            </div>
+            <div className="space-y-4">
+              {program.milestones.length > 0 ? (
+                program.milestones.map((milestone, index) => (
+                  <div key={milestone.id} className="rounded-xl border border-slate-200 p-4">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="flex gap-3">
+                        <div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
+                          style={{ backgroundColor: milestone.color }}
+                        >
+                          {index + 1}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900">{milestone.title}</div>
+                          <div className="mt-1 text-sm text-slate-500">
+                            {milestone.lessons.length} bài học · {milestone.outcomes.length} outcome
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          milestone.lessons.length > 0 && milestone.outcomes.length > 0
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {milestone.lessons.length > 0 && milestone.outcomes.length > 0 ? "Đủ khung" : "Cần bổ sung"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[1fr,1fr]">
+                      <div>
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Chuỗi bài học
+                        </div>
+                        <div className="space-y-2">
+                          {milestone.lessons.length > 0 ? (
+                            milestone.lessons.map((link, lessonIndex) => (
+                              <div
+                                key={link.id}
+                                className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                              >
+                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-500">
+                                  {lessonIndex + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-slate-800">{link.lesson.title}</div>
+                                  <div className="text-xs text-slate-400">
+                                    {link.lesson.duration ?? 0} phút · {difficultyLabel(link.lesson.difficulty)}
+                                  </div>
+                                  {link.lesson.isPublished === false && (
+                                    <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                                      Đang soạn
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                              Milestone này chưa có bài học. Nếu đây là mốc cũ/rỗng, hãy gắn bài hoặc xóa ở phần Biên soạn thủ công.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Outcome đo được
+                        </div>
+                        <div className="space-y-2">
+                          {milestone.outcomes.length > 0 ? (
+                            milestone.outcomes.map((outcome) => (
+                              <div key={outcome.id} className="rounded-lg border border-slate-100 bg-white px-3 py-2">
+                                <div className="text-sm font-semibold text-slate-800">{outcome.title}</div>
+                                <div className="mt-1 text-xs text-slate-400">
+                                  {outcome.lessons.length} bài đo · {outcome.skills.length} skill
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                              Milestone này chưa có learning outcome. Nếu đây là mốc cũ/rỗng, hãy bổ sung outcome hoặc xóa ở phần Biên soạn thủ công.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                  Chưa có milestone để dựng roadmap.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <aside className="border-t border-slate-200 bg-slate-50 p-5 xl:border-l xl:border-t-0">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-900">Kiểm tra cấu trúc</h3>
+              <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                {readinessPercent}%
+              </span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {readinessChecks.map((check) => (
+                <div key={check.label} className="flex items-start gap-3">
+                  <div
+                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                      check.passed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    <i className={`fa-solid ${check.passed ? "fa-check" : "fa-triangle-exclamation"} text-xs`}></i>
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">{check.label}</div>
+                    <div className="text-xs text-slate-500">{check.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="font-bold text-slate-900">Preview phía học sinh</h3>
+            <div className="mt-3 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 p-4 text-white">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-indigo-100">Hôm nay học gì</div>
+              <div className="mt-1 font-bold">{firstLesson?.title ?? "Chưa có bài trong roadmap"}</div>
+              <div className="mt-1 text-xs text-indigo-50">
+                {firstLesson
+                  ? `${firstLesson.duration ?? 0} phút · ${difficultyLabel(firstLesson.difficulty)}`
+                  : "Cần gắn bài học vào milestone"}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="font-bold text-slate-900">Skill tree preview</h3>
+            <div className="mt-3 space-y-2">
+              {rootSkills.length > 0 ? (
+                rootSkills.map((skill) => (
+                  <div key={skill.id} className="rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                    <div className="font-semibold text-slate-900">{skill.title}</div>
+                    <div className="mt-2 space-y-1">
+                      {(childrenBySkill.get(skill.id) ?? []).map((child) => (
+                        <div key={child.id} className="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700">
+                          {child.title}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                  Chưa có skill tree.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="font-bold text-slate-900">Bài chưa vào roadmap</h3>
+            <div className="mt-3 space-y-2">
+              {unlinkedLessons.length > 0 ? (
+                unlinkedLessons.slice(0, 6).map((lesson) => (
+                  <div key={lesson.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    {lesson.chapterTitle ? `${lesson.chapterTitle} · ` : ""}
+                    {lesson.title}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                  Tất cả bài học đã được đưa vào roadmap.
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div className="border-t border-slate-200 p-5">
+        <h3 className="font-bold text-slate-900">Ma trận chương trình</h3>
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-400">
+                <th className="py-2 pr-4 font-semibold">Milestone</th>
+                <th className="py-2 pr-4 font-semibold">Bài học</th>
+                <th className="py-2 pr-4 font-semibold">Outcome</th>
+                <th className="py-2 pr-4 font-semibold">Skill mapping</th>
+                <th className="py-2 pr-4 font-semibold">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {program.milestones.map((milestone) => {
+                const skillMappings = milestone.outcomes.reduce((sum, outcome) => sum + outcome.skills.length, 0);
+                const healthy = milestone.lessons.length > 0 && milestone.outcomes.length > 0 && skillMappings > 0;
+
+                return (
+                  <tr key={milestone.id} className="border-b border-slate-100">
+                    <td className="py-3 pr-4 font-semibold text-slate-900">{milestone.title}</td>
+                    <td className="py-3 pr-4 text-slate-600">{milestone.lessons.length}</td>
+                    <td className="py-3 pr-4 text-slate-600">{milestone.outcomes.length}</td>
+                    <td className="py-3 pr-4 text-slate-600">{skillMappings}</td>
+                    <td className="py-3 pr-4">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-bold ${
+                          healthy ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {healthy ? "Sẵn sàng" : "Cần hoàn thiện"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LessonSelect({
   value,
   onChange,
@@ -155,15 +498,23 @@ function LessonSelect({
         <option key={lesson.id} value={lesson.id}>
           {lesson.chapterTitle ? `${lesson.chapterTitle} - ` : ""}
           {lesson.title}
+          {lesson.isPublished === false ? " (Đang soạn)" : ""}
         </option>
       ))}
     </select>
   );
 }
 
-export default function ProgramsClientPage({ initialPrograms, lessonsByChapter }: ProgramsClientPageProps) {
+export default function ProgramsClientPage({
+  initialPrograms,
+  lessonsByChapter,
+  detailMode = false,
+  initialWorkspaceView = "ebook",
+}: ProgramsClientPageProps) {
+  const router = useRouter();
   const [programs, setPrograms] = useState<Program[]>(initialPrograms);
   const [selectedProgramId, setSelectedProgramId] = useState(initialPrograms[0]?.id ?? "");
+  const [workspaceView, setWorkspaceView] = useState<"ebook" | "manual">(initialWorkspaceView);
   const [saving, setSaving] = useState(false);
   const [programForm, setProgramForm] = useState(emptyProgramForm);
   const [programEdit, setProgramEdit] = useState(emptyProgramForm);
@@ -225,6 +576,11 @@ export default function ProgramsClientPage({ initialPrograms, lessonsByChapter }
     setSelectedProgramId(nextProgram.id);
   }
 
+  function handleEbookApplied(program: AppliedProgram) {
+    replaceProgram(program as Program);
+    setWorkspaceView("manual");
+  }
+
   async function runMutation(task: () => Promise<{ program?: Program }>) {
     setSaving(true);
     try {
@@ -256,7 +612,10 @@ export default function ProgramsClientPage({ initialPrograms, lessonsByChapter }
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 lg:grid-cols-[1.2fr,1fr]">
+      {selectedProgram && <ProgramPreview program={selectedProgram} allLessons={allLessons} />}
+
+      {!detailMode && (
+      <section id="bien-soan" className="grid scroll-mt-6 gap-4 lg:grid-cols-[1.2fr,1fr]">
         <div className="card p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -341,8 +700,46 @@ export default function ProgramsClientPage({ initialPrograms, lessonsByChapter }
           </div>
         </div>
       </section>
+      )}
 
-      {selectedProgram && (
+      <section id={detailMode ? "bien-soan" : undefined} className="card scroll-mt-6 p-2">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setWorkspaceView("ebook")}
+            className={`rounded-lg px-4 py-3 text-sm font-bold transition ${
+              workspaceView === "ebook"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <i className="fa-solid fa-file-import mr-2"></i>
+            Dựng từ ebook
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorkspaceView("manual")}
+            className={`rounded-lg px-4 py-3 text-sm font-bold transition ${
+              workspaceView === "manual"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <i className="fa-solid fa-pen-to-square mr-2"></i>
+            Biên soạn thủ công
+          </button>
+        </div>
+      </section>
+
+      {workspaceView === "ebook" && (
+        <EbookCurriculumBuilder
+          selectedProgramId={selectedProgram?.id}
+          selectedProgramTitle={selectedProgram?.title}
+          onApplied={handleEbookApplied}
+        />
+      )}
+
+      {workspaceView === "manual" && selectedProgram && (
         <>
           <section className="card p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -415,6 +812,9 @@ export default function ProgramsClientPage({ initialPrograms, lessonsByChapter }
                     await mutateProgram(`/api/admin/programs/${selectedProgram.id}`, "DELETE");
                     setPrograms((current) => current.filter((program) => program.id !== selectedProgram.id));
                     setSelectedProgramId(programs.find((program) => program.id !== selectedProgram.id)?.id ?? "");
+                    if (detailMode) {
+                      router.push("/admin/programs");
+                    }
                     return {};
                   });
                 }}
@@ -607,6 +1007,11 @@ export default function ProgramsClientPage({ initialPrograms, lessonsByChapter }
                                 <div className="text-xs text-slate-400">
                                   {link.lesson.chapter?.title} · {difficultyLabel(link.lesson.difficulty)}
                                 </div>
+                                {link.lesson.isPublished === false && (
+                                  <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                                    Đang soạn
+                                  </span>
+                                )}
                               </div>
                               <button
                                 onClick={() =>

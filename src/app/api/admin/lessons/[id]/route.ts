@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
+import { extractReferencedMediaIds } from "@/lib/lessons/lesson-media";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       include: {
         sections: { orderBy: { sortOrder: "asc" } },
         exercises: { orderBy: { sortOrder: "asc" } },
+        media: { orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -64,6 +66,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const payload = normalizeLessonMutationPayload(await request.json());
+    const referencedMediaIds = extractReferencedMediaIds(
+      payload.sections.map((section) => section.content)
+    );
 
     if (!payload.chapterId || !payload.title) {
       return NextResponse.json(
@@ -76,7 +81,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       await tx.section.deleteMany({ where: { lessonId: id } });
       await tx.exercise.deleteMany({ where: { lessonId: id } });
 
-      return tx.lesson.update({
+      await tx.lesson.update({
         where: { id },
         data: {
           chapterId: payload.chapterId,
@@ -90,6 +95,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             create: payload.sections.map((section, index) => ({
               title: section.title,
               content: section.content,
+              contentFormat: section.contentFormat,
+              contentBlocks: section.contentBlocks as never,
               sortOrder: index,
             })),
           },
@@ -109,6 +116,42 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         include: {
           sections: true,
           exercises: true,
+          media: true,
+        },
+      });
+
+      if (payload.draftId) {
+        await tx.lessonMedia.updateMany({
+          where: {
+            draftId: payload.draftId,
+            createdById: session.userId,
+          },
+          data: {
+            lessonId: id,
+            draftId: null,
+          },
+        });
+      }
+
+      if (referencedMediaIds.length > 0) {
+        await tx.lessonMedia.updateMany({
+          where: {
+            id: { in: referencedMediaIds },
+            createdById: session.userId,
+          },
+          data: {
+            lessonId: id,
+            draftId: null,
+          },
+        });
+      }
+
+      return tx.lesson.findUniqueOrThrow({
+        where: { id },
+        include: {
+          sections: true,
+          exercises: true,
+          media: true,
         },
       });
     });

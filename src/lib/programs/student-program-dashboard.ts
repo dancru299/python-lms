@@ -91,6 +91,7 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
         orderBy: { sortOrder: "asc" },
         include: {
           lessons: {
+            where: { lesson: { isPublished: true } },
             orderBy: { sortOrder: "asc" },
             include: {
               lesson: {
@@ -107,7 +108,10 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
           outcomes: {
             orderBy: { sortOrder: "asc" },
             include: {
-              lessons: { select: { lessonId: true } },
+              lessons: {
+                where: { lesson: { isPublished: true } },
+                select: { lessonId: true },
+              },
               skills: { select: { skillId: true } },
             },
           },
@@ -120,7 +124,10 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
             include: {
               outcome: {
                 include: {
-                  lessons: { select: { lessonId: true } },
+                  lessons: {
+                    where: { lesson: { isPublished: true } },
+                    select: { lessonId: true },
+                  },
                 },
               },
             },
@@ -134,8 +141,11 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
     return null;
   }
 
+  const visibleProgramMilestones = program.milestones.filter(
+    (milestone) => milestone.lessons.length > 0
+  );
   const programLessonIds = Array.from(
-    new Set(program.milestones.flatMap((milestone) => milestone.lessons.map((link) => link.lessonId)))
+    new Set(visibleProgramMilestones.flatMap((milestone) => milestone.lessons.map((link) => link.lessonId)))
   );
 
   const [progressRows, regularSubmissions, classroomSubmissions] = await Promise.all([
@@ -184,7 +194,7 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
 
   const outcomePercentById = new Map<string, number>();
 
-  const milestones: StudentDashboardMilestone[] = program.milestones.map((milestone) => {
+  const milestones: StudentDashboardMilestone[] = visibleProgramMilestones.map((milestone) => {
     const lessons = milestone.lessons.map((link) => ({
       id: link.lesson.id,
       title: link.lesson.title,

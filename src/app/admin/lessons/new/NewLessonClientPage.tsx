@@ -4,15 +4,21 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import LessonSectionEditor, {
+  type EditableLessonSection,
+} from "@/components/lessons/LessonSectionEditor";
+import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
 import type {
   LessonAiClientConfig,
   LessonAiProvider,
 } from "@/lib/ai/provider-types";
 
-interface Section {
+interface Section extends EditableLessonSection {
   id: string;
   title: string;
   content: string;
+  contentFormat?: string;
+  contentBlocks?: LessonContentBlock[] | null;
 }
 
 interface Exercise {
@@ -48,6 +54,14 @@ const RichTextEditor = dynamic(
     ),
   }
 );
+
+function createDraftId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `lesson-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 // Template definitions
 const CONTENT_TEMPLATES = [
@@ -242,6 +256,7 @@ function NewLessonContent({
 }: NewLessonClientPageProps) {
   const router = useRouter();
   const chapterIdParam = initialChapterId;
+  const [draftId] = useState(() => createDraftId());
 
   const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
   const [aiContent, setAiContent] = useState("");
@@ -354,6 +369,14 @@ function NewLessonContent({
 
   const updateSection = (id: string, field: string, value: string) => {
     setSections(sections.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+  };
+
+  const updateSectionDraft = (nextSection: EditableLessonSection) => {
+    setSections((current) =>
+      current.map((section) =>
+        section.id === nextSection.id ? { ...section, ...nextSection } : section
+      )
+    );
   };
 
   const removeSection = (id: string) => {
@@ -532,6 +555,7 @@ function NewLessonContent({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          draftId,
           sections: sections.filter((s) => s.title.trim()),
           exercises: exercises.filter((e) => e.title.trim()),
         }),
@@ -923,7 +947,7 @@ function NewLessonContent({
                 {activeSection === section.id && (
                   <div className="p-4 border-t border-gray-200 bg-white">
                     {/* Toolbar */}
-                    <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+                    <div className="hidden">
                       <span className="text-xs text-gray-500 mr-2">Chèn nhanh:</span>
                       
                       {/* Template Button - HIGHLIGHTED */}
@@ -974,19 +998,12 @@ function NewLessonContent({
                       </button>
                     </div>
 
-                    <textarea
-                      value={section.content}
-                      onChange={(e) => updateSection(section.id, "content", e.target.value)}
-                      placeholder={`Nội dung HTML của tab "${section.title}"...
-
-💡 Nhấn nút "Mẫu" ở trên để chọn template có sẵn!`}
-                      className="input min-h-[300px] font-mono text-sm"
-                      style={{ whiteSpace: "pre-wrap" }}
+                    <LessonSectionEditor
+                      section={section}
+                      draftId={draftId}
+                      onOpenTemplate={() => openTemplateModal(section.id)}
+                      onChange={updateSectionDraft}
                     />
-
-                    <p className="text-xs text-gray-400 mt-2">
-                      💡 Code block sẽ hiển thị đúng format xuống dòng như bạn nhập vào
-                    </p>
                   </div>
                 )}
               </div>

@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,9 +28,9 @@ export default function LoginPage() {
       }
 
       if (data.user.role === "teacher" || data.user.role === "admin") {
-        router.push("/admin");
+        window.location.replace("/admin");
       } else {
-        router.push("/");
+        window.location.replace("/");
       }
     } catch {
       setError("Đã xảy ra lỗi, vui lòng thử lại");

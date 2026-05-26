@@ -14,6 +14,7 @@ export const programDetailInclude = {
               title: true,
               duration: true,
               difficulty: true,
+              isPublished: true,
               chapterId: true,
               chapter: { select: { title: true, color: true, icon: true } },
             },
@@ -25,7 +26,7 @@ export const programDetailInclude = {
         include: {
           lessons: {
             include: {
-              lesson: { select: { id: true, title: true, chapterId: true } },
+              lesson: { select: { id: true, title: true, chapterId: true, isPublished: true } },
             },
           },
           skills: {
@@ -85,13 +86,13 @@ export async function getAllLessonsForProgramAdmin() {
       color: true,
       icon: true,
       lessons: {
-        where: { isPublished: true },
         orderBy: { sortOrder: "asc" },
         select: {
           id: true,
           title: true,
           duration: true,
           difficulty: true,
+          isPublished: true,
           objectiveKnowledge: true,
           objectiveSkills: true,
           objectiveAttitude: true,
