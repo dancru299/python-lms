@@ -63,6 +63,71 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function normalizeCanvasLayout(value: unknown): string {
+  const candidate = asString(value).toLowerCase();
+  return ["text", "split", "code", "media"].includes(candidate)
+    ? candidate
+    : "split";
+}
+
+function normalizeCanvasSteps(value: unknown, canvasId: string): unknown[] {
+  return asArray(value)
+    .map((step, index) => {
+      const source = asRecord(step);
+      if (!source) {
+        return null;
+      }
+
+      const text = asString(source.text) || asString(source.html);
+      if (!text) {
+        return null;
+      }
+
+      return {
+        id: asString(source.id) || `${canvasId}-step-${index + 1}`,
+        text,
+        html: asString(source.html) || text,
+      };
+    })
+    .filter((step) => step !== null);
+}
+
+function normalizeContentBlocks(value: unknown): unknown {
+  const blocks = asArray(value)
+    .map((block, index) => {
+      const source = asRecord(block);
+      if (!source) {
+        return null;
+      }
+
+      const type = asString(source.type);
+      if (type !== "teaching_canvas") {
+        return source;
+      }
+
+      const canvasId = asString(source.id) || `canvas-${index + 1}`;
+      const title = asString(source.title) || `Canvas ${index + 1}`;
+      const mainHtml = asString(source.mainHtml) || asString(source.html);
+
+      return {
+        id: canvasId,
+        type: "teaching_canvas",
+        title,
+        layout: normalizeCanvasLayout(source.layout),
+        mainHtml: mainHtml || `<p>${title}</p>`,
+        code: asString(source.code),
+        mediaId: asString(source.mediaId),
+        notesHtml: asString(source.notesHtml),
+        reveal:
+          typeof source.reveal === "boolean" ? source.reveal : true,
+        steps: normalizeCanvasSteps(source.steps, canvasId),
+      };
+    })
+    .filter((block) => block !== null);
+
+  return blocks.length > 0 ? blocks : null;
+}
+
 function normalizeDuration(value: unknown): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -125,9 +190,7 @@ function normalizeSections(value: unknown): LessonSectionDraft[] {
 
       const title = asString(source.title) || `Phần ${index + 1}`;
       const content = typeof source.content === "string" ? source.content.trim() : "";
-      const contentBlocks: unknown = Array.isArray(source.contentBlocks)
-        ? source.contentBlocks
-        : null;
+      const contentBlocks = normalizeContentBlocks(source.contentBlocks);
 
       if (!title && !content) {
         return null;
@@ -136,7 +199,9 @@ function normalizeSections(value: unknown): LessonSectionDraft[] {
       return {
         title,
         content,
-        contentFormat: asString(source.contentFormat) || "html",
+        contentFormat:
+          asString(source.contentFormat) ||
+          (Array.isArray(contentBlocks) ? "canvas" : "html"),
         contentBlocks,
       };
     })

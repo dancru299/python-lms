@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import LessonSectionEditor, {
   type EditableLessonSection,
 } from "@/components/lessons/LessonSectionEditor";
+import {
+  createTeachingCanvasBlock,
+  lessonContentBlocksToHtml,
+} from "@/lib/lessons/teaching-canvas";
 import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
 import type {
   LessonAiClientConfig,
@@ -72,24 +75,24 @@ type LessonEditorFormProps =
       initialLesson: LessonEditorLesson;
     };
 
-const RichTextEditor = dynamic(
-  () => import("@tinymce/tinymce-react").then((mod) => mod.Editor),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[500px] items-center justify-center bg-white text-sm text-gray-500">
-        Đang tải trình soạn thảo...
-      </div>
-    ),
-  }
-);
-
 function createDraftId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
 
   return `lesson-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createDefaultSection(id: string, title: string): Section {
+  const contentBlocks = [createTeachingCanvasBlock(title)];
+
+  return {
+    id,
+    title,
+    content: lessonContentBlocksToHtml(contentBlocks),
+    contentFormat: "canvas",
+    contentBlocks,
+  };
 }
 
 // Template definitions
@@ -290,6 +293,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
   const [aiContent, setAiContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiDraftReady, setAiDraftReady] = useState(false);
   const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
     initialAiConfig.defaultProvider
   );
@@ -302,7 +306,9 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   });
   const [chapters] = useState<LessonEditorChapter[]>(initialChapters);
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(() =>
+    initialLesson?.sections[0]?.id ?? (props.mode === "create" ? "sec-1" : null)
+  );
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateTargetSection, setTemplateTargetSection] = useState<string | null>(null);
 
@@ -332,9 +338,9 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
             : null,
         }))
       : [
-    { id: "sec-1", title: "Khái niệm", content: "" },
-    { id: "sec-2", title: "Ví dụ minh họa", content: "" },
-    { id: "sec-3", title: "Thực hành", content: "" },
+          createDefaultSection("sec-1", "Khái niệm"),
+          createDefaultSection("sec-2", "Ví dụ minh họa"),
+          createDefaultSection("sec-3", "Thực hành"),
         ]
   );
 
@@ -396,7 +402,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   // Section handlers
   const addSection = () => {
     const newId = `${initialLesson ? "new-sec" : "sec"}-${Date.now()}`;
-    setSections((current) => [...current, { id: newId, title: "", content: "" }]);
+    setSections((current) => [...current, createDefaultSection(newId, "Tab mới")]);
     setActiveSection(newId);
   };
 
@@ -550,9 +556,18 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         const newSections = generatedData.sections.map((sec: any, idx: number) => ({
           id: `${initialLesson ? "ai-sec" : "sec-ai"}-${generatedAt}-${idx}`,
           title: sec.title || `Phần ${idx + 1}`,
-          content: sec.content || "",
+          content: Array.isArray(sec.contentBlocks)
+            ? lessonContentBlocksToHtml(sec.contentBlocks as LessonContentBlock[])
+            : sec.content || "",
+          contentFormat: Array.isArray(sec.contentBlocks)
+            ? "canvas"
+            : sec.contentFormat || "html",
+          contentBlocks: Array.isArray(sec.contentBlocks)
+            ? (sec.contentBlocks as LessonContentBlock[])
+            : null,
         }));
         setSections(newSections);
+        setActiveSection(newSections[0]?.id || null);
       }
 
       // Update Exercises
@@ -576,6 +591,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
       // Chuyển về tab manual để user review
       setCreationMode("manual");
+      setAiDraftReady(true);
       if (initialLesson) {
         alert("AI đã xử lý xong! Bạn hãy kiểm tra lại cấu trúc trong chế độ thủ công.");
       }
@@ -594,14 +610,6 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     }
   };
 
-  // Quick insert helpers
-  const insertContent = (sectionId: string, content: string) => {
-    const section = sections.find((s) => s.id === sectionId);
-    if (section) {
-      updateSection(sectionId, "content", section.content + (section.content ? "\n\n" : "") + content);
-    }
-  };
-
   // Save lesson
   const handleSave = async () => {
     if (!formData.chapterId) {
@@ -615,6 +623,26 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
     setSaving(true);
     try {
+      const sectionsForSave = sections
+        .filter((section) => section.title.trim())
+        .map((section) => {
+          const contentBlocks = Array.isArray(section.contentBlocks)
+            ? section.contentBlocks
+            : null;
+
+          return {
+            ...section,
+            content: contentBlocks?.length
+              ? lessonContentBlocksToHtml(contentBlocks)
+              : section.content,
+            contentFormat:
+              contentBlocks?.length && section.contentFormat !== "html"
+                ? section.contentFormat || "canvas"
+                : section.contentFormat || "html",
+            contentBlocks,
+          };
+        });
+
       const res = await fetch(
         initialLesson ? `/api/admin/lessons/${initialLesson.id}` : "/api/admin/lessons",
         {
@@ -623,7 +651,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           body: JSON.stringify({
             ...formData,
             draftId,
-            sections: sections.filter((s) => s.title.trim()),
+            sections: sectionsForSave,
             exercises: exercises.filter((e) => e.title.trim()),
           }),
         }
@@ -793,26 +821,12 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
               </div>
             </div>
 
-            <div className="border border-gray-300 rounded-lg overflow-hidden mb-6">
-              <RichTextEditor
-                apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY}
+            <div className="mb-6 overflow-hidden rounded-lg border border-gray-300 bg-white">
+              <textarea
                 value={aiContent}
-                init={{
-                  height: 500,
-                  menubar: false,
-                  plugins: [
-                    'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
-                    'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
-                    'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
-                  ],
-                  toolbar: 'undo redo | blocks | ' +
-                    'bold italic forecolor | alignleft aligncenter ' +
-                    'alignright alignjustify | bullist numlist outdent indent | ' +
-                    'removeformat | help',
-                  content_style: 'body { font-family:Helvetica,Arial,sans-serif; font-size:14px }',
-                  branding: false,
-                }}
-                onEditorChange={(content) => setAiContent(content)}
+                onChange={(event) => setAiContent(event.target.value)}
+                className="min-h-[420px] w-full resize-y border-0 p-4 text-sm leading-6 text-slate-800 outline-none focus:ring-2 focus:ring-purple-300"
+                placeholder="Dán nội dung sách, giáo án, ghi chú, HTML hoặc code mẫu vào đây. AI sẽ chuyển thành các tab và teaching canvas để bạn kiểm tra trước khi lưu."
               />
             </div>
 
@@ -850,6 +864,30 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
         {/* CÁC PHẦN DƯỚI ĐÂY LÀ CHẾ ĐỘ THỦ CÔNG */}
         <div className={creationMode !== "manual" ? "hidden" : "space-y-6 animate-fade-in"}>
+        {aiDraftReady && (
+          <div className="rounded-2xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-900 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white">
+                  <i className="fa-solid fa-wand-magic-sparkles"></i>
+                </span>
+                <div>
+                  <div className="font-bold">AI đã tạo bản nháp canvas.</div>
+                  <p className="mt-1 leading-6">
+                    Hãy kiểm tra từng tab, từng canvas, reveal steps, code/ảnh và bài tập trước khi lưu.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiDraftReady(false)}
+                className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100"
+              >
+                Đã hiểu
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Section 1: Basic Info */}
         <div className="card p-6">
@@ -981,143 +1019,113 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           </div>
         </div>
 
-        {/* Section 3: Content Tabs */}
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
+        {/* Section 3: Content Tabs — 3-column canvas layout */}
+        <div className="card overflow-hidden p-0">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-lg flex items-center justify-center">
+              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-lg flex items-center justify-center shrink-0">
                 <i className="fa-solid fa-layer-group"></i>
               </span>
-              Nội dung bài giảng (Tabs)
+              Nội dung bài giảng
             </h2>
             <button onClick={addSection} className="btn btn-secondary text-sm">
               <i className="fa-solid fa-plus"></i> Thêm tab
             </button>
           </div>
 
-          <p className="text-sm text-gray-500 mb-4">
-            Mỗi tab sẽ trở thành một phần riêng trong bài giảng. Sử dụng nút <strong>"Mẫu"</strong> để chèn template có sẵn.
-          </p>
-
-          <div className="space-y-3">
-            {sections.map((section, index) => (
-              <div
-                key={section.id}
-                className={`border rounded-lg overflow-hidden transition-all ${
-                  activeSection === section.id ? "border-indigo-500 shadow-md" : "border-gray-200"
-                }`}
-              >
-                {/* Section Header */}
+          <div className="flex min-h-[640px]">
+            {/* Cột trái: danh sách tab/section */}
+            <nav className="w-52 shrink-0 border-r border-gray-200 bg-slate-50 flex flex-col overflow-y-auto">
+              {sections.map((section, index) => (
                 <div
-                  className="flex items-center justify-between p-3 bg-gray-50 cursor-pointer"
-                  onClick={() => setActiveSection(activeSection === section.id ? null : section.id)}
+                  key={section.id}
+                  className={`group relative cursor-pointer border-b border-gray-100 transition-colors ${
+                    activeSection === section.id ? "bg-white" : "hover:bg-gray-100/60"
+                  }`}
+                  onClick={() => setActiveSection(section.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
+                  {activeSection === section.id && (
+                    <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r bg-indigo-500" />
+                  )}
+                  <div className="flex items-center gap-2 px-3 py-2.5 pl-4">
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                      activeSection === section.id
+                        ? "bg-indigo-500 text-white"
+                        : "bg-slate-200 text-slate-500"
+                    }`}>
                       {index + 1}
                     </span>
                     <input
                       type="text"
                       value={section.title}
-                      onChange={(e) => { e.stopPropagation(); updateSection(section.id, "title", e.target.value); }}
+                      onChange={(e) => updateSection(section.id, "title", e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      placeholder="Tên tab (vd: Khái niệm)"
-                      className="font-medium text-gray-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                      placeholder="Tên tab"
+                      className={`flex-1 min-w-0 bg-transparent border-none p-0 focus:outline-none focus:ring-0 text-sm ${
+                        activeSection === section.id
+                          ? "font-semibold text-indigo-700"
+                          : "font-medium text-gray-600"
+                      }`}
                     />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveSection(section.id, "up"); }}
-                      disabled={index === 0}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <i className="fa-solid fa-chevron-up"></i>
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveSection(section.id, "down"); }}
-                      disabled={index === sections.length - 1}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <i className="fa-solid fa-chevron-down"></i>
-                    </button>
-                    {sections.length > 1 && (
+                    <div className="flex shrink-0 items-center gap-0 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
-                        onClick={(e) => { e.stopPropagation(); removeSection(section.id); }}
-                        className="p-1 text-red-400 hover:text-red-600"
+                        onClick={(e) => { e.stopPropagation(); moveSection(section.id, "up"); }}
+                        disabled={index === 0}
+                        className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700 disabled:opacity-20"
                       >
-                        <i className="fa-solid fa-trash"></i>
+                        <i className="fa-solid fa-chevron-up" style={{ fontSize: "9px" }}></i>
                       </button>
-                    )}
-                    <i className={`fa-solid fa-chevron-${activeSection === section.id ? "up" : "down"} text-gray-400`}></i>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveSection(section.id, "down"); }}
+                        disabled={index === sections.length - 1}
+                        className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700 disabled:opacity-20"
+                      >
+                        <i className="fa-solid fa-chevron-down" style={{ fontSize: "9px" }}></i>
+                      </button>
+                      {sections.length > 1 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeSection(section.id); }}
+                          className="flex h-6 w-6 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <i className="fa-solid fa-trash" style={{ fontSize: "9px" }}></i>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
+              ))}
+              <button
+                onClick={addSection}
+                className="mt-auto flex items-center gap-2 border-t border-gray-200 px-4 py-3 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-50"
+              >
+                <i className="fa-solid fa-plus text-[10px]"></i>
+                Thêm tab
+              </button>
+            </nav>
 
-                {/* Section Content Editor */}
-                {activeSection === section.id && (
-                  <div className="p-4 border-t border-gray-200 bg-white">
-                    {/* Toolbar */}
-                    <div className="hidden">
-                      <span className="text-xs text-gray-500 mr-2">Chèn nhanh:</span>
-                      
-                      {/* Template Button - HIGHLIGHTED */}
-                      <button
-                        type="button"
-                        onClick={() => openTemplateModal(section.id)}
-                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium"
-                      >
-                        <i className="fa-solid fa-wand-magic-sparkles mr-1"></i> Mẫu
-                      </button>
-                      
-                      <div className="w-px h-6 bg-gray-200"></div>
-                      
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<div class="code-block">\n# Code ở đây\nprint("Hello")\n</div>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-code mr-1"></i> Code
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<table>\n  <thead>\n    <tr>\n      <th>Cột 1</th>\n      <th>Cột 2</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>Dữ liệu</td>\n      <td>Dữ liệu</td>\n    </tr>\n  </tbody>\n</table>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-table mr-1"></i> Bảng
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<ul>\n  <li>Mục 1</li>\n  <li>Mục 2</li>\n  <li>Mục 3</li>\n</ul>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-list mr-1"></i> List
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<h2>Tiêu đề lớn</h2>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        <i className="fa-solid fa-heading mr-1"></i> H2
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertContent(section.id, `<h3>Tiêu đề phụ</h3>`)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                      >
-                        H3
-                      </button>
-                    </div>
-
+            {/* Cột phải: canvas editor cho tab đang chọn */}
+            <div className="flex-1 min-w-0 p-4 bg-white">
+              {activeSection ? (
+                sections
+                  .filter((s) => s.id === activeSection)
+                  .map((section) => (
                     <LessonSectionEditor
+                      key={section.id}
                       section={section}
                       lessonId={lessonId}
                       draftId={draftId}
                       onOpenTemplate={() => openTemplateModal(section.id)}
                       onChange={updateSectionDraft}
                     />
-                  </div>
-                )}
-              </div>
-            ))}
+                  ))
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 py-16">
+                  <i className="fa-solid fa-layer-group text-4xl mb-3 text-gray-300"></i>
+                  <p className="text-sm">Chọn một tab ở cột trái để chỉnh sửa</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

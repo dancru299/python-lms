@@ -8,10 +8,20 @@ import {
   type PointerEvent,
 } from "react";
 import LessonContentRenderer from "@/components/lessons/LessonContentRenderer";
+import TeachingCanvasRenderer from "@/components/lessons/TeachingCanvasRenderer";
+import {
+  buildTeachingCanvases,
+  createTeachingCanvasBlock,
+  isTeachingCanvasBlock,
+  lessonContentBlocksToHtml,
+} from "@/lib/lessons/teaching-canvas";
 import type {
   LessonContentBlock,
   LessonImageAnnotation,
   LessonMediaView,
+  LessonTeachingCanvasBlock,
+  LessonTeachingCanvasLayout,
+  LessonTeachingCanvasStep,
   StepGuideItem,
 } from "@/lib/lessons/lesson-media";
 
@@ -31,7 +41,7 @@ interface LessonSectionEditorProps {
   onChange: (nextSection: EditableLessonSection) => void;
 }
 
-type EditorMode = "html" | "blocks";
+type EditorMode = "canvas" | "blocks" | "html";
 type AnnotationTool = "rect" | "arrow" | "marker" | "label";
 
 const DEFAULT_STEP: StepGuideItem = {
@@ -52,16 +62,18 @@ export default function LessonSectionEditor({
   const [mediaModal, setMediaModal] = useState<{
     placeholderId?: string;
     suggestedCaption?: string;
+    canvasBlockId?: string;
   } | null>(null);
   const [stepModalOpen, setStepModalOpen] = useState(false);
-  const [editorMode, setEditorMode] = useState<EditorMode>(
-    section.contentFormat === "blocks" ? "blocks" : "html"
-  );
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<EditorMode>("canvas");
   const [blocks, setBlocks] = useState<LessonContentBlock[]>(
-    Array.isArray(section.contentBlocks) && section.contentBlocks.length > 0
-      ? section.contentBlocks
-      : []
+    () => normalizeBlocksForCanvasEditor(section)
   );
+  const [activeCanvasId, setActiveCanvasId] = useState(() => {
+    const firstCanvas = normalizeBlocksForCanvasEditor(section).find(isTeachingCanvasBlock);
+    return firstCanvas?.id || null;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -107,10 +119,31 @@ export default function LessonSectionEditor({
     [media]
   );
 
+  useEffect(() => {
+    const nextBlocks = normalizeBlocksForCanvasEditor(section);
+    setBlocks(nextBlocks);
+    setActiveCanvasId(nextBlocks.find(isTeachingCanvasBlock)?.id || null);
+    setEditorMode("canvas");
+    if (
+      nextBlocks.some(isTeachingCanvasBlock) &&
+      (section.contentFormat !== "canvas" ||
+        !Array.isArray(section.contentBlocks) ||
+        !section.contentBlocks.some(isTeachingCanvasBlock))
+    ) {
+      onChange({
+        ...section,
+        content: lessonContentBlocksToHtml(nextBlocks),
+        contentFormat: "canvas",
+        contentBlocks: nextBlocks,
+      });
+    }
+  }, [section.id]);
+
   const updateContent = (
     content: string,
     nextBlocks: LessonContentBlock[] | null = section.contentBlocks || null,
-    nextFormat: string = editorMode === "blocks" ? "blocks" : "html"
+    nextFormat: string =
+      editorMode === "canvas" ? "canvas" : editorMode === "blocks" ? "blocks" : "html"
   ) => {
     onChange({
       ...section,
@@ -143,120 +176,135 @@ export default function LessonSectionEditor({
   };
 
   const switchToBlocks = () => {
-    const nextBlocks = htmlToBlocks(section.content);
+    const nextBlocks =
+      blocks.length > 0 ? blocks : htmlToBlocks(section.content);
     setBlocks(nextBlocks);
     updateContent(blocksToHtml(nextBlocks, mediaById), nextBlocks, "blocks");
     setEditorMode("blocks");
   };
 
-  const updateBlocks = (nextBlocks: LessonContentBlock[]) => {
+  const switchToCanvas = () => {
+    const nextBlocks = normalizeBlocksForCanvasEditor({
+      ...section,
+      contentBlocks: blocks.length > 0 ? blocks : section.contentBlocks,
+    });
     setBlocks(nextBlocks);
-    updateContent(blocksToHtml(nextBlocks, mediaById), nextBlocks, "blocks");
+    setActiveCanvasId(nextBlocks.find(isTeachingCanvasBlock)?.id || null);
+    updateContent(blocksToHtml(nextBlocks, mediaById), nextBlocks, "canvas");
+    setEditorMode("canvas");
+  };
+
+  const updateBlocks = (
+    nextBlocks: LessonContentBlock[],
+    nextFormat: "canvas" | "blocks" = editorMode === "canvas" ? "canvas" : "blocks"
+  ) => {
+    setBlocks(nextBlocks);
+    updateContent(blocksToHtml(nextBlocks, mediaById), nextBlocks, nextFormat);
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 pb-3">
-        <span className="mr-2 text-xs text-gray-500">Chen nhanh:</span>
-        <button
-          type="button"
-          onClick={onOpenTemplate}
-          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          <i className="fa-solid fa-wand-magic-sparkles mr-1"></i>
-          Mau
-        </button>
-        <button
-          type="button"
-          onClick={() => setMediaModal({})}
-          className="rounded bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-200"
-        >
-          <i className="fa-solid fa-image mr-1"></i>
-          Anh
-        </button>
-        <button
-          type="button"
-          onClick={() => setStepModalOpen(true)}
-          className="rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-700 hover:bg-cyan-200"
-        >
-          <i className="fa-solid fa-list-ol mr-1"></i>
-          Step guide
-        </button>
-        <div className="h-6 w-px bg-gray-200"></div>
-        <button
-          type="button"
-          onClick={() =>
-            insertContent(`<div class="code-block">\n# Code o day\nprint("Hello")\n</div>`)
-          }
-          className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-        >
-          <i className="fa-solid fa-code mr-1"></i>
-          Code
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            insertContent(`<table>\n  <thead>\n    <tr>\n      <th>Cot 1</th>\n      <th>Cot 2</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>Du lieu</td>\n      <td>Du lieu</td>\n    </tr>\n  </tbody>\n</table>`)
-          }
-          className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-        >
-          <i className="fa-solid fa-table mr-1"></i>
-          Bang
-        </button>
-        <button
-          type="button"
-          onClick={() => insertContent(`<ul>\n  <li>Muc 1</li>\n  <li>Muc 2</li>\n</ul>`)}
-          className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-        >
-          <i className="fa-solid fa-list mr-1"></i>
-          List
-        </button>
-        <button
-          type="button"
-          onClick={() => insertContent(`<h2>Tieu de lon</h2>`)}
-          className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-        >
-          <i className="fa-solid fa-heading mr-1"></i>
-          H2
-        </button>
-        <button
-          type="button"
-          onClick={() => insertContent(`<h3>Tieu de phu</h3>`)}
-          className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-        >
-          H3
-        </button>
-        <button
-          type="button"
-          onClick={() => insertContent(`<hr data-canvas-break />`)}
-          className="rounded bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
-        >
-          <i className="fa-solid fa-clapperboard mr-1"></i>
-          Canvas moi
-        </button>
-        <div className="ml-auto flex rounded-lg bg-gray-100 p-1 text-xs">
+        <div className="flex rounded-lg bg-gray-100 p-1 text-xs">
+          <button
+            type="button"
+            onClick={switchToCanvas}
+            className={`rounded-md px-3 py-1.5 font-semibold ${
+              editorMode === "canvas" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500"
+            }`}
+          >
+            Canvas
+          </button>
+          <button
+            type="button"
+            onClick={switchToBlocks}
+            className={`rounded-md px-3 py-1.5 font-semibold ${
+              editorMode === "blocks" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500"
+            }`}
+          >
+            Blocks
+          </button>
           <button
             type="button"
             onClick={() => {
               setEditorMode("html");
               updateContent(section.content, null, "html");
             }}
-            className={`rounded-md px-2 py-1 font-semibold ${
+            className={`rounded-md px-3 py-1.5 font-semibold ${
               editorMode === "html" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500"
             }`}
           >
             HTML
           </button>
+        </div>
+
+        {editorMode === "canvas" && (
           <button
             type="button"
-            onClick={switchToBlocks}
-            className={`rounded-md px-2 py-1 font-semibold ${
-              editorMode === "blocks" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500"
-            }`}
+            onClick={() => setPreviewOpen(true)}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
           >
-            Blocks
+            <i className="fa-solid fa-eye"></i>
+            Preview
           </button>
-        </div>
+        )}
+
+        {editorMode !== "canvas" && (
+          <>
+            <span className="ml-2 text-xs text-gray-500">Chen nhanh:</span>
+            <button
+              type="button"
+              onClick={onOpenTemplate}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              <i className="fa-solid fa-wand-magic-sparkles mr-1"></i>
+              Mau
+            </button>
+            <button
+              type="button"
+              onClick={() => setMediaModal({})}
+              className="rounded bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-200"
+            >
+              <i className="fa-solid fa-image mr-1"></i>
+              Anh
+            </button>
+            <button
+              type="button"
+              onClick={() => setStepModalOpen(true)}
+              className="rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-700 hover:bg-cyan-200"
+            >
+              <i className="fa-solid fa-list-ol mr-1"></i>
+              Step guide
+            </button>
+            <div className="h-6 w-px bg-gray-200"></div>
+            <button
+              type="button"
+              onClick={() =>
+                insertContent(`<div class="code-block">\n# Code o day\nprint("Hello")\n</div>`)
+              }
+              className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
+            >
+              <i className="fa-solid fa-code mr-1"></i>
+              Code
+            </button>
+            <button
+              type="button"
+              onClick={() => insertContent(`<ul>\n  <li>Muc 1</li>\n  <li>Muc 2</li>\n</ul>`)}
+              className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
+            >
+              <i className="fa-solid fa-list mr-1"></i>
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => insertContent(`<hr data-canvas-break />`)}
+              className="rounded bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
+            >
+              <i className="fa-solid fa-clapperboard mr-1"></i>
+              Canvas moi
+            </button>
+          </>
+        )}
       </div>
 
       {loadingMedia && (
@@ -265,54 +313,65 @@ export default function LessonSectionEditor({
         </div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-        <div className="min-w-0">
-          {editorMode === "blocks" ? (
-            <LessonBlockBuilder
-              blocks={blocks}
-              media={media}
-              onChange={updateBlocks}
-            />
-          ) : (
-            <textarea
-              value={section.content}
-              onChange={(event) => updateContent(event.target.value, null, "html")}
-              placeholder={`Noi dung HTML cua tab "${section.title}"...`}
-              className="input min-h-[420px] font-mono text-sm"
-              style={{ whiteSpace: "pre-wrap" }}
-            />
-          )}
-        </div>
-
-        <div className="min-w-0 rounded-xl border border-gray-200 bg-slate-50 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-sm font-bold text-gray-700">
-              <i className="fa-solid fa-eye mr-2 text-indigo-500"></i>
-              Preview
-            </div>
-            <div className="text-xs text-gray-400">{media.length} anh</div>
-          </div>
-          <div className="max-h-[560px] overflow-auto rounded-lg bg-white p-4 shadow-inner">
-            {section.content.trim() ? (
-              <LessonContentRenderer
-                html={section.content}
+      {editorMode === "canvas" ? (
+        <LessonCanvasBuilder
+          blocks={blocks.filter(isTeachingCanvasBlock)}
+          media={media}
+          activeCanvasId={activeCanvasId}
+          onActiveCanvasChange={setActiveCanvasId}
+          onPickMedia={(canvasBlockId) => setMediaModal({ canvasBlockId })}
+          onChange={(nextCanvasBlocks) => updateBlocks(nextCanvasBlocks, "canvas")}
+        />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+          <div className="min-w-0">
+            {editorMode === "blocks" ? (
+              <LessonBlockBuilder
+                blocks={blocks}
                 media={media}
-                editable
-                onPlaceholderClick={(placeholder) =>
-                  setMediaModal({
-                    placeholderId: placeholder.id,
-                    suggestedCaption: placeholder.suggestedCaption,
-                  })
-                }
+                onChange={(nextBlocks) => updateBlocks(nextBlocks, "blocks")}
               />
             ) : (
-              <div className="rounded-lg border-2 border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
-                Preview se hien thi tai day
-              </div>
+              <textarea
+                value={section.content}
+                onChange={(event) => updateContent(event.target.value, null, "html")}
+                placeholder={`Noi dung HTML cua tab "${section.title}"...`}
+                className="input min-h-[420px] font-mono text-sm"
+                style={{ whiteSpace: "pre-wrap" }}
+              />
             )}
           </div>
+
+          <div className="min-w-0 rounded-xl border border-gray-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-bold text-gray-700">
+                <i className="fa-solid fa-eye mr-2 text-indigo-500"></i>
+                Preview
+              </div>
+              <div className="text-xs text-gray-400">{media.length} anh</div>
+            </div>
+            <div className="max-h-[560px] overflow-auto rounded-lg bg-white p-4 shadow-inner">
+              {section.content.trim() ? (
+                <LessonContentRenderer
+                  html={section.content}
+                  media={media}
+                  editable
+                  onPlaceholderClick={(placeholder) =>
+                    setMediaModal({
+                      placeholderId: placeholder.id,
+                      suggestedCaption: placeholder.suggestedCaption,
+                    })
+                  }
+                />
+              ) : (
+                <div className="rounded-lg border-2 border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
+                  Preview se hien thi tai day
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {mediaModal && (
         <LessonMediaModal
@@ -323,12 +382,27 @@ export default function LessonSectionEditor({
           onClose={() => setMediaModal(null)}
           onMediaChange={setMedia}
           onInsert={(selectedMedia, caption, altText) => {
-            insertMediaFigure(
-              selectedMedia,
-              caption,
-              altText,
-              mediaModal.placeholderId
-            );
+            if (mediaModal.canvasBlockId) {
+              updateBlocks(
+                blocks.map((block) =>
+                  block.id === mediaModal.canvasBlockId && isTeachingCanvasBlock(block)
+                    ? {
+                        ...block,
+                        mediaId: selectedMedia.id,
+                        layout: block.layout === "text" ? "split" : block.layout,
+                      }
+                    : block
+                ),
+                "canvas"
+              );
+            } else {
+              insertMediaFigure(
+                selectedMedia,
+                caption,
+                altText,
+                mediaModal.placeholderId
+              );
+            }
             setMediaModal(null);
           }}
         />
@@ -344,6 +418,494 @@ export default function LessonSectionEditor({
           }}
         />
       )}
+
+      {previewOpen && (
+        <CanvasPreviewModal
+          sectionId={section.id}
+          sectionTitle={section.title}
+          blocks={blocks}
+          media={media}
+          mediaById={mediaById}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CanvasPreviewModal({
+  sectionId,
+  sectionTitle,
+  blocks,
+  media,
+  mediaById,
+  onClose,
+}: {
+  sectionId: string;
+  sectionTitle: string;
+  blocks: LessonContentBlock[];
+  media: LessonMediaView[];
+  mediaById: Map<string, LessonMediaView>;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <i className="fa-solid fa-eye text-indigo-500"></i>
+            <span className="text-sm font-bold text-gray-800">Preview — {sectionTitle}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          >
+            <i className="fa-solid fa-times"></i>
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto bg-slate-50 p-5">
+          <TeachingCanvasRenderer
+            sectionId={sectionId}
+            sectionTitle={sectionTitle}
+            canvases={buildTeachingCanvases({
+              id: sectionId,
+              title: sectionTitle,
+              content: blocksToHtml(blocks, mediaById),
+              contentBlocks: blocks,
+            })}
+            media={media}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LessonCanvasBuilder({
+  blocks,
+  media,
+  activeCanvasId,
+  onActiveCanvasChange,
+  onPickMedia,
+  onChange,
+}: {
+  blocks: LessonTeachingCanvasBlock[];
+  media: LessonMediaView[];
+  activeCanvasId: string | null;
+  onActiveCanvasChange: (id: string | null) => void;
+  onPickMedia: (canvasBlockId: string) => void;
+  onChange: (blocks: LessonTeachingCanvasBlock[]) => void;
+}) {
+  const activeCanvas =
+    blocks.find((block) => block.id === activeCanvasId) || blocks[0] || null;
+  const selectedMedia = activeCanvas?.mediaId
+    ? media.find((item) => item.id === activeCanvas.mediaId)
+    : null;
+  const [supportOpen, setSupportOpen] = useState(
+    !!(activeCanvas?.code?.trim() || activeCanvas?.mediaId?.trim() || activeCanvas?.notesHtml?.trim())
+  );
+
+  useEffect(() => {
+    const canvas = blocks.find((b) => b.id === activeCanvasId) ?? blocks[0];
+    setSupportOpen(!!(canvas?.code?.trim() || canvas?.mediaId?.trim() || canvas?.notesHtml?.trim()));
+  }, [activeCanvasId]);
+
+  const updateCanvas = (
+    id: string,
+    patch: Partial<LessonTeachingCanvasBlock>
+  ) => {
+    onChange(blocks.map((block) => (block.id === id ? { ...block, ...patch } : block)));
+  };
+
+  const addCanvas = () => {
+    const next = createTeachingCanvasBlock(`Canvas ${blocks.length + 1}`);
+    onChange([...blocks, next]);
+    onActiveCanvasChange(next.id);
+  };
+
+  const removeCanvas = (id: string) => {
+    if (blocks.length <= 1) {
+      return;
+    }
+
+    const nextBlocks = blocks.filter((block) => block.id !== id);
+    onChange(nextBlocks);
+    onActiveCanvasChange(nextBlocks[0]?.id || null);
+  };
+
+  const moveCanvas = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= blocks.length) {
+      return;
+    }
+
+    const next = [...blocks];
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+
+  const updateStep = (
+    canvasId: string,
+    stepId: string,
+    patch: Partial<LessonTeachingCanvasStep>
+  ) => {
+    const canvas = blocks.find((block) => block.id === canvasId);
+    if (!canvas) {
+      return;
+    }
+
+    updateCanvas(canvasId, {
+      steps: canvas.steps.map((step) =>
+        step.id === stepId ? { ...step, ...patch } : step
+      ),
+    });
+  };
+
+  const addStep = (canvas: LessonTeachingCanvasBlock) => {
+    const stepId = `${canvas.id}-step-${Date.now()}`;
+    updateCanvas(canvas.id, {
+      reveal: true,
+      steps: [
+        ...canvas.steps,
+        {
+          id: stepId,
+          text: `Ý ${canvas.steps.length + 1}`,
+        },
+      ],
+    });
+  };
+
+  const removeStep = (canvas: LessonTeachingCanvasBlock, stepId: string) => {
+    updateCanvas(canvas.id, {
+      steps: canvas.steps.filter((step) => step.id !== stepId),
+    });
+  };
+
+  const moveStep = (canvas: LessonTeachingCanvasBlock, index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= canvas.steps.length) {
+      return;
+    }
+
+    const next = [...canvas.steps];
+    [next[index], next[target]] = [next[target], next[index]];
+    updateCanvas(canvas.id, { steps: next });
+  };
+
+  if (!activeCanvas) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-8 text-center">
+        <p className="text-sm font-semibold text-indigo-700">Chưa có canvas nào</p>
+        <button type="button" onClick={addCanvas} className="btn btn-primary mt-4">
+          <i className="fa-solid fa-plus"></i>
+          Thêm canvas
+        </button>
+      </div>
+    );
+  }
+
+  const activeIndex = blocks.findIndex((b) => b.id === activeCanvas.id);
+
+  return (
+    <div className="space-y-3">
+      {/* Canvas navigation — horizontal tabs */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+          {blocks.map((block, index) => (
+            <button
+              key={block.id}
+              type="button"
+              onClick={() => onActiveCanvasChange(block.id)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-all ${
+                activeCanvas.id === block.id
+                  ? "bg-white font-bold text-indigo-700 shadow-sm ring-1 ring-indigo-100"
+                  : "font-medium text-slate-500 hover:bg-white/70 hover:text-slate-700"
+              }`}
+            >
+              <span className={`text-[10px] font-black ${activeCanvas.id === block.id ? "text-indigo-400" : "text-slate-400"}`}>
+                {index + 1}
+              </span>
+              <span className="max-w-[140px] truncate">{block.title || `Canvas ${index + 1}`}</span>
+              {block.steps.length > 0 && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  activeCanvas.id === block.id ? "bg-violet-100 text-violet-600" : "bg-slate-200 text-slate-500"
+                }`}>
+                  {block.steps.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={addCanvas}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-indigo-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50"
+        >
+          <i className="fa-solid fa-plus text-sm"></i>
+        </button>
+      </div>
+
+      {/* Canvas header: số thứ tự + điều hướng vị trí */}
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-indigo-400">
+            {activeIndex + 1} / {blocks.length}
+          </span>
+          <span className="truncate text-sm font-bold text-slate-700">{activeCanvas.title}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => moveCanvas(activeIndex, -1)}
+            disabled={activeIndex === 0}
+            title="Di chuyển sang trái"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25"
+          >
+            <i className="fa-solid fa-chevron-left text-xs"></i>
+          </button>
+          <button
+            type="button"
+            onClick={() => moveCanvas(activeIndex, 1)}
+            disabled={activeIndex === blocks.length - 1}
+            title="Di chuyển sang phải"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25"
+          >
+            <i className="fa-solid fa-chevron-right text-xs"></i>
+          </button>
+          {blocks.length > 1 && (
+            <button
+              type="button"
+              onClick={() => removeCanvas(activeCanvas.id)}
+              title="Xóa canvas này"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+            >
+              <i className="fa-solid fa-trash text-xs"></i>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-3">
+        {/* Nhóm chính: Tiêu đề + Layout + Nội dung */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Tiêu đề canvas
+              </label>
+              <input
+                value={activeCanvas.title}
+                onChange={(event) =>
+                  updateCanvas(activeCanvas.id, { title: event.target.value })
+                }
+                className="input text-base font-bold"
+                placeholder="Ví dụ: print() là chiếc loa phát thanh"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Layout
+              </label>
+              <select
+                value={activeCanvas.layout || "split"}
+                onChange={(event) =>
+                  updateCanvas(activeCanvas.id, {
+                    layout: event.target.value as LessonTeachingCanvasLayout,
+                  })
+                }
+                className="input text-sm"
+              >
+                <option value="split">Nội dung + phụ trợ</option>
+                <option value="text">Chỉ nội dung</option>
+                <option value="code">Ưu tiên code</option>
+                <option value="media">Ưu tiên ảnh</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Nội dung chính
+            </label>
+            <textarea
+              value={activeCanvas.mainHtml}
+              onChange={(event) =>
+                updateCanvas(activeCanvas.id, { mainHtml: event.target.value })
+              }
+              className="input min-h-[130px] font-mono text-sm"
+              placeholder="<p>Nội dung chính dùng để giảng...</p>"
+            />
+          </div>
+        </div>
+
+        {/* Nhóm phụ trợ (thu gọn được): Code + Ảnh + Ghi chú */}
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setSupportOpen(!supportOpen)}
+            className="flex w-full items-center justify-between bg-slate-50 px-4 py-2.5 text-left transition-colors hover:bg-slate-100"
+          >
+            <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <i className="fa-solid fa-screwdriver-wrench text-slate-400" style={{ fontSize: "10px" }}></i>
+              Phụ trợ — code, ảnh, ghi chú
+            </span>
+            <div className="flex items-center gap-2">
+              {(activeCanvas.code?.trim() || activeCanvas.mediaId?.trim() || activeCanvas.notesHtml?.trim()) && (
+                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-600">
+                  Có nội dung
+                </span>
+              )}
+              <i className={`fa-solid fa-chevron-${supportOpen ? "up" : "down"} text-slate-400`} style={{ fontSize: "10px" }}></i>
+            </div>
+          </button>
+
+          {supportOpen && (
+            <div className="space-y-4 border-t border-slate-200 bg-white p-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Code chính
+                  </label>
+                  <textarea
+                    value={activeCanvas.code || ""}
+                    onChange={(event) =>
+                      updateCanvas(activeCanvas.id, { code: event.target.value })
+                    }
+                    className="input min-h-[140px] font-mono text-sm"
+                    placeholder={`print("Hello")`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Ảnh minh họa
+                  </label>
+                  {selectedMedia ? (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                      <img
+                        src={selectedMedia.publicUrl}
+                        alt={selectedMedia.altText || selectedMedia.fileName}
+                        className="h-32 w-full object-cover"
+                      />
+                      <div className="flex items-center justify-between gap-2 p-3">
+                        <div className="min-w-0 truncate text-sm font-semibold text-slate-700">
+                          {selectedMedia.caption || selectedMedia.fileName}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onPickMedia(activeCanvas.id)}
+                          className="rounded-lg bg-sky-100 px-2.5 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-200"
+                        >
+                          Đổi ảnh
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onPickMedia(activeCanvas.id)}
+                      className="flex min-h-[140px] w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-sky-200 bg-sky-50/60 text-sky-700 transition hover:border-sky-300 hover:bg-sky-50"
+                    >
+                      <i className="fa-solid fa-image mb-2 text-2xl"></i>
+                      <span className="text-sm font-bold">Chọn hoặc upload ảnh</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Ghi chú nhanh
+                </label>
+                <textarea
+                  value={activeCanvas.notesHtml || ""}
+                  onChange={(event) =>
+                    updateCanvas(activeCanvas.id, { notesHtml: event.target.value })
+                  }
+                  className="input min-h-[100px] font-mono text-sm"
+                  placeholder="<p>Nhắc học sinh ghi lại ý này...</p>"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Reveal steps */}
+        <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-sm font-bold text-violet-900">
+              <input
+                type="checkbox"
+                checked={activeCanvas.reveal !== false}
+                onChange={(event) =>
+                  updateCanvas(activeCanvas.id, { reveal: event.target.checked })
+                }
+              />
+              Reveal từng ý khi bấm tiếp
+            </label>
+            <button
+              type="button"
+              onClick={() => addStep(activeCanvas)}
+              className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700"
+            >
+              <i className="fa-solid fa-plus mr-1"></i>
+              Thêm ý
+            </button>
+          </div>
+          <div className="space-y-2">
+            {activeCanvas.steps.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-violet-200 bg-white/70 p-4 text-center text-sm text-violet-500">
+                Chưa có ý reveal nào
+              </div>
+            ) : (
+              activeCanvas.steps.map((step, index) => (
+                <div key={step.id} className="grid gap-2 rounded-lg bg-white p-2 md:grid-cols-[2rem_minmax(0,1fr)_auto] md:items-center">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-100 text-sm font-black text-violet-700">
+                    {index + 1}
+                  </span>
+                  <input
+                    value={step.text}
+                    onChange={(event) =>
+                      updateStep(activeCanvas.id, step.id, {
+                        text: event.target.value,
+                        html: event.target.value,
+                      })
+                    }
+                    className="input py-2 text-sm"
+                    placeholder="Ý sẽ hiện từng từ..."
+                  />
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => moveStep(activeCanvas, index, -1)} className="rounded p-2 text-slate-400 hover:bg-slate-100">
+                      <i className="fa-solid fa-chevron-up"></i>
+                    </button>
+                    <button type="button" onClick={() => moveStep(activeCanvas, index, 1)} className="rounded p-2 text-slate-400 hover:bg-slate-100">
+                      <i className="fa-solid fa-chevron-down"></i>
+                    </button>
+                    <button type="button" onClick={() => removeStep(activeCanvas, step.id)} className="rounded p-2 text-red-400 hover:bg-red-50">
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1197,46 +1759,48 @@ function LessonBlockBuilder({
               </div>
             </div>
 
-            <div className="mb-3 grid gap-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-xs md:grid-cols-[auto_minmax(160px,1fr)_auto_auto] md:items-center">
-              <label className="flex items-center gap-2 font-semibold text-violet-800">
+            {!isTeachingCanvasBlock(block) && (
+              <div className="mb-3 grid gap-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-xs md:grid-cols-[auto_minmax(160px,1fr)_auto_auto] md:items-center">
+                <label className="flex items-center gap-2 font-semibold text-violet-800">
+                  <input
+                    type="checkbox"
+                    checked={!!block.canvasBreakBefore}
+                    onChange={(event) =>
+                      updateBlock(block.id, { canvasBreakBefore: event.target.checked } as never)
+                    }
+                  />
+                  Canvas moi
+                </label>
                 <input
-                  type="checkbox"
-                  checked={!!block.canvasBreakBefore}
+                  value={block.canvasTitle || ""}
                   onChange={(event) =>
-                    updateBlock(block.id, { canvasBreakBefore: event.target.checked } as never)
+                    updateBlock(block.id, { canvasTitle: event.target.value } as never)
                   }
+                  className="input py-1 text-xs"
+                  placeholder="Tieu de canvas rieng"
                 />
-                Canvas moi
-              </label>
-              <input
-                value={block.canvasTitle || ""}
-                onChange={(event) =>
-                  updateBlock(block.id, { canvasTitle: event.target.value } as never)
-                }
-                className="input py-1 text-xs"
-                placeholder="Tieu de canvas rieng"
-              />
-              <label className="flex items-center gap-2 font-semibold text-violet-800">
-                <input
-                  type="checkbox"
-                  checked={block.reveal !== false}
+                <label className="flex items-center gap-2 font-semibold text-violet-800">
+                  <input
+                    type="checkbox"
+                    checked={block.reveal !== false}
+                    onChange={(event) =>
+                      updateBlock(block.id, { reveal: event.target.checked } as never)
+                    }
+                  />
+                  Reveal
+                </label>
+                <select
+                  value={block.canvasRole || "main"}
                   onChange={(event) =>
-                    updateBlock(block.id, { reveal: event.target.checked } as never)
+                    updateBlock(block.id, { canvasRole: event.target.value as never } as never)
                   }
-                />
-                Reveal
-              </label>
-              <select
-                value={block.canvasRole || "main"}
-                onChange={(event) =>
-                  updateBlock(block.id, { canvasRole: event.target.value as never } as never)
-                }
-                className="input py-1 text-xs"
-              >
-                <option value="main">Noi dung</option>
-                <option value="note">Ghi chu</option>
-              </select>
-            </div>
+                  className="input py-1 text-xs"
+                >
+                  <option value="main">Noi dung</option>
+                  <option value="note">Ghi chu</option>
+                </select>
+              </div>
+            )}
 
             {block.type === "rich_text" && (
               <textarea
@@ -1269,6 +1833,20 @@ function LessonBlockBuilder({
                   className="input min-h-[110px] font-mono text-sm"
                 />
               </div>
+            )}
+            {block.type === "teaching_canvas" && (
+              <textarea
+                value={JSON.stringify(block, null, 2)}
+                onChange={(event) => {
+                  try {
+                    const parsed = JSON.parse(event.target.value);
+                    updateBlock(block.id, parsed);
+                  } catch {
+                    // Keep editing until JSON is valid.
+                  }
+                }}
+                className="input min-h-[260px] font-mono text-xs"
+              />
             )}
             {block.type === "image" && (
               <select
@@ -1309,6 +1887,85 @@ function LessonBlockBuilder({
       )}
     </div>
   );
+}
+
+function normalizeBlocksForCanvasEditor(
+  section: EditableLessonSection
+): LessonContentBlock[] {
+  if (
+    Array.isArray(section.contentBlocks) &&
+    section.contentBlocks.some(isTeachingCanvasBlock)
+  ) {
+    return section.contentBlocks.map((block) =>
+      isTeachingCanvasBlock(block) ? normalizeTeachingCanvasBlock(block) : block
+    );
+  }
+
+  const canvases = buildTeachingCanvases({
+    id: section.id,
+    title: section.title || "Nội dung",
+    content: section.content || "",
+    contentBlocks: Array.isArray(section.contentBlocks)
+      ? section.contentBlocks
+      : null,
+  });
+
+  if (canvases.length > 0 && canvases.some((canvas) => canvas.html || canvas.steps.length > 0)) {
+    return canvases.map((canvas, index): LessonTeachingCanvasBlock => ({
+      id: canvas.id || `canvas-${section.id}-${index + 1}`,
+      type: "teaching_canvas",
+      title: canvas.title || `Canvas ${index + 1}`,
+      layout:
+        canvas.kind === "code"
+          ? "code"
+          : canvas.kind === "media"
+            ? "media"
+            : canvas.html && canvas.steps.length > 0
+              ? "split"
+              : "text",
+      mainHtml: canvas.html || "<p>Nội dung chính của canvas...</p>",
+      code: "",
+      mediaId: "",
+      notesHtml: canvas.notesHtml || "",
+      steps: canvas.steps.map((step, stepIndex) => ({
+        id: step.id || `${canvas.id}-step-${stepIndex + 1}`,
+        text: step.text || stripHtmlForEditor(step.html),
+        html: step.html || step.text,
+      })),
+      reveal: canvas.steps.length > 0,
+    }));
+  }
+
+  return [createTeachingCanvasBlock(section.title || "Canvas 1")];
+}
+
+function normalizeTeachingCanvasBlock(
+  block: LessonTeachingCanvasBlock
+): LessonTeachingCanvasBlock {
+  return {
+    ...block,
+    title: block.title || "Canvas",
+    layout: block.layout || "split",
+    mainHtml: block.mainHtml || "<p>Nội dung chính của canvas...</p>",
+    code: block.code || "",
+    mediaId: block.mediaId || "",
+    notesHtml: block.notesHtml || "",
+    steps: Array.isArray(block.steps)
+      ? block.steps.map((step, index) => ({
+          id: step.id || `${block.id}-step-${index + 1}`,
+          text: step.text || stripHtmlForEditor(step.html || ""),
+          html: step.html || step.text || "",
+        }))
+      : [],
+    reveal: block.reveal !== false,
+  };
+}
+
+function stripHtmlForEditor(value: string) {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function htmlToBlocks(html: string): LessonContentBlock[] {
@@ -1387,6 +2044,10 @@ function blocksToHtml(
 ) {
   return blocks
     .map((block) => {
+      if (block.type === "teaching_canvas") {
+        return lessonContentBlocksToHtml([block]);
+      }
+
       if (block.type === "rich_text") {
         return block.html;
       }

@@ -1,4 +1,8 @@
-import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
+import type {
+  LessonContentBlock,
+  LessonTeachingCanvasBlock,
+  LessonTeachingCanvasStep,
+} from "@/lib/lessons/lesson-media";
 
 export type TeachingCanvasKind =
   | "concept"
@@ -47,6 +51,16 @@ const MAX_CANVAS_PARTS = 4;
 export function buildTeachingCanvases(
   section: TeachingCanvasSectionSource
 ): TeachingCanvas[] {
+  if (
+    Array.isArray(section.contentBlocks) &&
+    section.contentBlocks.some(isTeachingCanvasBlock)
+  ) {
+    const canvases = buildFromTeachingCanvasBlocks(section);
+    if (canvases.length > 0) {
+      return canvases;
+    }
+  }
+
   const canvases =
     Array.isArray(section.contentBlocks) && section.contentBlocks.length > 0
       ? buildFromBlocks(section)
@@ -69,6 +83,129 @@ export function buildTeachingCanvases(
   ];
 }
 
+export function isTeachingCanvasBlock(
+  block: LessonContentBlock
+): block is LessonTeachingCanvasBlock {
+  return block.type === "teaching_canvas";
+}
+
+export function createTeachingCanvasBlock(
+  title = "Canvas mới"
+): LessonTeachingCanvasBlock {
+  const id = `canvas-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return {
+    id,
+    type: "teaching_canvas",
+    title,
+    layout: "split",
+    mainHtml: "<p>Nội dung chính của canvas...</p>",
+    code: "",
+    mediaId: "",
+    notesHtml: "<p>Ghi chú nhanh cho học sinh...</p>",
+    steps: [
+      {
+        id: `${id}-step-1`,
+        text: "Ý đầu tiên cần học sinh nắm được",
+      },
+    ],
+    reveal: true,
+  };
+}
+
+export function teachingCanvasBlockToHtml(block: LessonTeachingCanvasBlock) {
+  const parts = [block.mainHtml || ""];
+
+  if (block.code?.trim()) {
+    parts.push(`<div class="code-block">\n${escapeHtml(block.code.trim())}\n</div>`);
+  }
+
+  if (block.mediaId?.trim()) {
+    parts.push(
+      `<figure class="lesson-media" data-media-id="${escapeAttribute(block.mediaId.trim())}"></figure>`
+    );
+  }
+
+  if (block.reveal !== false && block.steps.length > 0) {
+    const steps = block.steps
+      .map((step) => {
+        const html = step.html?.trim();
+        const content = html && /<\/?[a-z][\s\S]*>/i.test(html)
+          ? html
+          : escapeHtml(step.text);
+        return `<li>${content}</li>`;
+      })
+      .join("");
+    parts.push(`<ul>${steps}</ul>`);
+  }
+
+  if (block.notesHtml?.trim()) {
+    parts.push(`<blockquote>${block.notesHtml}</blockquote>`);
+  }
+
+  return parts.filter((part) => part.trim()).join("\n\n");
+}
+
+export function lessonContentBlocksToHtml(blocks: LessonContentBlock[]) {
+  return blocks
+    .map((block) => blockToHtml(block))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildFromTeachingCanvasBlocks(section: TeachingCanvasSectionSource) {
+  return (section.contentBlocks || [])
+    .filter(isTeachingCanvasBlock)
+    .map((block, index): TeachingCanvas => ({
+      id: block.id || `${section.id}-canvas-${index + 1}`,
+      kind: getTeachingCanvasKind(block),
+      title: block.title || `${section.title} ${index + 1}`,
+      html: buildTeachingCanvasMainHtml(block),
+      notesHtml: block.notesHtml || "",
+      steps:
+        block.reveal === false
+          ? []
+          : block.steps.map((step, stepIndex) => ({
+              id: step.id || `${block.id}-step-${stepIndex + 1}`,
+              html: step.html || escapeHtml(step.text),
+              text: step.text || stripHtml(step.html || ""),
+            })),
+      sourceBlockIds: [block.id],
+    }));
+}
+
+function getTeachingCanvasKind(block: LessonTeachingCanvasBlock): TeachingCanvasKind {
+  if (block.layout === "code" || block.code?.trim()) {
+    return "code";
+  }
+
+  if (block.layout === "media" || block.mediaId?.trim()) {
+    return "media";
+  }
+
+  if (block.steps.length > 0) {
+    return "steps";
+  }
+
+  return "concept";
+}
+
+function buildTeachingCanvasMainHtml(block: LessonTeachingCanvasBlock) {
+  const parts = [block.mainHtml || ""];
+
+  if (block.code?.trim()) {
+    parts.push(`<div class="code-block">\n${escapeHtml(block.code.trim())}\n</div>`);
+  }
+
+  if (block.mediaId?.trim()) {
+    parts.push(
+      `<figure class="lesson-media" data-media-id="${escapeAttribute(block.mediaId.trim())}"></figure>`
+    );
+  }
+
+  return parts.filter((part) => part.trim()).join("\n\n");
+}
+
 function buildFromBlocks(section: TeachingCanvasSectionSource) {
   const drafts: DraftCanvas[] = [];
   let current = createDraft(section.id, section.title, drafts.length);
@@ -81,6 +218,10 @@ function buildFromBlocks(section: TeachingCanvasSectionSource) {
   };
 
   for (const [index, block] of (section.contentBlocks || []).entries()) {
+    if (isTeachingCanvasBlock(block)) {
+      continue;
+    }
+
     if (block.canvasBreakBefore && !isDraftEmpty(current)) {
       flush();
     }
@@ -304,6 +445,10 @@ function shouldSplitBefore(draft: DraftCanvas, nextHtml: string) {
 }
 
 function kindForBlock(block: LessonContentBlock): TeachingCanvasKind {
+  if (block.type === "teaching_canvas") {
+    return getTeachingCanvasKind(block);
+  }
+
   if (block.type === "code") {
     return "code";
   }
@@ -324,6 +469,10 @@ function kindForBlock(block: LessonContentBlock): TeachingCanvasKind {
 }
 
 function blockToHtml(block: LessonContentBlock) {
+  if (block.type === "teaching_canvas") {
+    return teachingCanvasBlockToHtml(block);
+  }
+
   if (block.type === "rich_text") {
     return block.html;
   }

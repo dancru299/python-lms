@@ -83,7 +83,29 @@ export interface LessonCanvasBlockOptions {
   canvasRole?: LessonCanvasBlockRole;
 }
 
+export type LessonTeachingCanvasLayout = "text" | "split" | "code" | "media";
+
+export interface LessonTeachingCanvasStep {
+  id: string;
+  text: string;
+  html?: string;
+}
+
+export interface LessonTeachingCanvasBlock {
+  id: string;
+  type: "teaching_canvas";
+  title: string;
+  layout?: LessonTeachingCanvasLayout;
+  mainHtml: string;
+  code?: string;
+  mediaId?: string;
+  notesHtml?: string;
+  steps: LessonTeachingCanvasStep[];
+  reveal?: boolean;
+}
+
 export type LessonContentBlock =
+  | LessonTeachingCanvasBlock
   | ({ id: string; type: "rich_text"; html: string } & LessonCanvasBlockOptions)
   | ({ id: string; type: "image"; mediaId: string } & LessonCanvasBlockOptions)
   | ({
