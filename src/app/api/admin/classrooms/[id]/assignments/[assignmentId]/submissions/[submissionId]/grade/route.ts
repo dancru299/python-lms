@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!assignment || assignment.classroomId !== classroomId) {
       return NextResponse.json(
-        { error: "Không tìm th?y bài giao" },
+        { error: "Không tìm thấy bài giao" },
         { status: 404 },
       );
     }
@@ -46,19 +46,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (targetSubmission.status === "graded") {
-      return NextResponse.json(
-        { error: "Bài này đã được chấm điểm rồi" },
-        { status: 409 },
-      );
-    }
-
     if (
       session.role !== "admin" &&
       assignment.classroom.teacherId !== session.userId
     ) {
       return NextResponse.json(
-        { error: "Không có quy?n ch?m bài" },
+        { error: "Không có quyền chấm bài" },
         { status: 403 },
       );
     }
@@ -69,7 +62,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       typeof body.feedback === "string" ? body.feedback.trim() : null;
 
     if (Number.isNaN(score) || score < 0) {
-      return NextResponse.json({ error: "Ðiểm không h?p l?" }, { status: 400 });
+      return NextResponse.json({ error: "Điểm không hợp lệ" }, { status: 400 });
     }
 
     const boundedScore = Math.min(score, assignment.maxScore);
@@ -87,12 +80,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const studentId = targetSubmission.studentId;
     if (studentId) {
+      const isRegrade = targetSubmission.status === "graded";
       await prisma.notification.create({
         data: {
           userId: studentId,
           type: "classroom_submission_graded",
-          title: "Bài làm đã được chấm",
-          message: `Bài "${assignment.title}" đã được chấm ${boundedScore}/${assignment.maxScore} điểm${feedback ? " và có nhận xét từ giáo viên." : "."}`,
+          title: isRegrade ? "Điểm bài làm đã được cập nhật" : "Bài làm đã được chấm",
+          message: `Bài "${assignment.title}" ${isRegrade ? "được cập nhật điểm thành" : "đã được chấm"} ${boundedScore}/${assignment.maxScore} điểm${feedback ? " và có nhận xét từ giáo viên." : "."}`,
           link: `/classrooms/${classroomId}/assignments/${assignmentId}`,
         },
       });
@@ -102,7 +96,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Grade assignment submission error:", error);
     return NextResponse.json(
-      { error: "Ðã x?y ra l?i khi ch?m bài" },
+      { error: "Đã xảy ra lỗi khi chấm bài" },
       { status: 500 },
     );
   }

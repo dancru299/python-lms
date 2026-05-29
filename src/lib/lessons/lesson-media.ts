@@ -83,7 +83,21 @@ export interface LessonCanvasBlockOptions {
   canvasRole?: LessonCanvasBlockRole;
 }
 
-export type LessonTeachingCanvasLayout = "text" | "split" | "code" | "media";
+export type LessonTeachingCanvasLayout =
+  | "text"
+  | "split"
+  | "code"
+  | "media"
+  | "hero"
+  | "cards"
+  | "highlight";
+
+export interface CanvasCard {
+  icon: string;
+  title: string;
+  description: string;
+  color?: string;
+}
 
 export interface LessonTeachingCanvasStep {
   id: string;
@@ -102,6 +116,7 @@ export interface LessonTeachingCanvasBlock {
   notesHtml?: string;
   steps: LessonTeachingCanvasStep[];
   reveal?: boolean;
+  cards?: CanvasCard[];
 }
 
 export type LessonContentBlock =

@@ -86,7 +86,15 @@ export default async function ClassroomAssignmentDetailPage({
 
         <TeacherPageFrame
           title={assignment.title}
-          subtitle={`${assignment.type === "test" ? "Bài kiểm tra" : "Bài tập về nhà"} · ${assignment.classroom.name} · ${assignment.maxScore} điểm`}
+          subtitle={`${assignment.type === "test" ? "Bài kiểm tra" : "Bài tập về nhà"} · ${assignment.classroom.name} · ${assignment.maxScore} điểm${
+            assignment.dueAt
+              ? ` · Hạn nộp ${new Date(assignment.dueAt).toLocaleString("vi-VN", {
+                  timeZone: "Asia/Ho_Chi_Minh",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}`
+              : ""
+          }`}
         >
         <div className="space-y-6">
         <div className="card p-6">
@@ -132,13 +140,20 @@ export default async function ClassroomAssignmentDetailPage({
                     </div>
                   </div>
                   <div className="text-left sm:text-right">
-                    <div
-                      className={`badge ${submission.status === "graded" ? "badge-success" : "badge-warning"}`}
-                    >
-                      {submission.status === "graded" ? "Đã chấm" : "Đã nộp"}
+                    <div className="flex flex-wrap gap-1 sm:justify-end">
+                      <div
+                        className={`badge ${submission.status === "graded" ? "badge-success" : "badge-warning"}`}
+                      >
+                        {submission.status === "graded" ? "Đã chấm" : "Đã nộp"}
+                      </div>
+                      {submission.isLate && (
+                        <div className="badge badge-danger">Nộp muộn</div>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {new Date(submission.createdAt).toLocaleString("vi-VN")}
+                      {new Date(submission.createdAt).toLocaleString("vi-VN", {
+                        timeZone: "Asia/Ho_Chi_Minh",
+                      })}
                     </div>
                   </div>
                 </div>

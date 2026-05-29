@@ -58,13 +58,17 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     if (media.lessonId) {
       const sections = await prisma.section.findMany({
         where: { lessonId: media.lessonId },
-        select: { content: true },
+        select: { content: true, contentBlocks: true },
       });
-      const referencedIds = extractReferencedMediaIds(
+      const htmlIds = extractReferencedMediaIds(
         sections.map((section) => section.content || "")
       );
+      const canvasIds = sections.flatMap((section) =>
+        extractCanvasBlockMediaIds(section.contentBlocks)
+      );
+      const referencedIds = new Set([...htmlIds, ...canvasIds]);
 
-      if (referencedIds.includes(id)) {
+      if (referencedIds.has(id)) {
         return NextResponse.json(
           { error: "Image is still used in lesson content" },
           { status: 409 }
@@ -87,4 +91,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function extractCanvasBlockMediaIds(contentBlocks: unknown): string[] {
+  if (!Array.isArray(contentBlocks)) return [];
+  return contentBlocks
+    .filter((b): b is Record<string, unknown> => b !== null && typeof b === "object")
+    .map((b) => (typeof b.mediaId === "string" ? b.mediaId.trim() : ""))
+    .filter(Boolean);
 }

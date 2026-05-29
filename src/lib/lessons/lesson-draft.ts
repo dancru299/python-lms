@@ -65,9 +65,25 @@ function asArray(value: unknown): unknown[] {
 
 function normalizeCanvasLayout(value: unknown): string {
   const candidate = asString(value).toLowerCase();
-  return ["text", "split", "code", "media"].includes(candidate)
+  return ["text", "split", "code", "media", "hero", "cards", "highlight"].includes(candidate)
     ? candidate
     : "split";
+}
+
+function normalizeCanvasCards(value: unknown): unknown[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const cards = value
+    .map((item) => {
+      const src = asRecord(item);
+      if (!src) return null;
+      const icon = asString(src.icon);
+      const title = asString(src.title);
+      const description = asString(src.description);
+      if (!title && !description) return null;
+      return { icon, title, description, color: asString(src.color) || undefined };
+    })
+    .filter((c) => c !== null);
+  return cards.length > 0 ? cards : undefined;
 }
 
 function normalizeCanvasSteps(value: unknown, canvasId: string): unknown[] {
@@ -109,11 +125,13 @@ function normalizeContentBlocks(value: unknown): unknown {
       const title = asString(source.title) || `Canvas ${index + 1}`;
       const mainHtml = asString(source.mainHtml) || asString(source.html);
 
+      const layout = normalizeCanvasLayout(source.layout);
+      const cards = normalizeCanvasCards(source.cards);
       return {
         id: canvasId,
         type: "teaching_canvas",
         title,
-        layout: normalizeCanvasLayout(source.layout),
+        layout,
         mainHtml: mainHtml || `<p>${title}</p>`,
         code: asString(source.code),
         mediaId: asString(source.mediaId),
@@ -121,6 +139,7 @@ function normalizeContentBlocks(value: unknown): unknown {
         reveal:
           typeof source.reveal === "boolean" ? source.reveal : true,
         steps: normalizeCanvasSteps(source.steps, canvasId),
+        ...(cards ? { cards } : {}),
       };
     })
     .filter((block) => block !== null);

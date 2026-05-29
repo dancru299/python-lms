@@ -154,7 +154,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           media: true,
         },
       });
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     return NextResponse.json({
       success: true,

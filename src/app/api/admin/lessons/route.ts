@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
           media: true,
         },
       });
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     return NextResponse.json({
       success: true,

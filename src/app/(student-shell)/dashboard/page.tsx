@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import prisma from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { requireAuth } from "@/lib/session";
 import { getUnreadNotificationCount } from "@/lib/notifications";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
 import StudentPageFrame from "@/components/student/StudentPageFrame";
-import LandingPage from "./LandingPage";
 import { getStudentProgramDashboard, type SkillStatus } from "@/lib/programs/student-program-dashboard";
 
 function getDifficultyLabel(level: string) {
@@ -127,16 +125,8 @@ async function StudentClassroomsSection({ userId }: { userId: string }) {
   );
 }
 
-export default async function HomePage() {
-  const session = await getSession();
-
-  if (!session) {
-    return <LandingPage />;
-  }
-
-  if (session.role === "teacher" || session.role === "admin") {
-    redirect("/admin");
-  }
+export default async function DashboardPage() {
+  const session = await requireAuth();
 
   const [dashboard, notificationCount, classroomCount] = await Promise.all([
     getStudentProgramDashboard(session.userId),

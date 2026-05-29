@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
+import {
+  normalizeScheduleRules,
+  regenerateClassroomSessions,
+} from "@/lib/classroom-schedule";
+
+function parseDateOnly(value: unknown): Date | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 // Generate random code
 function generateCode(length: number = 6): string {
@@ -73,6 +83,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, description, teacherId, studentIds } = body;
+    const startDate = parseDateOnly(body.startDate);
+    const endDate = parseDateOnly(body.endDate);
+    const scheduleRules = normalizeScheduleRules(body.scheduleRules);
 
     if (!name || !teacherId) {
       return NextResponse.json(
@@ -98,10 +111,21 @@ export async function POST(request: NextRequest) {
         description: description || null,
         teacherId,
         code,
+        startDate,
+        endDate,
         students: studentIds?.length
           ? {
               create: studentIds.map((studentId: string) => ({
                 studentId,
+              })),
+            }
+          : undefined,
+        scheduleRules: scheduleRules.length
+          ? {
+              create: scheduleRules.map((rule) => ({
+                weekday: rule.weekday,
+                startTime: rule.startTime,
+                endTime: rule.endTime,
               })),
             }
           : undefined,
@@ -111,6 +135,8 @@ export async function POST(request: NextRequest) {
         students: true,
       },
     });
+
+    await regenerateClassroomSessions(classroom.id);
 
     return NextResponse.json({
       success: true,

@@ -26,6 +26,9 @@ export default async function StudentClassroomDetailPage({
       classroom: {
         include: {
           teacher: { select: { name: true } },
+          scheduleRules: {
+            orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+          },
         },
       },
     },
@@ -34,6 +37,22 @@ export default async function StudentClassroomDetailPage({
   if (!membership) {
     redirect("/classrooms");
   }
+
+  const upcomingSessions = await prisma.classroomSession.findMany({
+    where: {
+      classroomId: id,
+      status: "scheduled",
+      startsAt: { gte: new Date() },
+    },
+    orderBy: { startsAt: "asc" },
+    take: 3,
+    select: { id: true, title: true, startsAt: true, endsAt: true },
+  });
+
+  const weekdayLabels = ["CN", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+  const scheduleSummary = membership.classroom.scheduleRules
+    .map((rule) => `${weekdayLabels[rule.weekday]} ${rule.startTime}`)
+    .join(" · ");
 
   const assignments = await prisma.classroomAssignment.findMany({
     where: {
@@ -73,6 +92,39 @@ export default async function StudentClassroomDetailPage({
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {(scheduleSummary || upcomingSessions.length > 0) && (
+          <div className="card mb-6 p-5">
+            <div className="flex items-center gap-2 text-gray-900">
+              <i className="fa-regular fa-calendar-days text-indigo-500"></i>
+              <h2 className="font-semibold">Lịch học</h2>
+            </div>
+            {scheduleSummary && (
+              <p className="mt-2 text-sm text-gray-600">
+                Lịch hàng tuần: <span className="font-medium">{scheduleSummary}</span>
+              </p>
+            )}
+            {upcomingSessions.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {upcomingSessions.map((s) => (
+                  <span
+                    key={s.id}
+                    className="rounded-full bg-indigo-50 px-3 py-1 text-sm text-indigo-700"
+                  >
+                    {new Date(s.startsAt).toLocaleString("vi-VN", {
+                      timeZone: "Asia/Ho_Chi_Minh",
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-3">
           {assignments.map((assignment) => {
             const mySubmission = assignment.submissions[0];
@@ -101,10 +153,21 @@ export default async function StudentClassroomDetailPage({
                       {assignment.type === "test" && assignment.durationMinutes
                         ? `${assignment.durationMinutes} phút • `
                         : ""}
-                      {assignment.maxScore} diểm
+                      {assignment.maxScore} điểm
                     </p>
+                    {assignment.dueAt && (
+                      <p className="mt-1 text-sm text-gray-500">
+                        <i className="fa-regular fa-clock mr-1"></i>
+                        Hạn nộp:{" "}
+                        {new Date(assignment.dueAt).toLocaleString("vi-VN", {
+                          timeZone: "Asia/Ho_Chi_Minh",
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    )}
                   </div>
-                  <div>
+                  <div className="flex flex-col items-end gap-1">
                     {mySubmission ? (
                       <span
                         className={`badge ${mySubmission.status === "graded" ? "badge-success" : "badge-warning"}`}
@@ -115,6 +178,9 @@ export default async function StudentClassroomDetailPage({
                       </span>
                     ) : (
                       <span className="badge badge-primary">Chưa nộp</span>
+                    )}
+                    {mySubmission?.isLate && (
+                      <span className="badge badge-danger">Nộp muộn</span>
                     )}
                   </div>
                 </div>

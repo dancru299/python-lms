@@ -16,6 +16,7 @@ import {
   lessonContentBlocksToHtml,
 } from "@/lib/lessons/teaching-canvas";
 import type {
+  CanvasCard,
   LessonContentBlock,
   LessonImageAnnotation,
   LessonMediaView,
@@ -63,6 +64,7 @@ export default function LessonSectionEditor({
     placeholderId?: string;
     suggestedCaption?: string;
     canvasBlockId?: string;
+    mainHtmlPlaceholderId?: string;
   } | null>(null);
   const [stepModalOpen, setStepModalOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -319,7 +321,13 @@ export default function LessonSectionEditor({
           media={media}
           activeCanvasId={activeCanvasId}
           onActiveCanvasChange={setActiveCanvasId}
-          onPickMedia={(canvasBlockId) => setMediaModal({ canvasBlockId })}
+          onPickMedia={(canvasBlockId, placeholderInfo) =>
+            setMediaModal({
+              canvasBlockId,
+              mainHtmlPlaceholderId: placeholderInfo?.id,
+              suggestedCaption: placeholderInfo?.suggestedCaption,
+            })
+          }
           onChange={(nextCanvasBlocks) => updateBlocks(nextCanvasBlocks, "canvas")}
         />
       ) : (
@@ -382,7 +390,26 @@ export default function LessonSectionEditor({
           onClose={() => setMediaModal(null)}
           onMediaChange={setMedia}
           onInsert={(selectedMedia, caption, altText) => {
-            if (mediaModal.canvasBlockId) {
+            if (mediaModal.canvasBlockId && mediaModal.mainHtmlPlaceholderId) {
+              // Replace placeholder inside canvas mainHtml
+              const figureHtml = buildMediaFigureHtml(selectedMedia, caption, altText);
+              updateBlocks(
+                blocks.map((block) =>
+                  block.id === mediaModal.canvasBlockId && isTeachingCanvasBlock(block)
+                    ? {
+                        ...block,
+                        mainHtml: replacePlaceholderWithFigure(
+                          block.mainHtml,
+                          mediaModal.mainHtmlPlaceholderId!,
+                          figureHtml
+                        ),
+                        layout: block.layout === "text" ? "media" : block.layout,
+                      }
+                    : block
+                ),
+                "canvas"
+              );
+            } else if (mediaModal.canvasBlockId) {
               updateBlocks(
                 blocks.map((block) =>
                   block.id === mediaModal.canvasBlockId && isTeachingCanvasBlock(block)
@@ -511,7 +538,7 @@ function LessonCanvasBuilder({
   media: LessonMediaView[];
   activeCanvasId: string | null;
   onActiveCanvasChange: (id: string | null) => void;
-  onPickMedia: (canvasBlockId: string) => void;
+  onPickMedia: (canvasBlockId: string, placeholderInfo?: { id: string; suggestedCaption: string }) => void;
   onChange: (blocks: LessonTeachingCanvasBlock[]) => void;
 }) {
   const activeCanvas =
@@ -733,6 +760,9 @@ function LessonCanvasBuilder({
                 }
                 className="input text-sm"
               >
+                <option value="hero">🎯 Hero (mở đầu bài)</option>
+                <option value="cards">🃏 Cards (danh sách icon)</option>
+                <option value="highlight">💡 Điểm nhấn</option>
                 <option value="split">Nội dung + phụ trợ</option>
                 <option value="text">Chỉ nội dung</option>
                 <option value="code">Ưu tiên code</option>
@@ -751,6 +781,11 @@ function LessonCanvasBuilder({
               }
               className="input min-h-[130px] font-mono text-sm"
               placeholder="<p>Nội dung chính dùng để giảng...</p>"
+            />
+            <CanvasPlaceholderPanel
+              mainHtml={activeCanvas.mainHtml}
+              canvasId={activeCanvas.id}
+              onPickMedia={onPickMedia}
             />
           </div>
         </div>
@@ -807,13 +842,22 @@ function LessonCanvasBuilder({
                         <div className="min-w-0 truncate text-sm font-semibold text-slate-700">
                           {selectedMedia.caption || selectedMedia.fileName}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => onPickMedia(activeCanvas.id)}
-                          className="rounded-lg bg-sky-100 px-2.5 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-200"
-                        >
-                          Đổi ảnh
-                        </button>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onPickMedia(activeCanvas.id)}
+                            className="rounded-lg bg-sky-100 px-2.5 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-200"
+                          >
+                            Đổi ảnh
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateCanvas(activeCanvas.id, { mediaId: "" })}
+                            className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100"
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -828,19 +872,97 @@ function LessonCanvasBuilder({
                   )}
                 </div>
               </div>
-              <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Ghi chú nhanh
-                </label>
-                <textarea
-                  value={activeCanvas.notesHtml || ""}
-                  onChange={(event) =>
-                    updateCanvas(activeCanvas.id, { notesHtml: event.target.value })
-                  }
-                  className="input min-h-[100px] font-mono text-sm"
-                  placeholder="<p>Nhắc học sinh ghi lại ý này...</p>"
-                />
-              </div>
+              {activeCanvas.layout === "cards" ? (
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Danh sách cards
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newCard: CanvasCard = { icon: "fa-star", title: "Tiêu đề", description: "Mô tả ngắn" };
+                        updateCanvas(activeCanvas.id, { cards: [...(activeCanvas.cards || []), newCard] });
+                      }}
+                      className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>Thêm card
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {(activeCanvas.cards || []).length === 0 && (
+                      <div className="rounded-lg border border-dashed border-slate-200 p-3 text-center text-xs text-slate-400">
+                        Chưa có card nào — bấm "Thêm card"
+                      </div>
+                    )}
+                    {(activeCanvas.cards || []).map((card, ci) => (
+                      <div key={ci} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-slate-200 bg-white p-2.5">
+                        <div className="flex flex-col gap-1.5 pt-0.5">
+                          <input
+                            value={card.icon}
+                            onChange={(e) => {
+                              const next = [...(activeCanvas.cards || [])];
+                              next[ci] = { ...next[ci], icon: e.target.value };
+                              updateCanvas(activeCanvas.id, { cards: next });
+                            }}
+                            className="input w-32 font-mono text-xs"
+                            placeholder="fa-star"
+                          />
+                          <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-100 text-slate-600">
+                            <i className={`fa-solid ${card.icon || "fa-star"} text-sm`}></i>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <input
+                            value={card.title}
+                            onChange={(e) => {
+                              const next = [...(activeCanvas.cards || [])];
+                              next[ci] = { ...next[ci], title: e.target.value };
+                              updateCanvas(activeCanvas.id, { cards: next });
+                            }}
+                            className="input text-sm font-bold"
+                            placeholder="Tiêu đề card"
+                          />
+                          <input
+                            value={card.description}
+                            onChange={(e) => {
+                              const next = [...(activeCanvas.cards || [])];
+                              next[ci] = { ...next[ci], description: e.target.value };
+                              updateCanvas(activeCanvas.id, { cards: next });
+                            }}
+                            className="input text-sm"
+                            placeholder="Mô tả ngắn"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = (activeCanvas.cards || []).filter((_, i) => i !== ci);
+                            updateCanvas(activeCanvas.id, { cards: next });
+                          }}
+                          className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <i className="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Ghi chú nội bộ
+                  </label>
+                  <textarea
+                    value={activeCanvas.notesHtml || ""}
+                    onChange={(event) =>
+                      updateCanvas(activeCanvas.id, { notesHtml: event.target.value })
+                    }
+                    className="input min-h-[100px] font-mono text-sm"
+                    placeholder="<p>Ghi chú nội bộ, không hiển thị trên slide...</p>"
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -932,7 +1054,32 @@ function LessonMediaModal({
   const [altText, setAltText] = useState(suggestedCaption || media[0]?.altText || "");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const selectedMedia = media.find((item) => item.id === selectedId) || null;
+
+  const handleDeleteMedia = async (itemId: string) => {
+    if (!confirm("Xóa ảnh này vĩnh viễn? Hành động không thể hoàn tác.")) return;
+    setDeletingId(itemId);
+    try {
+      const response = await fetch(`/api/admin/lesson-media/${itemId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          alert("Ảnh này đang được dùng trong bài học, không thể xóa.");
+        } else {
+          alert(payload.error || "Không xóa được ảnh");
+        }
+        return;
+      }
+      const next = media.filter((item) => item.id !== itemId);
+      onMediaChange(next);
+      if (selectedId === itemId) setSelectedId(next[0]?.id || "");
+    } catch {
+      alert("Lỗi kết nối, thử lại.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!selectedMedia) {
@@ -1074,30 +1221,46 @@ function LessonMediaModal({
                   </div>
                 ) : (
                   media.map((item) => (
-                    <button
+                    <div
                       key={item.id}
-                      type="button"
-                      onClick={() => setSelectedId(item.id)}
-                      className={`flex w-full items-center gap-3 rounded-lg border p-2 text-left transition ${
+                      className={`flex items-center gap-2 rounded-lg border p-2 transition ${
                         selectedId === item.id
                           ? "border-indigo-500 bg-indigo-50"
-                          : "border-gray-200 hover:border-gray-300"
+                          : "border-gray-200"
                       }`}
                     >
-                      <img
-                        src={item.publicUrl}
-                        alt={item.altText || item.fileName}
-                        className="h-14 w-20 rounded-md object-cover"
-                      />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-gray-800">
-                          {item.caption || item.fileName}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(item.id)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <img
+                          src={item.publicUrl}
+                          alt={item.altText || item.fileName}
+                          className="h-14 w-20 shrink-0 rounded-md object-cover"
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-gray-800">
+                            {item.caption || item.fileName}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {Math.round(item.sizeBytes / 1024)}KB
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {Math.round(item.sizeBytes / 1024)}KB
-                        </div>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMedia(item.id)}
+                        disabled={deletingId === item.id}
+                        className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                        title="Xóa ảnh"
+                      >
+                        {deletingId === item.id
+                          ? <i className="fa-solid fa-spinner fa-spin text-xs"></i>
+                          : <i className="fa-solid fa-trash text-xs"></i>
+                        }
+                      </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -2169,4 +2332,61 @@ function cssEscape(value: string) {
 
 function clamp(value: number) {
   return Math.min(Math.max(value, 0), 100);
+}
+
+function CanvasPlaceholderPanel({
+  mainHtml,
+  canvasId,
+  onPickMedia,
+}: {
+  mainHtml: string;
+  canvasId: string;
+  onPickMedia: (canvasBlockId: string, placeholderInfo?: { id: string; suggestedCaption: string }) => void;
+}) {
+  const placeholders = useMemo(() => extractMainHtmlPlaceholders(mainHtml), [mainHtml]);
+
+  if (placeholders.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {placeholders.map((p) => (
+        <div
+          key={p.id}
+          className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2"
+        >
+          <i className="fa-solid fa-image shrink-0 text-sky-500"></i>
+          <span className="flex-1 truncate text-xs text-sky-800">
+            {p.suggestedCaption || p.id}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPickMedia(canvasId, p)}
+            className="shrink-0 rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-sky-700"
+          >
+            Chèn ảnh
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function extractMainHtmlPlaceholders(
+  html: string
+): Array<{ id: string; suggestedCaption: string }> {
+  if (!html?.trim() || typeof document === "undefined") return [];
+  try {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return Array.from(
+      div.querySelectorAll<HTMLElement>(".lesson-media-placeholder[data-placeholder-id]")
+    )
+      .map((el) => ({
+        id: el.dataset.placeholderId || "",
+        suggestedCaption: el.dataset.suggestedCaption || "",
+      }))
+      .filter((p) => Boolean(p.id));
+  } catch {
+    return [];
+  }
 }

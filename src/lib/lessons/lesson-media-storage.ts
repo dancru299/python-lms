@@ -59,7 +59,11 @@ export function buildLessonMediaStorageKey(options: {
   return `${ownerSegment}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
 }
 
+let bucketEnsured = false;
+
 export async function ensureLessonMediaBucket() {
+  if (bucketEnsured) return;
+
   const config = getLessonMediaStorageConfig();
   const headers = getStorageHeaders(config);
 
@@ -69,13 +73,46 @@ export async function ensureLessonMediaBucket() {
   );
 
   if (readResponse.ok) {
+    bucketEnsured = true;
     return;
   }
 
-  if (readResponse.status !== 404) {
-    throw new Error(`Cannot read Supabase bucket: ${readResponse.status}`);
+  if (readResponse.status === 401 || readResponse.status === 403) {
+    throw new Error(
+      `Supabase Storage: không đủ quyền truy cập bucket (${readResponse.status}). ` +
+      `Kiểm tra SUPABASE_SERVICE_ROLE_KEY phải là service_role key, không phải anon key.`
+    );
   }
 
+  // Supabase đôi khi trả HTTP 400 nhưng body chứa statusCode "404" (Bucket not found).
+  // Đây là quirk của Supabase Storage API — cần đọc body để phân biệt.
+  if (readResponse.status === 400 || readResponse.status === 404) {
+    let bodyJson: Record<string, unknown> | null = null;
+    try {
+      bodyJson = await readResponse.json() as Record<string, unknown>;
+    } catch {
+      // body không phải JSON
+    }
+
+    const isNotFound =
+      readResponse.status === 404 ||
+      bodyJson?.statusCode === "404" ||
+      (typeof bodyJson?.error === "string" && bodyJson.error.toLowerCase().includes("not found")) ||
+      (typeof bodyJson?.message === "string" && bodyJson.message.toLowerCase().includes("not found"));
+
+    if (!isNotFound) {
+      throw new Error(
+        `Supabase Storage trả về ${readResponse.status} khi đọc bucket. ` +
+        `Nguyên nhân thường gặp: SUPABASE_SERVICE_ROLE_KEY là anon key, SUPABASE_URL sai project, hoặc project bị paused. ` +
+        (bodyJson ? `Chi tiết: ${JSON.stringify(bodyJson)}` : "")
+      );
+    }
+    // isNotFound = true → bucket chưa tồn tại, tiếp tục tạo mới bên dưới
+  } else if (readResponse.status !== 404) {
+    throw new Error(`Supabase Storage: lỗi không xác định khi đọc bucket (${readResponse.status}).`);
+  }
+
+  // Bucket chưa tồn tại → tạo mới
   const createResponse = await fetch(`${config.supabaseUrl}/storage/v1/bucket`, {
     method: "POST",
     headers: {
@@ -94,9 +131,11 @@ export async function ensureLessonMediaBucket() {
   if (!createResponse.ok && createResponse.status !== 409) {
     const body = await createResponse.text().catch(() => "");
     throw new Error(
-      `Cannot create Supabase bucket: ${createResponse.status} ${body}`.trim()
+      `Không thể tạo Supabase bucket: ${createResponse.status} ${body}`.trim()
     );
   }
+
+  bucketEnsured = true;
 }
 
 export async function uploadLessonMediaObject(options: {

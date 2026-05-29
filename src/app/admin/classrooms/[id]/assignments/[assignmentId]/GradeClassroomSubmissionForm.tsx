@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -28,11 +28,13 @@ export default function GradeClassroomSubmissionForm({
   const [score, setScore] = useState(defaultScore);
   const [feedback, setFeedback] = useState(defaultFeedback);
   const [loading, setLoading] = useState(false);
-  const [locked, setLocked] = useState(isGraded);
+  const [editing, setEditing] = useState(!isGraded);
+
+  const fieldsDisabled = !editing || loading;
 
   const handleGrade = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (locked) {
+    if (!editing) {
       return;
     }
 
@@ -54,7 +56,7 @@ export default function GradeClassroomSubmissionForm({
         return;
       }
 
-      setLocked(true);
+      setEditing(false);
       router.refresh();
     } catch (error) {
       alert("Đã xảy ra lỗi khi chấm bài");
@@ -63,19 +65,25 @@ export default function GradeClassroomSubmissionForm({
     }
   };
 
+  const handleCancelEdit = () => {
+    setScore(defaultScore);
+    setFeedback(defaultFeedback);
+    setEditing(false);
+  };
+
   return (
     <form onSubmit={handleGrade} className="border-t border-gray-200 pt-4">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Biểu mẫu chấm điểm</h3>
           <p className="mt-1 text-sm text-gray-500">
-            {locked
-              ? `Bài này đã được chấm${gradedAtLabel ? ` lúc ${gradedAtLabel}` : ""}.`
-              : "Điền điểm và nhận xét rồi lưu một lần để hoàn tất chấm bài."}
+            {isGraded && !editing
+              ? `Bài này đã được chấm${gradedAtLabel ? ` lúc ${gradedAtLabel}` : ""}. Bấm "Sửa điểm" nếu muốn chỉnh lại.`
+              : "Điền điểm và nhận xét rồi lưu để hoàn tất chấm bài."}
           </p>
         </div>
-        <span className={`badge ${locked ? "badge-success" : "badge-warning"}`}>
-          {locked ? "Đã khóa sau khi chấm" : "Chưa chấm"}
+        <span className={`badge ${isGraded ? "badge-success" : "badge-warning"}`}>
+          {isGraded ? "Đã chấm" : "Chưa chấm"}
         </span>
       </div>
 
@@ -91,7 +99,7 @@ export default function GradeClassroomSubmissionForm({
             step="0.01"
             inputMode="decimal"
             value={score}
-            disabled={locked || loading}
+            disabled={fieldsDisabled}
             onChange={(e) => setScore(parseFloat(e.target.value))}
             className="input bg-white text-lg font-semibold"
           />
@@ -104,34 +112,48 @@ export default function GradeClassroomSubmissionForm({
           <textarea
             className="input min-h-[132px] resize-y bg-white"
             value={feedback}
-            disabled={locked || loading}
+            disabled={fieldsDisabled}
             onChange={(e) => setFeedback(e.target.value)}
             placeholder="Nhập nhận xét cho học sinh..."
           />
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-gray-500">
-          {locked
-            ? "Muốn chấm lại, cần mở lại luồng riêng thay vì bấm lưu nhiều lần."
-            : "Sau khi lưu, biểu mẫu sẽ tự khóa để tránh chấm trùng."}
-        </p>
-        <button className="btn btn-success sm:min-w-[180px]" disabled={locked || loading}>
-          {loading ? (
-            <>
-              <i className="fa-solid fa-spinner fa-spin"></i> Đang lưu...
-            </>
-          ) : locked ? (
-            <>
-              <i className="fa-solid fa-lock"></i> Đã chấm điểm
-            </>
-          ) : (
-            <>
-              <i className="fa-solid fa-check"></i> Lưu chấm điểm
-            </>
-          )}
-        </button>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+        {isGraded && !editing ? (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="btn btn-secondary sm:min-w-[160px]"
+          >
+            <i className="fa-solid fa-pen"></i> Sửa điểm
+          </button>
+        ) : (
+          <>
+            {isGraded && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                disabled={loading}
+                className="btn btn-ghost sm:min-w-[120px]"
+              >
+                Hủy
+              </button>
+            )}
+            <button className="btn btn-success sm:min-w-[180px]" disabled={loading}>
+              {loading ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin"></i> Đang lưu...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-check"></i>{" "}
+                  {isGraded ? "Lưu thay đổi" : "Lưu chấm điểm"}
+                </>
+              )}
+            </button>
+          </>
+        )}
       </div>
     </form>
   );

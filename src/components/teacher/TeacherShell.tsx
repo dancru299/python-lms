@@ -14,6 +14,7 @@ import {
 import RouteFeedbackLink from "@/components/navigation/RouteFeedbackLink";
 import LogoutButton from "@/components/LogoutButton";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { Toaster } from "react-hot-toast";
 import type { ActionLink, SectionLink, TeacherNavKey } from "./teacher-shell-shared";
 
 interface TeacherShellProps {
@@ -291,6 +292,7 @@ export default function TeacherShell({
           <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
         </div>
       </div>
+      <Toaster position="top-right" />
     </TeacherShellPageChromeContext.Provider>
   );
 }

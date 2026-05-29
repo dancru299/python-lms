@@ -1,6 +1,16 @@
 ﻿import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCookieSessionUser } from "@/lib/cookie-session";
+import {
+  normalizeScheduleRules,
+  regenerateClassroomSessions,
+} from "@/lib/classroom-schedule";
+
+function parseDateOnly(value: unknown): Date | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,6 +29,19 @@ export async function GET(request: Request, { params }: RouteParams) {
       where: { id },
       include: {
         teacher: { select: { id: true, name: true, email: true } },
+        scheduleRules: {
+          orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+        },
+        sessions: {
+          orderBy: { startsAt: "asc" },
+          select: {
+            id: true,
+            title: true,
+            startsAt: true,
+            endsAt: true,
+            status: true,
+          },
+        },
         students: {
           include: {
             student: {
@@ -78,6 +101,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
       teacherId?: string;
       studentIds?: string[];
     } = body;
+    const startDate = parseDateOnly(body.startDate);
+    const endDate = parseDateOnly(body.endDate);
+    const scheduleRules = normalizeScheduleRules(body.scheduleRules);
 
     const classroom = await prisma.classroom.findUnique({
       where: { id },
@@ -109,6 +135,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
           name: name.trim(),
           description: description?.trim() || null,
           teacherId: nextTeacherId,
+          startDate,
+          endDate,
         },
       });
 
@@ -126,8 +154,26 @@ export async function PUT(request: Request, { params }: RouteParams) {
         });
       }
 
+      await tx.classroomScheduleRule.deleteMany({
+        where: { classroomId: id },
+      });
+
+      if (scheduleRules.length > 0) {
+        await tx.classroomScheduleRule.createMany({
+          data: scheduleRules.map((rule) => ({
+            classroomId: id,
+            weekday: rule.weekday,
+            startTime: rule.startTime,
+            endTime: rule.endTime,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
       return updatedClassroom;
     });
+
+    await regenerateClassroomSessions(id);
 
     return NextResponse.json({
       success: true,

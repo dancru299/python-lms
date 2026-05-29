@@ -146,6 +146,7 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
           <StudentAssignmentSubmitForm
             assignmentId={assignment.id}
             answerTemplate={assignment.answerTemplate || null}
+            dueAt={assignment.dueAt ? assignment.dueAt.toISOString() : null}
             existingSubmission={
               mySubmission
                 ? {
@@ -153,6 +154,7 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
                     content: mySubmission.content,
                     score: mySubmission.score,
                     feedback: mySubmission.feedback,
+                    isLate: mySubmission.isLate,
                   }
                 : null
             }

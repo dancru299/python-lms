@@ -237,20 +237,57 @@ model Notification {
 
 // ============ CLASSROOMS ============
 model Classroom {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
   description String?
-  code        String   @unique // Mã lớp để học sinh tham gia
+  code        String    @unique // Mã lớp để học sinh tham gia
   teacherId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  startDate   DateTime? // Ngày bắt đầu khóa học
+  endDate     DateTime? // Ngày kết thúc khóa học (để trống = mở rộng theo mặc định)
+  timezone    String    @default("Asia/Ho_Chi_Minh")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
-  teacher     User                  @relation("TeacherClassrooms", fields: [teacherId], references: [id])
-  students    ClassroomStudent[]
-  assignments ClassroomAssignment[]
+  teacher       User                    @relation("TeacherClassrooms", fields: [teacherId], references: [id])
+  students      ClassroomStudent[]
+  assignments   ClassroomAssignment[]
+  scheduleRules ClassroomScheduleRule[]
+  sessions      ClassroomSession[]
 
   @@index([teacherId])
+}
+
+// Quy luật lặp của lịch học (vd: thứ 3 & thứ 5 hàng tuần)
+model ClassroomScheduleRule {
+  id          String   @id @default(cuid())
+  classroomId String
+  weekday     Int // 0=CN, 1=T2, 2=T3, 3=T4, 4=T5, 5=T6, 6=T7 (theo JS getDay)
+  startTime   String // giờ bắt đầu dạng "HH:MM" theo giờ địa phương của lớp
+  endTime     String? // giờ kết thúc dạng "HH:MM"
+  createdAt   DateTime @default(now())
+
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@unique([classroomId, weekday, startTime])
+  @@index([classroomId])
+}
+
+// Buổi học cụ thể (materialize từ scheduleRules)
+model ClassroomSession {
+  id          String    @id @default(cuid())
+  classroomId String
+  title       String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  status      String    @default("scheduled") // scheduled | cancelled | completed
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  classroom   Classroom             @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  assignments ClassroomAssignment[]
+
+  @@index([classroomId, startsAt])
 }
 
 model ClassroomStudent {
@@ -286,30 +323,34 @@ model StudentProfile {
 
 // ============ CLASSROOM ASSIGNMENTS ============
 model ClassroomAssignment {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   classroomId     String
   lessonId        String?
+  sessionId       String? // buổi học gắn bài này (dùng để suy ra hạn nộp)
   title           String
   description     String?
-  type            String   @default("homework") // homework, test
+  type            String    @default("homework") // homework, test
   durationMinutes Int?
-  questionHtml    String?  @db.Text
-  questionDocx    String?  @db.Text
-  answerTemplate  String?  @db.Text
-  maxScore        Int      @default(10)
-  isPublished     Boolean  @default(true)
+  dueAt           DateTime? // hạn nộp (mặc định = buổi học kế tiếp)
+  questionHtml    String?   @db.Text
+  questionDocx    String?   @db.Text
+  answerTemplate  String?   @db.Text
+  maxScore        Int       @default(10)
+  isPublished     Boolean   @default(true)
   createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   classroom   Classroom                       @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   lesson      Lesson?                         @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  session     ClassroomSession?               @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   teacher     User?                           @relation("TeacherClassroomAssignments", fields: [createdBy], references: [id], onDelete: SetNull)
   submissions ClassroomAssignmentSubmission[]
 
   @@index([classroomId])
   @@index([lessonId])
+  @@index([sessionId])
   @@index([type])
   @@index([createdBy])
 }
@@ -320,6 +361,7 @@ model ClassroomAssignmentSubmission {
   studentId    String
   content      String    @db.Text
   status       String    @default("submitted") // submitted, graded
+  isLate       Boolean   @default(false) // nộp sau hạn
   score        Float?
   feedback     String?   @db.Text
   gradedAt     DateTime?

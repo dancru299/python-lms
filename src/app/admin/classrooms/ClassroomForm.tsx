@@ -11,6 +11,39 @@ interface User {
   role?: string;
 }
 
+const WEEKDAYS = [
+  { value: 1, label: "Thứ 2" },
+  { value: 2, label: "Thứ 3" },
+  { value: 3, label: "Thứ 4" },
+  { value: 4, label: "Thứ 5" },
+  { value: 5, label: "Thứ 6" },
+  { value: 6, label: "Thứ 7" },
+  { value: 0, label: "Chủ nhật" },
+];
+
+interface DayConfig {
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+}
+
+type DayConfigMap = Record<number, DayConfig>;
+
+function emptyDayConfigs(): DayConfigMap {
+  const map: DayConfigMap = {};
+  for (const day of WEEKDAYS) {
+    map[day.value] = { enabled: false, startTime: "18:00", endTime: "19:30" };
+  }
+  return map;
+}
+
+function toDateInput(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
 interface ClassroomFormProps {
   mode: "create" | "edit";
   classroomId?: string;
@@ -37,6 +70,9 @@ export default function ClassroomForm({
     description: "",
     teacherId: "",
   });
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [dayConfigs, setDayConfigs] = useState<DayConfigMap>(emptyDayConfigs);
 
   useEffect(() => {
     async function loadData() {
@@ -63,6 +99,25 @@ export default function ClassroomForm({
             description: classroom.description || "",
             teacherId: classroom.teacherId || classroom.teacher?.id || "",
           });
+          setStartDate(toDateInput(classroom.startDate));
+          setEndDate(toDateInput(classroom.endDate));
+          if (Array.isArray(classroom.scheduleRules)) {
+            const next = emptyDayConfigs();
+            for (const rule of classroom.scheduleRules as Array<{
+              weekday: number;
+              startTime: string;
+              endTime: string | null;
+            }>) {
+              if (next[rule.weekday]) {
+                next[rule.weekday] = {
+                  enabled: true,
+                  startTime: rule.startTime || "18:00",
+                  endTime: rule.endTime || "",
+                };
+              }
+            }
+            setDayConfigs(next);
+          }
           setSelectedStudents(
             classroom.students.map((item: { student: { id: string } }) => item.student.id)
           );
@@ -76,6 +131,13 @@ export default function ClassroomForm({
 
     loadData();
   }, [classroomId, mode, router]);
+
+  const updateDay = (weekday: number, patch: Partial<DayConfig>) => {
+    setDayConfigs((prev) => ({
+      ...prev,
+      [weekday]: { ...prev[weekday], ...patch },
+    }));
+  };
 
   const toggleStudent = (studentId: string) => {
     setSelectedStudents((prev) =>
@@ -102,6 +164,23 @@ export default function ClassroomForm({
       return;
     }
 
+    const scheduleRules = WEEKDAYS.filter((day) => dayConfigs[day.value]?.enabled)
+      .map((day) => ({
+        weekday: day.value,
+        startTime: dayConfigs[day.value].startTime,
+        endTime: dayConfigs[day.value].endTime.trim() || null,
+      }));
+
+    if (scheduleRules.length > 0 && !startDate) {
+      alert("Vui lòng chọn ngày bắt đầu khóa học khi đã thiết lập lịch học");
+      return;
+    }
+
+    if (startDate && endDate && endDate < startDate) {
+      alert("Ngày kết thúc phải sau ngày bắt đầu");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch(
@@ -112,6 +191,9 @@ export default function ClassroomForm({
           body: JSON.stringify({
             ...formData,
             studentIds: selectedStudents,
+            startDate: startDate || null,
+            endDate: endDate || null,
+            scheduleRules,
           }),
         }
       );
@@ -273,6 +355,93 @@ export default function ClassroomForm({
               className="input min-h-[100px]"
               placeholder="Mô tả ngắn về lớp học..."
             />
+          </div>
+        </div>
+
+        <div className="card p-6">
+          <h2 className="text-lg font-bold text-gray-900">Lịch học</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Chọn các buổi học lặp hàng tuần (vd: thứ 3 &amp; thứ 5). Hệ thống sẽ sinh các
+            buổi học cụ thể trong khoảng thời gian khóa học và dùng buổi kế tiếp làm hạn
+            nộp mặc định cho bài tập.
+          </p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Ngày bắt đầu khóa học
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Ngày kết thúc{" "}
+                <span className="font-normal text-gray-400">
+                  (để trống = tự sinh 16 tuần)
+                </span>
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="input"
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-2">
+            {WEEKDAYS.map((day) => {
+              const config = dayConfigs[day.value];
+              return (
+                <div
+                  key={day.value}
+                  className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center ${
+                    config.enabled ? "border-indigo-200 bg-indigo-50" : "border-gray-200"
+                  }`}
+                >
+                  <label className="flex w-32 cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={config.enabled}
+                      onChange={(e) => updateDay(day.value, { enabled: e.target.checked })}
+                      className="h-5 w-5 rounded text-indigo-600"
+                    />
+                    <span className="font-medium text-gray-900">{day.label}</span>
+                  </label>
+
+                  {config.enabled ? (
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Bắt đầu</span>
+                        <input
+                          type="time"
+                          value={config.startTime}
+                          onChange={(e) => updateDay(day.value, { startTime: e.target.value })}
+                          className="input w-32"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Kết thúc</span>
+                        <input
+                          type="time"
+                          value={config.endTime}
+                          onChange={(e) => updateDay(day.value, { endTime: e.target.value })}
+                          className="input w-32"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400">Không học</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

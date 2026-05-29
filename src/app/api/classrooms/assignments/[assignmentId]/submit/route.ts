@@ -39,6 +39,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         maxScore: true,
         type: true,
         title: true,
+        isPublished: true,
+        dueAt: true,
         classroom: {
           select: {
             name: true,
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    if (!assignment) {
+    if (!assignment || !assignment.isPublished) {
       return NextResponse.json(
         { error: "Không tìm thấy bài giao" },
         { status: 404 }
@@ -70,10 +72,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const existing = await prisma.classroomAssignmentSubmission.findUnique({
+      where: {
+        assignmentId_studentId: {
+          assignmentId,
+          studentId: session.userId,
+        },
+      },
+      select: { status: true },
+    });
+
+    if (existing?.status === "graded") {
+      return NextResponse.json(
+        { error: "Bài này đã được chấm điểm, bạn không thể nộp lại." },
+        { status: 409 }
+      );
+    }
+
     const student = await prisma.user.findUnique({
       where: { id: session.userId },
       select: { name: true },
     });
+
+    const isLate = assignment.dueAt ? new Date() > assignment.dueAt : false;
 
     const submission = await prisma.classroomAssignmentSubmission.upsert({
       where: {
@@ -87,10 +108,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         studentId: session.userId,
         content,
         status: "submitted",
+        isLate,
       },
       update: {
         content,
         status: "submitted",
+        isLate,
         score: null,
         feedback: null,
         gradedAt: null,
@@ -103,7 +126,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         userId: assignment.classroom.teacherId,
         type: "classroom_submission_created",
         title: assignment.type === "test" ? "Có bài kiểm tra vừa nộp" : "Có bài tập vừa nộp",
-        message: `${student?.name || "Học sinh"} đã nộp bài "${assignment.title}" của lớp ${assignment.classroom.name}.`,
+        message: `${student?.name || "Học sinh"} đã nộp bài "${assignment.title}" của lớp ${assignment.classroom.name}${isLate ? " (nộp muộn)" : ""}.`,
         link: `/admin/classrooms/${assignment.classroomId}/assignments/${assignmentId}#submission-${submission.id}`,
       },
     });

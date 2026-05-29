@@ -9,6 +9,7 @@ import type {
   LessonContentBlock,
   LessonMediaView,
 } from "@/lib/lessons/lesson-media";
+import { sanitizeLessonHtml } from "@/lib/sanitize-html";
 
 const PythonCodeEditor = dynamic(() => import("@/components/PythonCodeEditor"), {
   ssr: false,
@@ -248,6 +249,11 @@ export default function LessonClientPage({
   const [submissions, setSubmissions] = useState<Record<string, string>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const user = initialUser;
+  const dashboardHref = user
+    ? user.role === "admin" || user.role === "teacher"
+      ? "/admin"
+      : "/dashboard"
+    : "/library";
   const [showAuthModal, setShowAuthModal] = useState(false);
   const loading = false;
   const segmentStartedAtRef = useRef<number | null>(null);
@@ -433,7 +439,7 @@ export default function LessonClientPage({
           <i className="fa-solid fa-exclamation-triangle text-5xl text-red-500 mb-4"></i>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Không tìm thấy bài giảng</h2>
           <p className="text-gray-500 mb-6">Bài giảng này không tồn tại hoặc đã bị xóa</p>
-          <Link href="/" className="btn btn-primary">
+          <Link href={dashboardHref} className="btn btn-primary">
             <i className="fa-solid fa-arrow-left mr-2"></i>
             Quay lại Dashboard
           </Link>
@@ -499,14 +505,14 @@ export default function LessonClientPage({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <Link
-              href={user ? "/" : "/library"}
+              href={dashboardHref}
               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 transition hover:bg-slate-200"
             >
               <i className="fa-solid fa-arrow-left text-xs"></i>
               {user ? "Dashboard" : "Thư viện"}
             </Link>
             <i className="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-            <Link href={user ? "/#lo-trinh" : "/library"} className="font-medium text-slate-600 transition hover:text-indigo-600">
+            <Link href={dashboardHref} className="font-medium text-slate-600 transition hover:text-indigo-600">
               {lesson.chapter.title}
             </Link>
             <i className="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
@@ -784,23 +790,26 @@ export default function LessonClientPage({
                       Bài tập {index + 1}: {exercise.title}
                     </h2>
                     <div className="mb-4 flex flex-wrap items-center gap-2">
-                      <span className={`px-3 py-1 rounded-full border text-sm font-medium ${difficultyMeta.className}`}>
+                      <span className={`inline-flex items-center ml-2 gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-sm font-medium ${difficultyMeta.className}`}>
+                        <i className="fa-solid fa-signal text-[11px]"></i>
                         {difficultyMeta.label}
                       </span>
-                      <span className="px-3 py-1 rounded-full border border-sky-200 bg-white text-sm font-medium text-sky-700">
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">
+                        <i className="fa-solid fa-star text-[11px] text-amber-400"></i>
                         {exercise.points} điểm
                       </span>
-                      <span className={`px-3 py-1 rounded-full border text-sm font-medium ${
+                      <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-sm font-medium ${
                         exercise.answerVisible
                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border-slate-200 bg-slate-100 text-slate-600"
                       }`}>
+                        <i className={`fa-solid ${exercise.answerVisible ? "fa-lock-open" : "fa-lock"} text-[11px]`}></i>
                         {exercise.answerVisible ? "Có đáp án mẫu" : "Đáp án đang khóa"}
                       </span>
                     </div>
                     
                     {questionHtml && (
-                      <div className="text-gray-700 mb-4 lesson-content exercise-content" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+                      <div className="text-gray-700 mb-4 lesson-content exercise-content" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(questionHtml) }} />
                     )}
 
                     <button
@@ -873,25 +882,27 @@ export default function LessonClientPage({
                         <h2 className="text-xl font-semibold text-purple-700">
                           BTVN {index + 1}: {exercise.title}
                         </h2>
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2">
                           {hasSubmitted && (
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
                               isGraded ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
                             }`}>
                               {isGraded ? `✓ Đã chấm: ${exercise.mySubmission?.score}/${exercise.points}` : "⏳ Chờ chấm"}
                             </span>
                           )}
-                          <span className={`px-3 py-1 rounded-full border text-sm font-medium ${difficultyMeta.className}`}>
+                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-sm font-medium ${difficultyMeta.className}`}>
+                            <i className="fa-solid fa-signal text-[11px]"></i>
                             {difficultyMeta.label}
                           </span>
-                          <span className="px-3 py-1 rounded-full border border-purple-200 bg-white text-sm font-medium text-purple-700">
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-sm font-semibold text-purple-700">
+                            <i className="fa-solid fa-star text-[11px] text-amber-400"></i>
                             {exercise.points} điểm
                           </span>
                         </div>
                       </div>
                       
                       {questionHtml && (
-                        <div className="text-gray-700 mb-4 lesson-content exercise-content" dangerouslySetInnerHTML={{ __html: questionHtml }} />
+                        <div className="text-gray-700 mb-4 lesson-content exercise-content" dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(questionHtml) }} />
                       )}
 
                       {/* Show graded result */}
@@ -1037,7 +1048,7 @@ export default function LessonClientPage({
               </Link>
             ) : (
               <Link
-                href={user ? "/" : "/library"}
+                href={dashboardHref}
                 className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700"
               >
                 <i className="fa-solid fa-arrow-left"></i>
@@ -1371,36 +1382,6 @@ export default function LessonClientPage({
           font-weight: 800;
         }
 
-        .teaching-canvas-notes {
-          display: flex;
-          min-width: 0;
-          flex-direction: column;
-          gap: 0.9rem;
-          border-radius: 0.9rem;
-          border: 1px solid #e2e8f0;
-          background: #fefce8;
-          padding: 1rem;
-          color: #713f12;
-        }
-
-        .teaching-notes-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          color: #92400e;
-          font-size: 0.75rem;
-          font-weight: 900;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-        }
-
-        .teaching-canvas-notes p {
-          margin: 0;
-          color: #713f12;
-          font-size: 0.95rem;
-          line-height: 1.7;
-        }
-
         .teaching-canvas-strip {
           display: flex;
           flex-wrap: wrap;
@@ -1658,12 +1639,14 @@ export default function LessonClientPage({
           word-wrap: break-word;
           letter-spacing: 0.01em;
         }
-        .code-block *, .code-block code {
+        .code-block *, .code-block code,
+        .lesson-content pre *, .lesson-content pre code {
           background: transparent !important;
           padding: 0 !important;
           border-radius: 0 !important;
           border: none !important;
-          color: inherit;
+          color: inherit !important;
+          font-weight: inherit !important;
           font-size: inherit;
         }
         /* Comment color blue (applied by highlightComments JS function) */

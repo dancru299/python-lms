@@ -57,6 +57,17 @@ function getPublicErrorMessage(
     return `${providerLabel} chưa được cấu hình đầy đủ.`;
   }
 
+  if (
+    details.includes("JSON bị cắt ngắn") ||
+    details.includes("JSON hợp lệ") ||
+    details.includes("Unexpected end") ||
+    details.includes("Unexpected token") ||
+    details.includes("after array element") ||
+    details.includes("after property value")
+  ) {
+    return details;
+  }
+
   switch (status) {
     case 400:
       return `Yêu cầu gửi tới ${providerLabel} không hợp lệ.`;

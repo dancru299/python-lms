@@ -17,7 +17,7 @@ import NotificationBell from "@/components/notifications/NotificationBell";
 import type { ActionLink, SectionLink, StudentNavKey } from "./student-shell-shared";
 
 const navItems: Array<{ key: StudentNavKey; href: string; label: string; icon: string }> = [
-  { key: "home", href: "/", label: "Tổng quan", icon: "fa-house" },
+  { key: "home", href: "/dashboard", label: "Tổng quan", icon: "fa-house" },
   { key: "classrooms", href: "/classrooms", label: "Lớp học", icon: "fa-users" },
   { key: "library", href: "/library", label: "Thư viện", icon: "fa-book-open" },
   { key: "profile", href: "/profile", label: "Hồ sơ", icon: "fa-id-card" },

@@ -15,6 +15,8 @@ import type {
   LessonAiClientConfig,
   LessonAiProvider,
 } from "@/lib/ai/provider-types";
+import type { LessonDraft } from "@/lib/lessons/lesson-draft";
+import toast from "react-hot-toast";
 
 interface Section extends EditableLessonSection {
   id: string;
@@ -294,6 +296,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   const [aiContent, setAiContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiDraftReady, setAiDraftReady] = useState(false);
+  const [aiMeta, setAiMeta] = useState<{ provider: string; model: string } | null>(null);
   const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
     initialAiConfig.defaultProvider
   );
@@ -506,11 +509,30 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
   const handleAiGenerate = async () => {
     if (!aiContent.trim()) {
-      alert("Vui lòng nhập nội dung để AI phân tích!");
+      toast.error("Vui lòng nhập nội dung để AI phân tích!");
       return;
     }
 
+    const defaultSectionTitles = ["Khái niệm", "Ví dụ minh họa", "Thực hành"];
+    const hasExistingContent =
+      initialLesson ||
+      exercises.length > 0 ||
+      sections.some(
+        (s, i) =>
+          s.title !== (defaultSectionTitles[i] ?? "Tab mới") ||
+          s.content.trim().length > 50
+      );
+
+    if (hasExistingContent) {
+      const confirmed = window.confirm(
+        "AI sẽ thay toàn bộ nội dung hiện tại (sections, bài tập, tiêu đề). Tiếp tục?"
+      );
+      if (!confirmed) return;
+    }
+
     setIsGenerating(true);
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 90_000);
     try {
       const res = await fetch("/api/admin/lessons/generate", {
         method: "POST",
@@ -520,71 +542,74 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           provider: aiProvider,
           model: aiModel,
         }),
+        signal: abortController.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         throw new Error(await readAiErrorMessage(res));
       }
 
-      const generatedData = await res.json();
+      // Server đã chạy normalizeLessonDraft — dùng thẳng, không chuẩn hóa lại
+      const generatedData = (await res.json()) as LessonDraft & {
+        meta?: { provider: string; model: string };
+      };
       const generatedAt = Date.now();
 
-      // Update Form Data
+      if (generatedData.meta) {
+        setAiMeta(generatedData.meta);
+      }
+
+      // Update Form Data — dùng trực tiếp giá trị đã chuẩn hóa từ server
       setFormData((prev) => ({
         ...prev,
         title: generatedData.title || prev.title,
-        duration: Number(generatedData.duration) || (initialLesson ? prev.duration : 120),
+        duration: generatedData.duration || (initialLesson ? prev.duration : 120),
         difficulty: generatedData.difficulty || (initialLesson ? prev.difficulty : "beginner"),
         objectives: {
           knowledge:
-            generatedData.objectives?.knowledge ||
+            generatedData.objectives.knowledge ||
             (initialLesson ? prev.objectives.knowledge : ""),
           skills:
-            generatedData.objectives?.skills || (initialLesson ? prev.objectives.skills : ""),
+            generatedData.objectives.skills ||
+            (initialLesson ? prev.objectives.skills : ""),
           attitude:
-            generatedData.objectives?.attitude ||
+            generatedData.objectives.attitude ||
             (initialLesson ? prev.objectives.attitude : ""),
         },
       }));
 
-      // Update Sections
-      if (
-        generatedData.sections &&
-        Array.isArray(generatedData.sections) &&
-        generatedData.sections.length > 0
-      ) {
-        const newSections = generatedData.sections.map((sec: any, idx: number) => ({
-          id: `${initialLesson ? "ai-sec" : "sec-ai"}-${generatedAt}-${idx}`,
-          title: sec.title || `Phần ${idx + 1}`,
-          content: Array.isArray(sec.contentBlocks)
-            ? lessonContentBlocksToHtml(sec.contentBlocks as LessonContentBlock[])
-            : sec.content || "",
-          contentFormat: Array.isArray(sec.contentBlocks)
-            ? "canvas"
-            : sec.contentFormat || "html",
-          contentBlocks: Array.isArray(sec.contentBlocks)
+      // Update Sections — server đã chuẩn hóa, chỉ cần gán id + derive content từ contentBlocks
+      if (generatedData.sections.length > 0) {
+        const newSections = generatedData.sections.map((sec, idx) => {
+          const contentBlocks = Array.isArray(sec.contentBlocks)
             ? (sec.contentBlocks as LessonContentBlock[])
-            : null,
-        }));
+            : null;
+          return {
+            id: `${initialLesson ? "ai-sec" : "sec-ai"}-${generatedAt}-${idx}`,
+            title: sec.title,
+            content: contentBlocks?.length
+              ? lessonContentBlocksToHtml(contentBlocks)
+              : sec.content,
+            contentFormat: contentBlocks?.length ? "canvas" : sec.contentFormat || "html",
+            contentBlocks,
+          };
+        });
         setSections(newSections);
         setActiveSection(newSections[0]?.id || null);
       }
 
-      // Update Exercises
-      if (
-        generatedData.exercises &&
-        Array.isArray(generatedData.exercises) &&
-        generatedData.exercises.length > 0
-      ) {
-        const newExercises = generatedData.exercises.map((ex: any, idx: number) => ({
+      // Update Exercises — server đã chuẩn hóa difficulty/points/answerVisible, chỉ cần gán id
+      if (generatedData.exercises.length > 0) {
+        const newExercises = generatedData.exercises.map((ex, idx) => ({
           id: `${initialLesson ? "ai-ex" : "ex-ai"}-${generatedAt}-${idx}`,
-          type: ex.type || "practice",
-          title: ex.title || "Bài tập AI",
-          question: ex.question || "",
-          answer: ex.answer || "",
-          difficulty: ex.difficulty || "medium",
-          points: Number(ex.points) || 10,
-          answerVisible: Boolean(ex.answerVisible ?? ex.type === "practice"),
+          type: ex.type,
+          title: ex.title,
+          question: ex.question,
+          answer: ex.answer,
+          difficulty: ex.difficulty,
+          points: ex.points,
+          answerVisible: ex.answerVisible,
         }));
         setExercises(newExercises);
       }
@@ -593,16 +618,19 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       setCreationMode("manual");
       setAiDraftReady(true);
       if (initialLesson) {
-        alert("AI đã xử lý xong! Bạn hãy kiểm tra lại cấu trúc trong chế độ thủ công.");
+        toast.success("AI đã xử lý xong! Hãy kiểm tra lại cấu trúc trước khi lưu.");
       }
 
     } catch (error) {
-      alert(
-        initialLesson
-          ? "Quá trình AI tạo bài giảng gặp lỗi.\n" +
-              (error instanceof Error ? error.message : "Vui lòng thử lại.")
-          : "Đã xảy ra lỗi khi tạo bằng AI: " +
-              (error instanceof Error ? error.message : "Vui lòng thử lại.")
+      clearTimeout(timeoutId);
+      const isTimeout =
+        error instanceof Error &&
+        (error.name === "AbortError" || error.message.includes("abort"));
+      toast.error(
+        isTimeout
+          ? "AI phản hồi quá lâu (90 giây). Hãy rút ngắn nội dung hoặc chọn provider nhanh hơn."
+          : (error instanceof Error ? error.message : "Đã xảy ra lỗi khi tạo bằng AI."),
+        { duration: 6000 }
       );
       console.warn("AI generation request failed:", error);
     } finally {
@@ -613,11 +641,11 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   // Save lesson
   const handleSave = async () => {
     if (!formData.chapterId) {
-      alert("Vui lòng chọn chương học!");
+      toast.error("Vui lòng chọn chương học!");
       return;
     }
     if (!formData.title.trim()) {
-      alert("Vui lòng nhập tên bài giảng!");
+      toast.error("Vui lòng nhập tên bài giảng!");
       return;
     }
 
@@ -661,13 +689,13 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         router.push("/admin/lessons");
       } else {
         const data = await res.json();
-        alert(
+        toast.error(
           data.error ||
             (initialLesson ? "Lỗi khi cập nhật bài giảng!" : "Lỗi khi tạo bài giảng!")
         );
       }
     } catch (error) {
-      alert("Đã xảy ra lỗi!");
+      toast.error(error instanceof Error ? error.message : "Đã xảy ra lỗi!");
     } finally {
       setSaving(false);
     }
@@ -828,6 +856,19 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
                 className="min-h-[420px] w-full resize-y border-0 p-4 text-sm leading-6 text-slate-800 outline-none focus:ring-2 focus:ring-purple-300"
                 placeholder="Dán nội dung sách, giáo án, ghi chú, HTML hoặc code mẫu vào đây. AI sẽ chuyển thành các tab và teaching canvas để bạn kiểm tra trước khi lưu."
               />
+              <div className={`flex items-center justify-end gap-2 border-t px-3 py-1.5 text-xs ${
+                aiContent.length > 50_000
+                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : "border-gray-100 text-gray-400"
+              }`}>
+                {aiContent.length > 50_000 && (
+                  <span className="font-medium">
+                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                    Nội dung dài — có thể vượt giới hạn model, cân nhắc tách nhỏ.
+                  </span>
+                )}
+                <span>{aiContent.length.toLocaleString("vi-VN")} ký tự</span>
+              </div>
             </div>
 
             <div className="bg-purple-50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -873,6 +914,11 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
                 </span>
                 <div>
                   <div className="font-bold">AI đã tạo bản nháp canvas.</div>
+                  {aiMeta && (
+                    <p className="mt-0.5 text-xs font-medium text-purple-600">
+                      {aiMeta.provider} · {aiMeta.model}
+                    </p>
+                  )}
                   <p className="mt-1 leading-6">
                     Hãy kiểm tra từng tab, từng canvas, reveal steps, code/ảnh và bài tập trước khi lưu.
                   </p>

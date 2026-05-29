@@ -5,6 +5,7 @@ import type {
   LessonImageAnnotation,
   LessonMediaView,
 } from "@/lib/lessons/lesson-media";
+import { sanitizeLessonHtml } from "@/lib/sanitize-html";
 
 interface LessonContentRendererProps {
   html: string;
@@ -28,10 +29,10 @@ export default function LessonContentRenderer({
     () => new Map(media.map((item) => [item.id, item])),
     [media]
   );
-  const enhancedHtml = useMemo(
-    () => (canEnhanceHtml ? enhanceLessonHtml(html, mediaById, editable) : html || ""),
-    [html, mediaById, editable, canEnhanceHtml]
-  );
+  const enhancedHtml = useMemo(() => {
+    const safeHtml = sanitizeLessonHtml(html || "");
+    return canEnhanceHtml ? enhanceLessonHtml(safeHtml, mediaById, editable) : safeHtml;
+  }, [html, mediaById, editable, canEnhanceHtml]);
   const lightboxMedia = lightboxMediaId ? mediaById.get(lightboxMediaId) : null;
 
   useEffect(() => {

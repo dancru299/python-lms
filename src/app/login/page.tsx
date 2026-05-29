@@ -30,7 +30,7 @@ export default function LoginPage() {
       if (data.user.role === "teacher" || data.user.role === "admin") {
         window.location.replace("/admin");
       } else {
-        window.location.replace("/");
+        window.location.replace("/dashboard");
       }
     } catch {
       setError("Đã xảy ra lỗi, vui lòng thử lại");

@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma";
 import { getCookieSessionUser } from "@/lib/cookie-session";
 import { convertDocxToHtml } from "@/lib/docx-html";
+import { getNextSession } from "@/lib/classroom-schedule";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -247,14 +248,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Hạn nộp: ưu tiên giá trị giáo viên nhập tay, nếu không thì lấy buổi học kế tiếp.
+    let dueAt: Date | null = null;
+    let sessionId: string | null = null;
+    const dueAtRaw = String(formData.get("dueAt") || "").trim();
+    if (dueAtRaw) {
+      const parsed = new Date(dueAtRaw);
+      if (!Number.isNaN(parsed.getTime())) {
+        dueAt = parsed;
+      }
+    } else {
+      const nextSession = await getNextSession(classroomId);
+      if (nextSession) {
+        dueAt = nextSession.startsAt;
+        sessionId = nextSession.id;
+      }
+    }
+
     const assignment = await prisma.classroomAssignment.create({
       data: {
         classroomId,
         lessonId,
+        sessionId,
+        dueAt,
         type,
         title:
           title ||
-          `${type === "test" ? "Bài kiểm tra" : "Bài t?p v? nhà"} - ${lesson.title}`,
+          `${type === "test" ? "Bài kiểm tra" : "Bài tập về nhà"} - ${lesson.title}`,
         description,
         durationMinutes,
         questionHtml,

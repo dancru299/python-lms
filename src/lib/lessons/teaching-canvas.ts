@@ -1,4 +1,5 @@
 import type {
+  CanvasCard,
   LessonContentBlock,
   LessonTeachingCanvasBlock,
   LessonTeachingCanvasStep,
@@ -6,10 +7,14 @@ import type {
 
 export type TeachingCanvasKind =
   | "concept"
+  | "split"
   | "code"
   | "media"
   | "steps"
-  | "note";
+  | "note"
+  | "hero"
+  | "cards"
+  | "highlight";
 
 export interface TeachingCanvasStep {
   id: string;
@@ -23,6 +28,9 @@ export interface TeachingCanvas {
   title: string;
   html: string;
   notesHtml: string;
+  code?: string;
+  mediaId?: string;
+  cards?: CanvasCard[];
   steps: TeachingCanvasStep[];
   sourceBlockIds: string[];
 }
@@ -160,8 +168,11 @@ function buildFromTeachingCanvasBlocks(section: TeachingCanvasSectionSource) {
       id: block.id || `${section.id}-canvas-${index + 1}`,
       kind: getTeachingCanvasKind(block),
       title: block.title || `${section.title} ${index + 1}`,
-      html: buildTeachingCanvasMainHtml(block),
+      html: block.mainHtml || "",
       notesHtml: block.notesHtml || "",
+      code: block.code?.trim() || undefined,
+      mediaId: block.mediaId?.trim() || undefined,
+      cards: block.cards,
       steps:
         block.reveal === false
           ? []
@@ -175,18 +186,22 @@ function buildFromTeachingCanvasBlocks(section: TeachingCanvasSectionSource) {
 }
 
 function getTeachingCanvasKind(block: LessonTeachingCanvasBlock): TeachingCanvasKind {
-  if (block.layout === "code" || block.code?.trim()) {
-    return "code";
+  switch (block.layout) {
+    case "hero": return "hero";
+    case "cards": return "cards";
+    case "highlight": return "highlight";
+    case "code": return "code";
+    case "media": return "media";
+    case "split":
+      if (block.mediaId?.trim()) return "split";
+      if (block.code?.trim()) return "code";
+      return "concept";
+    case "text": return "concept";
   }
 
-  if (block.layout === "media" || block.mediaId?.trim()) {
-    return "media";
-  }
-
-  if (block.steps.length > 0) {
-    return "steps";
-  }
-
+  if (block.code?.trim()) return "code";
+  if (block.mediaId?.trim()) return "media";
+  if (block.steps.length > 0) return "steps";
   return "concept";
 }
 

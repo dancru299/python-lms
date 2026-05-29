@@ -377,82 +377,135 @@ function resolveLessonGenerationSelection(
 function buildSystemPrompt(): string {
   return [
     "You are a senior instructional designer and Python teacher.",
-    "Transform raw study material into a Vietnamese lesson draft.",
-    "Return only one valid JSON object and nothing else.",
-    "Do not wrap the JSON in markdown fences.",
-    "All user-facing prose must be in Vietnamese.",
-    'Lesson section "content" and exercise "question" must be valid HTML.',
-    'Prefer structured lesson section "contentBlocks" with type "teaching_canvas" for classroom slides.',
-    'When showing code, always wrap it in <div class="code-block">...</div>.',
-    "When a concept needs a screenshot or visual aid, insert a lesson image placeholder div instead of inventing an image URL.",
-    'Exercise "answer" must be plain text or plain code, never HTML.',
-    "If the source has no exercise, create one relevant practice exercise.",
-    "Keep the structure concise, practical, and classroom-ready.",
+    "Transform raw study material into a well-structured Vietnamese lesson draft.",
+    "Return ONLY one valid JSON object — no markdown fences, no extra text before or after.",
+    "All user-facing text (titles, objectives, canvas content, exercise questions) MUST be in Vietnamese.",
+    "Keep every response within 8000 tokens. Prioritize completeness of structure over verbosity of prose.",
   ].join("\n");
 }
 
 function buildUserPrompt(content: string): string {
   return [
     "Return JSON with exactly this shape:",
-    "{",
-    '  "title": "string",',
-    '  "duration": 120,',
-    '  "difficulty": "beginner | intermediate | advanced",',
-    '  "objectives": {',
-    '    "knowledge": "string",',
-    '    "skills": "string",',
-    '    "attitude": "string"',
-    "  },",
-    '  "sections": [',
-    "    {",
-    '      "title": "string",',
-    '      "content": "HTML string",',
-    '      "contentFormat": "canvas",',
-    '      "contentBlocks": [',
-    "        {",
-    '          "id": "canvas-1",',
-    '          "type": "teaching_canvas",',
-    '          "title": "string",',
-    '          "layout": "text | split | code | media",',
-    '          "mainHtml": "HTML string",',
-    '          "code": "plain Python code or empty string",',
-    '          "mediaId": "",',
-    '          "notesHtml": "HTML string",',
-    '          "reveal": true,',
-    '          "steps": [',
-    '            { "id": "step-1", "text": "short reveal sentence", "html": "optional HTML" }',
-    "          ]",
-    "        }",
-    "      ]",
-    "    }",
-    "  ],",
-    '  "exercises": [',
-    "    {",
-    '      "type": "practice | homework",',
-    '      "title": "string",',
-    '      "question": "HTML string",',
-    '      "answer": "plain text or plain code",',
-    '      "points": 10,',
-    '      "difficulty": "easy | medium | hard",',
-    '      "answerVisible": true',
-    "    }",
-    "  ]",
-    "}",
+    `{
+  "title": "string — Vietnamese lesson title",
+  "duration": 120,
+  "difficulty": "beginner | intermediate | advanced",
+  "objectives": {
+    "knowledge": "Vietnamese string",
+    "skills": "Vietnamese string",
+    "attitude": "Vietnamese string"
+  },
+  "sections": [
+    {
+      "title": "string — short tab label in Vietnamese",
+      "content": "",
+      "contentFormat": "canvas",
+      "contentBlocks": [
+        {
+          "id": "canvas-1",
+          "type": "teaching_canvas",
+          "title": "string — one-line canvas headline in Vietnamese",
+          "layout": "hero | cards | highlight | text | split | code | media",
+          "mainHtml": "HTML string — main explanation (empty string for hero/cards layout)",
+          "code": "plain Python code only, no HTML tags, empty string if none",
+          "mediaId": "",
+          "notesHtml": "",
+          "reveal": true,
+          "steps": [
+            { "id": "step-1", "text": "short Vietnamese bullet sentence" }
+          ],
+          "cards": [
+            { "icon": "fa-icon-name", "title": "Card title", "description": "Short description" }
+          ]
+        }
+      ]
+    }
+  ],
+  "exercises": [
+    {
+      "type": "practice | homework",
+      "title": "string",
+      "question": "HTML string in Vietnamese",
+      "answer": "plain text or plain Python code, never HTML",
+      "points": 10,
+      "difficulty": "easy | medium | hard",
+      "answerVisible": true
+    }
+  ]
+}`,
     "",
-    "Rules:",
-    "- Create 2-5 sections when the source is rich enough.",
-    "- Section titles should be short and suitable for lesson tabs.",
-    "- Each section should contain 2-5 teaching_canvas blocks unless the topic is very short.",
-    "- Each canvas should teach one main idea and work as both a slide and a note-taking surface.",
-    "- Use reveal steps for bullet ideas: 2-5 short Vietnamese sentences per canvas.",
-    "- Put teacher/student reminders in notesHtml. Put runnable Python in code without HTML tags.",
-    "- Use layout code when code is the focus, media when a visual is needed, split for mixed explanation.",
-    "- Keep HTML clean. Use h2, h3, p, ul, ol, li, table, thead, tbody, tr, th, td, strong, em, code, div when needed.",
-    '- Use image placeholders when a screen, UI location, diagram, or visual sequence would help: <div class="lesson-media-placeholder" data-placeholder-id="short-kebab-id" data-suggested-caption="Mo ta anh can chen">Can anh minh hoa: mo ta ngan</div>.',
-    "- Placeholder ids must be unique within the draft and use lowercase letters, numbers, and hyphens.",
-    "- For homework, make the question more complete and outcome-driven.",
-    "- For practice, keep the task shorter and suitable for immediate reinforcement.",
-    "- Use realistic Python examples instead of placeholders.",
+    "Layout selection rules — pick the BEST layout for each canvas:",
+    "- 'hero': FIRST canvas of the FIRST section ONLY. Large title slide (title = lesson name, mainHtml = short tagline). No steps, no code.",
+    "- 'cards': When listing 2–4 parallel concepts each needing an icon (e.g. use-cases, features, categories). Use 'cards' array — omit mainHtml. FA solid icon names (fa-youtube, fa-robot, fa-rocket, fa-database, fa-code, fa-chart-bar, fa-gear, fa-globe, fa-user, fa-shield, fa-bolt, fa-star).",
+    "- 'highlight': Key concept, definition, or memorable rule. mainHtml is the highlighted content. Steps optionally reveal elaboration.",
+    "- 'code': Canvas focused on a code example. mainHtml = brief explanation. code field = runnable Python. Steps walk through the code line by line.",
+    "- 'split': Visual concept needing an image. mainHtml on left, placeholder image on right. Use media-placeholder inside mainHtml.",
+    "- 'text': Pure prose explanation, no code or image needed.",
+    "",
+    "Additional rules:",
+    "- Create 2–5 sections. Section titles must be short tab labels.",
+    "- Each section: 2–5 teaching_canvas blocks. Each canvas teaches exactly one idea.",
+    "- reveal steps: 2–5 short Vietnamese sentences. Use steps to reveal key points progressively.",
+    "- code field: PLAIN Python only — no <code>, no <div>, no HTML at all. Empty string when not needed.",
+    "- mainHtml: valid HTML using h2, h3, p, ul, ol, li, strong, em, code, table, div. Keep it concise.",
+    "- When a screenshot or diagram would help (split layout): embed placeholder in mainHtml:",
+    '  <div class="lesson-media-placeholder" data-placeholder-id="unique-kebab-id" data-suggested-caption="Mô tả ảnh">Ảnh: mô tả ngắn</div>',
+    "  Placeholder ids must be unique, lowercase, letters/numbers/hyphens only. Leave mediaId as empty string.",
+    "- For homework: detailed, outcome-driven question. For practice: short, immediate reinforcement.",
+    "- answer field: realistic, runnable Python. Never HTML.",
+    "- If no exercise in source, create one practice exercise.",
+    "- Use realistic variable names and data, not foo/bar placeholders.",
+    "",
+    "EXAMPLES of well-formed canvas blocks (one per layout):",
+    `[
+  {
+    "id": "canvas-intro",
+    "type": "teaching_canvas",
+    "title": "Bài 1: Làm quen với Python",
+    "layout": "hero",
+    "mainHtml": "<p>Hành trình trở thành Nhà Sáng Tạo Công Nghệ</p>",
+    "code": "", "mediaId": "", "notesHtml": "", "reveal": false, "steps": []
+  },
+  {
+    "id": "canvas-usecases",
+    "type": "teaching_canvas",
+    "title": "Python ở đâu quanh ta?",
+    "layout": "cards",
+    "mainHtml": "", "code": "", "mediaId": "", "notesHtml": "", "reveal": false, "steps": [],
+    "cards": [
+      { "icon": "fa-youtube", "title": "Giải trí", "description": "YouTube dùng Python để gợi ý video em thích xem." },
+      { "icon": "fa-rocket",  "title": "Khám phá", "description": "NASA dùng Python để điều khiển tàu vũ trụ." },
+      { "icon": "fa-robot",   "title": "Trí tuệ nhân tạo", "description": "Các chatbot thông minh đều nói ngôn ngữ Python." }
+    ]
+  },
+  {
+    "id": "canvas-print-basics",
+    "type": "teaching_canvas",
+    "title": "print() — Lệnh in ra màn hình",
+    "layout": "code",
+    "mainHtml": "<p>Hàm <code>print()</code> hiển thị giá trị ra màn hình console.</p>",
+    "code": "name = 'An'\nprint('Xin chào,', name)\n# Kết quả: Xin chào, An",
+    "mediaId": "", "notesHtml": "", "reveal": true,
+    "steps": [
+      { "id": "canvas-print-basics-step-1", "text": "print() nhận một hoặc nhiều đối số, cách nhau bởi dấu phẩy." },
+      { "id": "canvas-print-basics-step-2", "text": "Python tự thêm dấu cách giữa các đối số khi in." },
+      { "id": "canvas-print-basics-step-3", "text": "Kết quả in ra màn hình theo thứ tự từ trái sang phải." }
+    ]
+  },
+  {
+    "id": "canvas-def",
+    "type": "teaching_canvas",
+    "title": "Python là gì?",
+    "layout": "highlight",
+    "mainHtml": "<p><strong>Python</strong> là ngôn ngữ lập trình bậc cao, dễ học, cú pháp gần tiếng Anh — lý tưởng để bắt đầu.</p>",
+    "code": "", "mediaId": "", "notesHtml": "", "reveal": true,
+    "steps": [
+      { "id": "s1", "text": "Guido van Rossum tạo ra Python năm 1991 tại Hà Lan." },
+      { "id": "s2", "text": "Python được đặt tên theo chương trình hài Monty Python, không phải loài rắn." }
+    ]
+  }
+]`,
     "",
     "Source material:",
     "<source>",
@@ -478,15 +531,30 @@ function parseJsonObject(rawText: string): unknown {
 
   try {
     return JSON.parse(cleaned);
-  } catch {
+  } catch (firstError) {
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
 
     if (start === -1 || end === -1 || end <= start) {
-      throw new Error("Model did not return a valid JSON object.");
+      throw new Error("AI không trả về JSON hợp lệ. Hãy thử lại hoặc rút gọn nội dung nguồn.");
     }
 
-    return JSON.parse(cleaned.slice(start, end + 1));
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+      const isTruncated =
+        firstError instanceof Error &&
+        (firstError.message.includes("position") ||
+          firstError.message.includes("Unexpected end") ||
+          firstError.message.includes("after array element") ||
+          firstError.message.includes("after property value"));
+
+      throw new Error(
+        isTruncated
+          ? "AI trả về JSON bị cắt ngắn (vượt giới hạn output token). Hãy rút gọn tài liệu nguồn hoặc thử lại."
+          : "AI không trả về JSON hợp lệ. Hãy thử lại."
+      );
+    }
   }
 }
 
@@ -535,14 +603,15 @@ async function requestGemini(
     const genAI = new GoogleGenerativeAI(selection.apiKey);
     const model = genAI.getGenerativeModel({
       model: selection.model,
+      systemInstruction: systemPrompt,
       generationConfig: {
         temperature: 0.2,
+        maxOutputTokens: 32768,
+        responseMimeType: "application/json",
       },
     });
 
-    const result = await model.generateContent(
-      [systemPrompt, userPrompt].join("\n\n")
-    );
+    const result = await model.generateContent(userPrompt);
 
     return {
       model: selection.model,
@@ -678,6 +747,7 @@ async function requestOpenAiCompatible(
   const payload: Record<string, unknown> = {
     model: selection.model,
     temperature: 0.2,
+    max_tokens: 16384,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -688,11 +758,30 @@ async function requestOpenAiCompatible(
     payload.response_format = { type: "json_object" };
   }
 
-  const response = await fetch(`${selection.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: buildOpenAiCompatibleHeaders(selection.provider, selection.apiKey),
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 85_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${selection.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: buildOpenAiCompatibleHeaders(selection.provider, selection.apiKey),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const isAbort =
+      err instanceof Error && (err.name === "AbortError" || err.message.includes("abort"));
+    throw new ProviderRequestError(
+      isAbort
+        ? `Provider "${selection.provider}" không phản hồi trong thời gian cho phép (85 giây).`
+        : (err instanceof Error ? err.message : "Network error"),
+      isAbort ? 504 : 503,
+      selection.provider
+    );
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     let message = `Provider ${selection.provider} trả về lỗi ${response.status}.`;

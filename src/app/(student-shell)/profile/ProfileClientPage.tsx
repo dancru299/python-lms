@@ -342,7 +342,7 @@ export default function ProfileClientPage({
           <div className="card rounded-[1.5rem] p-5">
             <h2 className="text-lg font-bold text-slate-900">Điều hướng nhanh</h2>
             <div className="mt-4 grid gap-3">
-              <Link href="/" className="rounded-2xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:bg-slate-50">
+              <Link href="/dashboard" className="rounded-2xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:bg-slate-50">
                 <div className="font-semibold text-slate-900">Tổng quan học tập</div>
                 <p className="mt-1 text-sm text-slate-500">Quay lại để xem tiến độ và bài nộp.</p>
               </Link>

@@ -6,7 +6,7 @@ import { getUnreadNotificationCount } from "@/lib/notifications";
 export default async function StudentShellLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
 
-  if (!session || session.role !== "student") {
+  if (!session) {
     return children;
   }
 
