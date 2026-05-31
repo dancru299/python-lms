@@ -180,9 +180,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const body = await request.json();
 
-    const data: { isPublished?: boolean; isLocked?: boolean } = {};
+    const data: { isPublished?: boolean; isLocked?: boolean; isPublicPreview?: boolean } = {};
     if (typeof body.isPublished === "boolean") data.isPublished = body.isPublished;
     if (typeof body.isLocked === "boolean") data.isLocked = body.isLocked;
+    if (typeof body.isPublicPreview === "boolean") data.isPublicPreview = body.isPublicPreview;
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "Không có trường hợp lệ để cập nhật" }, { status: 400 });
@@ -196,7 +197,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const lesson = await prisma.lesson.update({
       where: { id },
       data,
-      select: { id: true, isPublished: true, isLocked: true },
+      select: { id: true, isPublished: true, isLocked: true, isPublicPreview: true },
     });
 
     return NextResponse.json({ success: true, lesson });

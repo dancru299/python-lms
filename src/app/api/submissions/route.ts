@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
-import { getLessonGateForStudent } from "@/lib/programs/lesson-gating";
+import { getLessonGateForStudent, getStudentProgramId } from "@/lib/programs/lesson-gating";
 
 // Helper to get session
 async function getSessionUser() {
@@ -60,6 +60,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Bài tập không tồn tại" },
         { status: 404 }
+      );
+    }
+
+    // Only enrolled learners may submit — mirror the lesson page access gate so a
+    // non-enrolled student can't submit by calling the API directly.
+    const programId = await getStudentProgramId(session.userId);
+    if (!programId) {
+      return NextResponse.json(
+        { error: "Bạn cần được thêm vào một lớp có chương trình đào tạo để nộp bài." },
+        { status: 403 }
       );
     }
 

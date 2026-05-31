@@ -65,6 +65,9 @@ model Lesson {
   sortOrder   Int     @default(0)
   isLocked    Boolean @default(false)
   isPublished Boolean @default(true)
+  // When true, guests and not-yet-enrolled students can read this lesson as a free
+  // public sample (a teaser). All other lessons require enrollment in a program.
+  isPublicPreview Boolean @default(false)
 
   // Learning Objectives
   objectiveKnowledge String? @db.Text

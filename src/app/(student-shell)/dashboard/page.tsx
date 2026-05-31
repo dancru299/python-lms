@@ -169,15 +169,11 @@ export default async function DashboardPage() {
           </div>
           <h2 className="mt-4 text-xl font-bold text-slate-900">Bạn chưa tham gia lớp học nào</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-            Lộ trình học, roadmap và skill tree sẽ xuất hiện khi giáo viên thêm bạn vào một lớp đã gắn chương trình đào tạo.
-            Trong lúc chờ, bạn có thể đọc trước các bài giảng trong thư viện.
+            Lộ trình học, thư viện bài giảng, roadmap và skill tree sẽ xuất hiện khi giáo viên thêm bạn vào một lớp đã gắn chương trình đào tạo.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/library" className="btn btn-primary">
-              <i className="fa-solid fa-book-open"></i>
-              Khám phá thư viện
-            </Link>
-            <Link href="/classrooms" className="btn btn-secondary">
+            <Link href="/classrooms" className="btn btn-primary">
+              <i className="fa-solid fa-users"></i>
               Xem lớp học
             </Link>
           </div>
@@ -190,14 +186,11 @@ export default async function DashboardPage() {
           <h2 className="mt-4 text-xl font-bold text-slate-900">Lớp của bạn chưa có lộ trình học</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
             Lớp <span className="font-semibold text-slate-700">{result.classroomName}</span> chưa được gắn chương trình
-            đào tạo. Giáo viên cần gắn chương trình thì roadmap và skill tree mới hiển thị tại đây.
+            đào tạo. Giáo viên cần gắn chương trình thì thư viện bài giảng, roadmap và skill tree mới hiển thị tại đây.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/library" className="btn btn-primary">
-              <i className="fa-solid fa-book-open"></i>
-              Khám phá thư viện
-            </Link>
-            <Link href="/classrooms" className="btn btn-secondary">
+            <Link href="/classrooms" className="btn btn-primary">
+              <i className="fa-solid fa-users"></i>
               Xem lớp học
             </Link>
           </div>

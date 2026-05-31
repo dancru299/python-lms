@@ -9,6 +9,7 @@ interface Lesson {
   duration: number;
   difficulty: string;
   isPublished: boolean;
+  isPublicPreview: boolean;
   _count: { exercises: number };
 }
 
@@ -30,6 +31,7 @@ export default function AdminLessonsClientPage({
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const handleTogglePublish = async (lessonId: string, nextPublished: boolean) => {
     setPublishingId(lessonId);
@@ -56,6 +58,34 @@ export default function AdminLessonsClientPage({
       alert("Đã xảy ra lỗi khi cập nhật trạng thái!");
     } finally {
       setPublishingId(null);
+    }
+  };
+
+  const handleTogglePreview = async (lessonId: string, nextPreview: boolean) => {
+    setPreviewingId(lessonId);
+    try {
+      const res = await fetch(`/api/admin/lessons/${lessonId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublicPreview: nextPreview }),
+      });
+      if (res.ok) {
+        setChapters((prev) =>
+          prev.map((chapter) => ({
+            ...chapter,
+            lessons: chapter.lessons.map((l) =>
+              l.id === lessonId ? { ...l, isPublicPreview: nextPreview } : l
+            ),
+          }))
+        );
+      } else {
+        const data = await res.json();
+        alert(data.error || "Lỗi khi cập nhật chế độ đọc thử!");
+      }
+    } catch {
+      alert("Đã xảy ra lỗi khi cập nhật chế độ đọc thử!");
+    } finally {
+      setPreviewingId(null);
     }
   };
 
@@ -189,6 +219,12 @@ export default function AdminLessonsClientPage({
                           ></i>
                           {lesson.isPublished ? "Đã công bố" : "Đang soạn"}
                         </span>
+                        {lesson.isPublicPreview && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700">
+                            <i className="fa-solid fa-globe mr-1"></i>
+                            Đọc thử công khai
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -214,6 +250,23 @@ export default function AdminLessonsClientPage({
                         ></i>
                       )}
                       {lesson.isPublished ? "Gỡ công bố" : "Công bố"}
+                    </button>
+                    <button
+                      onClick={() => handleTogglePreview(lesson.id, !lesson.isPublicPreview)}
+                      disabled={previewingId === lesson.id}
+                      className={`btn text-sm ${lesson.isPublicPreview ? "btn-primary" : "btn-secondary"}`}
+                      title={
+                        lesson.isPublicPreview
+                          ? "Tắt đọc thử — bài này sẽ chỉ dành cho học viên trong lớp"
+                          : "Bật đọc thử — khách và học sinh chưa vào lớp có thể đọc bài này"
+                      }
+                    >
+                      {previewingId === lesson.id ? (
+                        <i className="fa-solid fa-spinner fa-spin"></i>
+                      ) : (
+                        <i className="fa-solid fa-globe"></i>
+                      )}
+                      {lesson.isPublicPreview ? "Tắt đọc thử" : "Đọc thử"}
                     </button>
                     <Link
                       href={`/lessons/${lesson.id}`}

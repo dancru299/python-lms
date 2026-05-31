@@ -47,6 +47,26 @@ const SETTING_DEFINITIONS: Omit<Setting, "value">[] = [
     description: "Địa chỉ email hỗ trợ hiển thị trong footer.",
     type: "text",
   },
+  {
+    key: "recruitment_message",
+    label: "Lời mời liên hệ (bài đọc thử)",
+    description:
+      "Hiển thị cho khách và học sinh chưa vào lớp khi đọc bài giảng công khai, mời họ liên hệ để học đầy đủ.",
+    type: "textarea",
+  },
+  {
+    key: "recruitment_cta_label",
+    label: "Nhãn nút liên hệ",
+    description: 'Chữ trên nút liên hệ, ví dụ: "Nhắn Zalo", "Inbox Facebook", "Liên hệ để học".',
+    type: "text",
+  },
+  {
+    key: "recruitment_cta_url",
+    label: "Liên kết nút liên hệ",
+    description:
+      "Đích của nút liên hệ: https://zalo.me/0901234567, https://m.me/trangcuaban, tel:0901234567 hoặc mailto:ban@email.com. Để trống sẽ dùng email liên hệ ở trên.",
+    type: "text",
+  },
 ];
 
 interface SettingsClientPageProps {
@@ -62,6 +82,9 @@ export default function SettingsClientPage({ initialSettings }: SettingsClientPa
       allow_library_access: "true",
       maintenance_mode: "false",
       contact_email: "",
+      recruitment_message: "",
+      recruitment_cta_label: "",
+      recruitment_cta_url: "",
     };
     return { ...defaults, ...initialSettings };
   });

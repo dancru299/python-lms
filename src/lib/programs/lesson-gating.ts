@@ -32,7 +32,13 @@ const UNLOCKED: LessonGateInfo = {
   requiredLessonTitle: null,
 };
 
-async function getStudentProgramId(userId: string): Promise<string | null> {
+/**
+ * The program id of the student's most recent program-bearing classroom enrollment, or null
+ * when they aren't in any classroom that has a program. Throws on DB error (callers decide
+ * whether to fail open or closed) — distinct from {@link computeProgramGate}, which returns
+ * null for both "no program" and "error".
+ */
+export async function getStudentProgramId(userId: string): Promise<string | null> {
   const enrollments = await prisma.classroomStudent.findMany({
     where: { studentId: userId },
     select: { classroom: { select: { programId: true } } },

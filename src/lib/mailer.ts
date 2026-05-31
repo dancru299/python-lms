@@ -1,18 +1,43 @@
 import nodemailer from "nodemailer";
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT ?? 587),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+import dns from "node:dns/promises";
 
 const FROM = process.env.SMTP_FROM ?? `"Python LMS" <no-reply@pythonlms.edu>`;
 
+// Some networks resolve mail hosts (e.g. smtp.gmail.com) to an IPv6 address but
+// have no working IPv6 route, so the SMTP socket hangs and fails with
+// ETIMEDOUT. nodemailer (v7) ignores the `family`/`lookup` options, so we
+// resolve an IPv4 address ourselves and connect by IP — keeping the original
+// hostname as the TLS servername so certificate validation still passes.
+// Falls back to the hostname when IPv4 resolution isn't available.
+async function createTransporter() {
+  const host = process.env.SMTP_HOST;
+  let connectHost = host;
+  let tls: { servername: string } | undefined;
+
+  if (host) {
+    try {
+      const { address } = await dns.lookup(host, { family: 4 });
+      connectHost = address;
+      tls = { servername: host };
+    } catch {
+      // Leave connectHost as the hostname and let nodemailer resolve it.
+    }
+  }
+
+  return nodemailer.createTransport({
+    host: connectHost,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    ...(tls ? { tls } : {}),
+  });
+}
+
 export async function sendPasswordResetOtp(email: string, otp: string) {
+  const transporter = await createTransporter();
   await transporter.sendMail({
     from: FROM,
     to: email,
