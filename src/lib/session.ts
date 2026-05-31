@@ -1,14 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { verifySession, type SessionPayload } from "@/lib/session-token";
 
-export interface SessionUser {
-  userId: string;
-  email: string;
-  name: string;
-  role: string;
-  exp: number;
-}
+export type SessionUser = SessionPayload;
 
 export const getSession = cache(async (): Promise<SessionUser | null> => {
   const cookieStore = await cookies();
@@ -18,20 +13,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     return null;
   }
 
-  try {
-    const sessionData: SessionUser = JSON.parse(
-      Buffer.from(sessionCookie.value, "base64").toString()
-    );
-
-    // Check if expired
-    if (sessionData.exp < Date.now()) {
-      return null;
-    }
-
-    return sessionData;
-  } catch {
-    return null;
-  }
+  return verifySession(sessionCookie.value);
 });
 
 export const requireAuth = cache(async () => {

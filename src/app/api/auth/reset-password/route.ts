@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import crypto from "crypto";
-
-function hashPassword(password: string): string {
-  return crypto
-    .createHash("sha256")
-    .update(password + "python-lms-2024-secret") // Using the same secret as in seed.ts
-    .digest("hex");
-}
+import { hashPassword } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
@@ -37,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Update Password
-    const hashedPassword = hashPassword(newPassword);
+    const hashedPassword = await hashPassword(newPassword);
 
     await prisma.user.update({
       where: { email },

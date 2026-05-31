@@ -9,7 +9,6 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "student",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +39,6 @@ export default function RegisterPage() {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: formData.role,
         }),
       });
 
@@ -141,43 +139,6 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Role selection */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Bạn là</label>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { value: "student", label: "Học sinh", icon: "fa-graduation-cap", color: "indigo" },
-                  { value: "teacher", label: "Giáo viên", icon: "fa-chalkboard-user", color: "purple" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role: option.value })}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-all ${
-                      formData.role === option.value
-                        ? option.color === "indigo"
-                          ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                          : "border-purple-500 bg-purple-50 text-purple-700"
-                        : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                        formData.role === option.value
-                          ? option.color === "indigo"
-                            ? "bg-indigo-100 text-indigo-600"
-                            : "bg-purple-100 text-purple-600"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      <i className={`fa-solid ${option.icon} text-sm`}></i>
-                    </div>
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Họ và tên</label>
               <input

@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-export interface SessionUser {
-  userId: string;
-  email: string;
-  name: string;
-  role: string;
-  exp: number;
-}
+import { verifySession } from "@/lib/session-token";
 
 export async function GET() {
   try {
@@ -18,12 +11,10 @@ export async function GET() {
       return NextResponse.json({ authenticated: false });
     }
 
-    const sessionData: SessionUser = JSON.parse(
-      Buffer.from(sessionCookie.value, "base64").toString()
-    );
+    const sessionData = verifySession(sessionCookie.value);
 
-    // Check if expired
-    if (sessionData.exp < Date.now()) {
+    // Invalid signature or expired session
+    if (!sessionData) {
       cookieStore.delete("session");
       return NextResponse.json({ authenticated: false });
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { verifySession } from "@/lib/session-token";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
 import { extractReferencedMediaIds } from "@/lib/lessons/lesson-media";
@@ -10,10 +11,8 @@ async function verifyTeacher() {
   if (!sessionCookie) return null;
 
   try {
-    const sessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, "base64").toString()
-    );
-    if (sessionData.exp < Date.now()) return null;
+    const sessionData = verifySession(sessionCookie.value);
+    if (!sessionData) return null;
     if (sessionData.role !== "teacher" && sessionData.role !== "admin") return null;
     return sessionData;
   } catch {

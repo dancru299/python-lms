@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { verifySession } from "@/lib/session-token";
 
 // Verify admin only
 async function verifyAdmin() {
@@ -9,10 +10,8 @@ async function verifyAdmin() {
   if (!sessionCookie) return null;
 
   try {
-    const sessionData = JSON.parse(
-      Buffer.from(sessionCookie.value, "base64").toString()
-    );
-    if (sessionData.exp < Date.now()) return null;
+    const sessionData = verifySession(sessionCookie.value);
+    if (!sessionData) return null;
     if (sessionData.role !== "admin") return null;
     return sessionData;
   } catch {

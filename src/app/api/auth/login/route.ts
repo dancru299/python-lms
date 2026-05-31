@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyPassword } from "@/lib/auth";
+import { verifyPassword, hashPassword, isLegacyHash } from "@/lib/auth";
+import { signSession } from "@/lib/session-token";
 import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
@@ -29,23 +30,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    if (!verifyPassword(password, user.password)) {
+    if (!(await verifyPassword(password, user.password))) {
       return NextResponse.json(
         { error: "Email hoặc mật khẩu không đúng" },
         { status: 401 }
       );
     }
 
-    // Create session token (simple approach)
-    const sessionData = {
+    // Transparently upgrade legacy SHA-256 hashes to scrypt on successful login.
+    if (isLegacyHash(user.password)) {
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { password: await hashPassword(password) },
+        });
+      } catch (upgradeError) {
+        console.error("Password rehash failed:", upgradeError);
+      }
+    }
+
+    // Create a signed, tamper-proof session token
+    const token = signSession({
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
       exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
-    };
-
-    const token = Buffer.from(JSON.stringify(sessionData)).toString("base64");
+    });
 
     // Set cookie
     const cookieStore = await cookies();

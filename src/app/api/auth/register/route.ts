@@ -5,7 +5,7 @@ import { hashPassword } from "@/lib/auth";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, name, role } = body;
+    const { email, password, name } = body;
 
     // Validation
     if (!email || !password || !name) {
@@ -22,8 +22,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate role - only allow student or teacher (not admin)
-    const validRole = role === "teacher" ? "teacher" : "student";
+    // Self-registration always creates a student.
+    // Teacher/admin accounts are provisioned by an admin via the admin panel.
+    const validRole = "student";
 
     // Check if email exists
     const existingUser = await prisma.user.findUnique({
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = await hashPassword(password);
     const user = await prisma.user.create({
       data: {
         email: email.toLowerCase(),
