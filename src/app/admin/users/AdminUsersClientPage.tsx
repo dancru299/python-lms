@@ -23,6 +23,7 @@ export default function AdminUsersClientPage({ initialUsers }: AdminUsersClientP
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const deferredSearch = useDeferredValue(search);
 
   const [formData, setFormData] = useState({
@@ -47,12 +48,14 @@ export default function AdminUsersClientPage({ initialUsers }: AdminUsersClientP
   const openCreateModal = () => {
     setEditingUser(null);
     setFormData({ name: "", email: "", password: "", role: "student" });
+    setShowPassword(false);
     setShowModal(true);
   };
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
     setFormData({ name: user.name, email: user.email, password: "", role: user.role });
+    setShowPassword(false);
     setShowModal(true);
   };
 
@@ -318,13 +321,24 @@ export default function AdminUsersClientPage({ initialUsers }: AdminUsersClientP
                     <span className="text-gray-400 text-xs ml-1">(để trống nếu không đổi)</span>
                   )}
                 </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder={editingUser ? "••••••" : ""}
-                  className="input"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder={editingUser ? "••••••" : ""}
+                    className="input !pr-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
+                    aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                    tabIndex={-1}
+                  >
+                    <i className={`fa-solid ${showPassword ? "fa-eye" : "fa-eye-slash"}`}></i>
+                  </button>
+                </div>
               </div>
 
               <div>

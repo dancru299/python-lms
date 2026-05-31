@@ -17,6 +17,8 @@ function ResetPasswordForm() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Safely initialize email from search params after hydration
   useEffect(() => {
@@ -128,28 +130,50 @@ function ResetPasswordForm() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Mật khẩu mới
           </label>
-          <input
-            type="password"
-            className="input"
-            placeholder="••••••••"
-            value={formData.newPassword}
-            onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-            required
-          />
+          <div className="relative">
+            <input
+              type={showNewPassword ? "text" : "password"}
+              className="input !pr-11"
+              placeholder="••••••••"
+              value={formData.newPassword}
+              onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPassword((v) => !v)}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
+              aria-label={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              tabIndex={-1}
+            >
+              <i className={`fa-solid ${showNewPassword ? "fa-eye" : "fa-eye-slash"}`}></i>
+            </button>
+          </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Xác nhận mật khẩu mới
           </label>
-          <input
-            type="password"
-            className="input"
-            placeholder="••••••••"
-            value={formData.confirmPassword}
-            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-            required
-          />
+          <div className="relative">
+            <input
+              type={showConfirmPassword ? "text" : "password"}
+              className="input !pr-11"
+              placeholder="••••••••"
+              value={formData.confirmPassword}
+              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((v) => !v)}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
+              aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              tabIndex={-1}
+            >
+              <i className={`fa-solid ${showConfirmPassword ? "fa-eye" : "fa-eye-slash"}`}></i>
+            </button>
+          </div>
         </div>
 
         <button
