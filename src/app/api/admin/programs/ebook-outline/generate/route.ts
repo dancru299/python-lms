@@ -8,6 +8,9 @@ import {
   type EbookOutlineItem,
 } from "@/lib/programs/ebook-curriculum";
 
+// AI outline generation can take up to ~55s; allow the Vercel function the full Hobby cap.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const { response } = await requireTeacherSessionJson();

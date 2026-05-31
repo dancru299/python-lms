@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import EbookCurriculumBuilder, {
   type AppliedProgram,
 } from "@/components/programs/EbookCurriculumBuilder";
+import AutoArrangePanel from "./AutoArrangePanel";
 
 interface LessonOption {
   id: string;
@@ -528,6 +529,7 @@ export default function ProgramsClientPage({
   const [milestoneLessonSelect, setMilestoneLessonSelect] = useState<Record<string, string>>({});
   const [outcomeLessonSelect, setOutcomeLessonSelect] = useState<Record<string, string>>({});
   const [outcomeSkillSelect, setOutcomeSkillSelect] = useState<Record<string, string>>({});
+  const [autoArrangeOpen, setAutoArrangeOpen] = useState(false);
 
   const selectedProgram = useMemo(
     () => programs.find((program) => program.id === selectedProgramId) ?? programs[0] ?? null,
@@ -612,6 +614,40 @@ export default function ProgramsClientPage({
 
   return (
     <div className="space-y-6">
+      {selectedProgram && selectedProgram.milestones.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+              <i className="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900">Sắp xếp bài học tự động</div>
+              <p className="text-sm text-slate-500">
+                Để AI đề xuất gắn bài học vào từng mốc &amp; outcome. Bạn xem, chỉnh rồi xác nhận.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAutoArrangeOpen(true)}
+            className="btn btn-primary text-sm"
+          >
+            <i className="fa-solid fa-wand-magic-sparkles"></i>
+            Gợi ý sắp xếp bài học
+          </button>
+        </div>
+      )}
+
+      {autoArrangeOpen && selectedProgram && (
+        <AutoArrangePanel
+          programId={selectedProgram.id}
+          milestones={selectedProgram.milestones}
+          lessons={allLessons}
+          onApplied={(program) => replaceProgram(program as Program)}
+          onClose={() => setAutoArrangeOpen(false)}
+        />
+      )}
+
       {selectedProgram && <ProgramPreview program={selectedProgram} allLessons={allLessons} />}
 
       {!detailMode && (

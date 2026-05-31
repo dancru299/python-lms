@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { getLessonGateForStudent } from "@/lib/programs/lesson-gating";
 
 // Helper to get session
 async function getSessionUser() {
@@ -59,6 +60,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Bài tập không tồn tại" },
         { status: 404 }
+      );
+    }
+
+    // Don't let a student submit homework for a lesson that is still locked for them.
+    const gate = await getLessonGateForStudent(session.userId, exercise.lessonId);
+    if (gate.locked) {
+      return NextResponse.json(
+        {
+          error: gate.requiredLessonTitle
+            ? `Bài này đang khóa. Hãy hoàn thành "${gate.requiredLessonTitle}" trước.`
+            : "Bài này đang khóa. Hãy hoàn thành bài học trước đó.",
+        },
+        { status: 403 }
       );
     }
 

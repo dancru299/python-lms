@@ -24,6 +24,14 @@ h6 {
   font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* Display styling for marketing / public headings. Uses Inter (full Vietnamese glyph
+   coverage) with tighter tracking for a premium headline feel — Outfit is intentionally
+   NOT used here because its loaded subset lacks Vietnamese diacritics. */
+.font-display {
+  font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

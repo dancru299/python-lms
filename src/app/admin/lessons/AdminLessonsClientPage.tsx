@@ -8,6 +8,7 @@ interface Lesson {
   title: string;
   duration: number;
   difficulty: string;
+  isPublished: boolean;
   _count: { exercises: number };
 }
 
@@ -28,6 +29,35 @@ export default function AdminLessonsClientPage({
 }: AdminLessonsClientPageProps) {
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+
+  const handleTogglePublish = async (lessonId: string, nextPublished: boolean) => {
+    setPublishingId(lessonId);
+    try {
+      const res = await fetch(`/api/admin/lessons/${lessonId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublished: nextPublished }),
+      });
+      if (res.ok) {
+        setChapters((prev) =>
+          prev.map((chapter) => ({
+            ...chapter,
+            lessons: chapter.lessons.map((l) =>
+              l.id === lessonId ? { ...l, isPublished: nextPublished } : l
+            ),
+          }))
+        );
+      } else {
+        const data = await res.json();
+        alert(data.error || "Lỗi khi cập nhật trạng thái bài giảng!");
+      }
+    } catch {
+      alert("Đã xảy ra lỗi khi cập nhật trạng thái!");
+    } finally {
+      setPublishingId(null);
+    }
+  };
 
   const handleDelete = async (lessonId: string, lessonTitle: string) => {
     if (
@@ -145,11 +175,46 @@ export default function AdminLessonsClientPage({
                           <i className="fa-solid fa-code mr-1"></i>
                           {lesson._count.exercises} bài tập
                         </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            lesson.isPublished
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          <i
+                            className={`fa-solid ${
+                              lesson.isPublished ? "fa-circle-check" : "fa-pen-ruler"
+                            } mr-1`}
+                          ></i>
+                          {lesson.isPublished ? "Đã công bố" : "Đang soạn"}
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTogglePublish(lesson.id, !lesson.isPublished)}
+                      disabled={publishingId === lesson.id}
+                      className={`btn text-sm ${lesson.isPublished ? "btn-secondary" : "btn-primary"}`}
+                      title={
+                        lesson.isPublished
+                          ? "Gỡ công bố (ẩn khỏi học viên và AI sắp xếp)"
+                          : "Công bố bài giảng cho học viên và AI sắp xếp"
+                      }
+                    >
+                      {publishingId === lesson.id ? (
+                        <i className="fa-solid fa-spinner fa-spin"></i>
+                      ) : (
+                        <i
+                          className={`fa-solid ${
+                            lesson.isPublished ? "fa-eye-slash" : "fa-paper-plane"
+                          }`}
+                        ></i>
+                      )}
+                      {lesson.isPublished ? "Gỡ công bố" : "Công bố"}
+                    </button>
                     <Link
                       href={`/lessons/${lesson.id}`}
                       target="_blank"

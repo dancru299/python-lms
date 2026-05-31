@@ -128,41 +128,131 @@ async function StudentClassroomsSection({ userId }: { userId: string }) {
 export default async function DashboardPage() {
   const session = await requireAuth();
 
-  const [dashboard, notificationCount, classroomCount] = await Promise.all([
+  const [result, notificationCount, classroomCount] = await Promise.all([
     getStudentProgramDashboard(session.userId),
     getUnreadNotificationCount(session.userId),
     prisma.classroomStudent.count({ where: { studentId: session.userId } }),
   ]);
 
+  const dashboard = result.status === "ok" ? result.dashboard : null;
+
   const rootSkills = dashboard?.skills.filter((skill) => !skill.parentSkillId) ?? [];
   const childSkills = (parentId: string) => dashboard?.skills.filter((skill) => skill.parentSkillId === parentId) ?? [];
+  const achievedSkills = dashboard?.skills.filter((skill) => skill.status === "achieved").length ?? 0;
 
   return (
     <StudentPageFrame
       title={`Xin chào, ${session.name.split(" ").pop()}`}
-      subtitle={dashboard ? dashboard.program.title : "Không gian học tập"}
-      summaryPills={[
-        { label: "Tiến độ", value: dashboard ? `${dashboard.percent}%` : "N/A", tone: "indigo" },
-        { label: "Lớp học", value: classroomCount, tone: "emerald" },
-        { label: "Portfolio", value: dashboard?.portfolio.length ?? 0, tone: "amber" },
-        ...(notificationCount > 0
-          ? [{ label: "Thông báo", value: notificationCount, tone: "slate" as const }]
-          : []),
-      ]}
+      subtitle={dashboard ? `${dashboard.classroom.name} · ${dashboard.program.title}` : "Không gian học tập"}
+      summaryPills={
+        dashboard
+          ? [
+              { label: "Tiến độ", value: `${dashboard.percent}%`, tone: "indigo" },
+              { label: "Lớp học", value: classroomCount, tone: "emerald" },
+              { label: "Portfolio", value: dashboard.portfolio.length, tone: "amber" },
+              ...(notificationCount > 0
+                ? [{ label: "Thông báo", value: notificationCount, tone: "slate" as const }]
+                : []),
+            ]
+          : [
+              { label: "Lớp học", value: classroomCount, tone: "emerald" },
+              ...(notificationCount > 0
+                ? [{ label: "Thông báo", value: notificationCount, tone: "slate" as const }]
+                : []),
+            ]
+      }
     >
-      {!dashboard ? (
+      {result.status === "no-class" ? (
+        <div className="card rounded-[1.5rem] p-10 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+            <i className="fa-solid fa-user-plus text-2xl"></i>
+          </div>
+          <h2 className="mt-4 text-xl font-bold text-slate-900">Bạn chưa tham gia lớp học nào</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+            Lộ trình học, roadmap và skill tree sẽ xuất hiện khi giáo viên thêm bạn vào một lớp đã gắn chương trình đào tạo.
+            Trong lúc chờ, bạn có thể đọc trước các bài giảng trong thư viện.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href="/library" className="btn btn-primary">
+              <i className="fa-solid fa-book-open"></i>
+              Khám phá thư viện
+            </Link>
+            <Link href="/classrooms" className="btn btn-secondary">
+              Xem lớp học
+            </Link>
+          </div>
+        </div>
+      ) : result.status === "no-program" ? (
         <div className="card rounded-[1.5rem] p-10 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
             <i className="fa-solid fa-route text-2xl"></i>
           </div>
-          <h2 className="mt-4 text-xl font-bold text-slate-900">Chưa có chương trình đào tạo active</h2>
+          <h2 className="mt-4 text-xl font-bold text-slate-900">Lớp của bạn chưa có lộ trình học</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-            Giáo viên cần tạo hoặc seed chương trình đào tạo để dashboard hiển thị roadmap, outcome và skill tree.
+            Lớp <span className="font-semibold text-slate-700">{result.classroomName}</span> chưa được gắn chương trình
+            đào tạo. Giáo viên cần gắn chương trình thì roadmap và skill tree mới hiển thị tại đây.
           </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href="/library" className="btn btn-primary">
+              <i className="fa-solid fa-book-open"></i>
+              Khám phá thư viện
+            </Link>
+            <Link href="/classrooms" className="btn btn-secondary">
+              Xem lớp học
+            </Link>
+          </div>
         </div>
-      ) : (
+      ) : dashboard ? (
         <>
-          {dashboard.nextLesson ? (
+          {/* Progress overview — single clear summary of where the student is */}
+          <div className="card mb-6 rounded-2xl p-5">
+            <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  Tiến độ chương trình
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-3xl font-extrabold text-slate-900">{dashboard.percent}%</span>
+                  <span className="text-sm text-slate-400">
+                    {dashboard.completedLessons}/{dashboard.totalLessons} bài
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-6 text-center">
+                <div>
+                  <div className="text-lg font-bold text-slate-900">{dashboard.milestones.length}</div>
+                  <div className="text-xs text-slate-400">Mốc học</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-slate-900">
+                    {achievedSkills}/{dashboard.skills.length}
+                  </div>
+                  <div className="text-xs text-slate-400">Kỹ năng đạt</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-slate-900">{dashboard.portfolio.length}</div>
+                  <div className="text-xs text-slate-400">Portfolio</div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 h-2 rounded-full bg-slate-100">
+              <div className="h-2 rounded-full bg-indigo-500 transition-all" style={{ width: `${dashboard.percent}%` }} />
+            </div>
+          </div>
+
+          {dashboard.totalLessons === 0 ? (
+            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <i className="fa-solid fa-hourglass-half text-amber-600"></i>
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-amber-800">Chương trình chưa có bài học</div>
+                <div className="text-xs text-amber-600">
+                  Giáo viên cần gắn bài học vào các mốc của chương trình thì lộ trình mới bắt đầu.
+                </div>
+              </div>
+            </div>
+          ) : dashboard.nextLesson ? (
             <Link
               href={`/lessons/${dashboard.nextLesson.id}`}
               className="mb-6 flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-cyan-500 px-5 py-4 text-white shadow-md shadow-indigo-200/50 transition hover:shadow-lg hover:shadow-indigo-200/60"
@@ -188,29 +278,27 @@ export default async function DashboardPage() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-emerald-800">Hoàn thành toàn bộ chương trình!</div>
-                <div className="text-xs text-emerald-600">Tất cả bài học trong roadmap active đã hoàn thành.</div>
+                <div className="text-xs text-emerald-600">Tất cả bài học trong roadmap đã hoàn thành.</div>
               </div>
             </div>
           )}
 
           <div className="grid gap-6 xl:grid-cols-[1.55fr,1fr]">
             <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">Roadmap chương trình</h2>
-                  <p className="text-sm text-slate-400">
-                    {dashboard.completedLessons}/{dashboard.totalLessons} bài đã hoàn thành
+              <h2 className="text-base font-semibold text-slate-900">Roadmap chương trình</h2>
+
+              {dashboard.milestones.length === 0 && (
+                <div className="card flex flex-col items-center rounded-2xl p-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                    <i className="fa-solid fa-diagram-project text-xl"></i>
+                  </div>
+                  <h3 className="mt-4 text-sm font-semibold text-slate-700">Roadmap chưa có bài học</h3>
+                  <p className="mx-auto mt-1 max-w-sm text-sm text-slate-400">
+                    Chương trình đã có khung kỹ năng nhưng các mốc chưa được gắn bài học. Lộ trình sẽ hiện ở đây
+                    ngay khi giáo viên thêm bài học vào chương trình.
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="hidden w-32 sm:block">
-                    <div className="h-1.5 rounded-full bg-slate-200">
-                      <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${dashboard.percent}%` }} />
-                    </div>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-500">{dashboard.percent}%</span>
-                </div>
-              </div>
+              )}
 
               {dashboard.milestones.map((milestone, milestoneIndex) => (
                 <article key={milestone.id} className="card overflow-hidden rounded-2xl">
@@ -255,12 +343,8 @@ export default async function DashboardPage() {
                     <div>
                       <h4 className="mb-3 text-sm font-semibold text-slate-800">Bài học</h4>
                       <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
-                        {milestone.lessons.map((lesson, index) => (
-                          <Link
-                            key={lesson.id}
-                            href={`/lessons/${lesson.id}`}
-                            className="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50"
-                          >
+                        {milestone.lessons.map((lesson, index) => {
+                          const badge = (
                             <div
                               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
                                 lesson.completed
@@ -268,17 +352,57 @@ export default async function DashboardPage() {
                                   : "bg-slate-100 text-slate-400"
                               }`}
                             >
-                              {lesson.completed ? <i className="fa-solid fa-check"></i> : index + 1}
+                              {lesson.completed ? (
+                                <i className="fa-solid fa-check"></i>
+                              ) : lesson.locked ? (
+                                <i className="fa-solid fa-lock text-[11px]"></i>
+                              ) : (
+                                index + 1
+                              )}
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium text-slate-800">{lesson.title}</div>
-                              <div className="text-xs text-slate-400">
-                                {lesson.duration} phút · {getDifficultyLabel(lesson.difficulty)}
+                          );
+
+                          if (lesson.locked) {
+                            return (
+                              <div
+                                key={lesson.id}
+                                className="flex cursor-not-allowed items-center gap-3 px-4 py-3 opacity-70"
+                                title={
+                                  lesson.requiredLessonTitle
+                                    ? `Hoàn thành "${lesson.requiredLessonTitle}" để mở khóa`
+                                    : "Hoàn thành bài học trước để mở khóa"
+                                }
+                              >
+                                {badge}
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-sm font-medium text-slate-500">{lesson.title}</div>
+                                  <div className="truncate text-xs text-slate-400">
+                                    {lesson.requiredLessonTitle
+                                      ? `🔒 Hoàn thành “${lesson.requiredLessonTitle}” để mở`
+                                      : "🔒 Hoàn thành bài trước để mở"}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                            <i className="fa-solid fa-chevron-right shrink-0 text-xs text-slate-300"></i>
-                          </Link>
-                        ))}
+                            );
+                          }
+
+                          return (
+                            <Link
+                              key={lesson.id}
+                              href={`/lessons/${lesson.id}`}
+                              className="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50"
+                            >
+                              {badge}
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium text-slate-800">{lesson.title}</div>
+                                <div className="text-xs text-slate-400">
+                                  {lesson.duration} phút · {getDifficultyLabel(lesson.difficulty)}
+                                </div>
+                              </div>
+                              <i className="fa-solid fa-chevron-right shrink-0 text-xs text-slate-300"></i>
+                            </Link>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -422,7 +546,7 @@ export default async function DashboardPage() {
             </aside>
           </div>
         </>
-      )}
+      ) : null}
     </StudentPageFrame>
   );
 }

@@ -94,7 +94,7 @@ export default async function StudentClassroomsPage() {
         },
       ]}
       primaryAction={{
-        href: "/",
+        href: "/dashboard",
         label: "Về tổng quan",
         icon: "fa-house",
       }}

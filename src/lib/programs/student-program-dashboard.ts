@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { computeProgramGate } from "@/lib/programs/lesson-gating";
 
 export type SkillStatus = "not-started" | "learning" | "achieved";
 
@@ -9,6 +10,8 @@ export interface StudentDashboardLesson {
   difficulty: string;
   chapterTitle: string;
   completed: boolean;
+  locked: boolean;
+  requiredLessonTitle: string | null;
 }
 
 export interface StudentDashboardOutcome {
@@ -60,6 +63,10 @@ export interface StudentProgramDashboard {
     title: string;
     description: string | null;
   };
+  classroom: {
+    id: string;
+    name: string;
+  };
   percent: number;
   totalLessons: number;
   completedLessons: number;
@@ -68,6 +75,11 @@ export interface StudentProgramDashboard {
   skills: StudentDashboardSkill[];
   portfolio: StudentDashboardPortfolioItem[];
 }
+
+export type StudentDashboardResult =
+  | { status: "no-class" }
+  | { status: "no-program"; classroomName: string }
+  | { status: "ok"; dashboard: StudentProgramDashboard };
 
 function percent(completed: number, total: number) {
   return total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -83,9 +95,28 @@ function skillStatus(value: number): SkillStatus {
   return "not-started";
 }
 
-export async function getStudentProgramDashboard(userId: string): Promise<StudentProgramDashboard | null> {
-  const program = await prisma.program.findFirst({
-    where: { isActive: true },
+export async function getStudentProgramDashboard(userId: string): Promise<StudentDashboardResult> {
+  const enrollments = await prisma.classroomStudent.findMany({
+    where: { studentId: userId },
+    select: {
+      classroom: { select: { id: true, name: true, programId: true } },
+    },
+    orderBy: { joinedAt: "desc" },
+  });
+
+  if (enrollments.length === 0) {
+    return { status: "no-class" };
+  }
+
+  const classroomWithProgram = enrollments.find((item) => item.classroom.programId);
+  if (!classroomWithProgram) {
+    return { status: "no-program", classroomName: enrollments[0].classroom.name };
+  }
+
+  const classroom = classroomWithProgram.classroom;
+
+  const program = await prisma.program.findUnique({
+    where: { id: classroom.programId! },
     include: {
       milestones: {
         orderBy: { sortOrder: "asc" },
@@ -138,7 +169,7 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
   });
 
   if (!program) {
-    return null;
+    return { status: "no-program", classroomName: classroom.name };
   }
 
   const visibleProgramMilestones = program.milestones.filter(
@@ -148,7 +179,7 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
     new Set(visibleProgramMilestones.flatMap((milestone) => milestone.lessons.map((link) => link.lessonId)))
   );
 
-  const [progressRows, regularSubmissions, classroomSubmissions] = await Promise.all([
+  const [progressRows, regularSubmissions, classroomSubmissions, programGate] = await Promise.all([
     prisma.userProgress.findMany({
       where: { userId, lessonId: { in: programLessonIds } },
       select: { lessonId: true, completed: true },
@@ -186,6 +217,7 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
       orderBy: [{ gradedAt: "desc" }, { updatedAt: "desc" }],
       take: 8,
     }),
+    computeProgramGate(userId),
   ]);
 
   const completedLessonIds = new Set(
@@ -195,14 +227,19 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
   const outcomePercentById = new Map<string, number>();
 
   const milestones: StudentDashboardMilestone[] = visibleProgramMilestones.map((milestone) => {
-    const lessons = milestone.lessons.map((link) => ({
-      id: link.lesson.id,
-      title: link.lesson.title,
-      duration: link.lesson.duration,
-      difficulty: link.lesson.difficulty,
-      chapterTitle: link.lesson.chapter.title,
-      completed: completedLessonIds.has(link.lessonId),
-    }));
+    const lessons = milestone.lessons.map((link) => {
+      const gateInfo = programGate?.gates.get(link.lessonId);
+      return {
+        id: link.lesson.id,
+        title: link.lesson.title,
+        duration: link.lesson.duration,
+        difficulty: link.lesson.difficulty,
+        chapterTitle: link.lesson.chapter.title,
+        completed: completedLessonIds.has(link.lessonId),
+        locked: gateInfo?.locked ?? false,
+        requiredLessonTitle: gateInfo?.requiredLessonTitle ?? null,
+      };
+    });
 
     const completedLessons = lessons.filter((lesson) => lesson.completed).length;
 
@@ -306,17 +343,24 @@ export async function getStudentProgramDashboard(userId: string): Promise<Studen
     .slice(0, 8);
 
   return {
-    program: {
-      id: program.id,
-      title: program.title,
-      description: program.description,
+    status: "ok",
+    dashboard: {
+      program: {
+        id: program.id,
+        title: program.title,
+        description: program.description,
+      },
+      classroom: {
+        id: classroom.id,
+        name: classroom.name,
+      },
+      percent: percent(completedLessons, orderedLessons.length),
+      totalLessons: orderedLessons.length,
+      completedLessons,
+      nextLesson,
+      milestones,
+      skills,
+      portfolio,
     },
-    percent: percent(completedLessons, orderedLessons.length),
-    totalLessons: orderedLessons.length,
-    completedLessons,
-    nextLesson,
-    milestones,
-    skills,
-    portfolio,
   };
 }

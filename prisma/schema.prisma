@@ -34,6 +34,7 @@ model User {
   classroomAssignmentSubmissions ClassroomAssignmentSubmission[] @relation("StudentAssignmentSubmissions")
   gradedClassroomSubmissions     ClassroomAssignmentSubmission[] @relation("TeacherAssignmentGradings")
   lessonMediaUploads             LessonMedia[]                  @relation("LessonMediaCreatedBy")
+  lessonUnlocks                  LessonUnlock[]                  @relation("StudentUnlocks")
 }
 
 // ============ CHAPTERS ============
@@ -83,8 +84,26 @@ model Lesson {
   milestoneLinks MilestoneLesson[]
   outcomeLinks   OutcomeLesson[]
   media          LessonMedia[]
+  unlocks        LessonUnlock[]
 
   @@index([chapterId])
+}
+
+// Per-student manual unlock that overrides sequential gating (e.g. teacher grants a
+// makeup so a student can open a locked lesson without finishing the previous one).
+model LessonUnlock {
+  id          String   @id @default(cuid())
+  studentId   String
+  lessonId    String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  student User   @relation("StudentUnlocks", fields: [studentId], references: [id], onDelete: Cascade)
+  lesson  Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, lessonId])
+  @@index([studentId])
+  @@index([lessonId])
 }
 
 // ============ SECTIONS ============
@@ -242,6 +261,7 @@ model Classroom {
   description String?
   code        String    @unique // Mã lớp để học sinh tham gia
   teacherId   String
+  programId   String? // Chương trình đào tạo gắn cho lớp (quyết định roadmap/skill tree học sinh thấy)
   startDate   DateTime? // Ngày bắt đầu khóa học
   endDate     DateTime? // Ngày kết thúc khóa học (để trống = mở rộng theo mặc định)
   timezone    String    @default("Asia/Ho_Chi_Minh")
@@ -250,12 +270,14 @@ model Classroom {
 
   // Relations
   teacher       User                    @relation("TeacherClassrooms", fields: [teacherId], references: [id])
+  program       Program?                @relation(fields: [programId], references: [id], onDelete: SetNull)
   students      ClassroomStudent[]
   assignments   ClassroomAssignment[]
   scheduleRules ClassroomScheduleRule[]
   sessions      ClassroomSession[]
 
   @@index([teacherId])
+  @@index([programId])
 }
 
 // Quy luật lặp của lịch học (vd: thứ 3 & thứ 5 hàng tuần)
@@ -412,6 +434,7 @@ model Program {
 
   milestones Milestone[]
   skills     Skill[]
+  classrooms Classroom[]
 
   @@index([isActive])
   @@index([sortOrder])

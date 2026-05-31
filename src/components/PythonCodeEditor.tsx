@@ -1,45 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Editor from "@monaco-editor/react";
-
-declare global {
-  interface Window {
-    loadPyodide?: (config: { indexURL: string }) => Promise<PyodideInstance>;
-    _pyodideInstance?: PyodideInstance;
-    _pyodideLoading?: Promise<PyodideInstance>;
-  }
-}
-
-interface PyodideInstance {
-  runPython: (code: string) => unknown;
-  runPythonAsync: (code: string) => Promise<unknown>;
-}
-
-const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/";
-
-async function getPyodide(): Promise<PyodideInstance> {
-  if (window._pyodideInstance) return window._pyodideInstance;
-  if (window._pyodideLoading) return window._pyodideLoading;
-
-  window._pyodideLoading = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `${PYODIDE_CDN}pyodide.js`;
-    script.onload = async () => {
-      try {
-        const py = await window.loadPyodide!({ indexURL: PYODIDE_CDN });
-        window._pyodideInstance = py;
-        resolve(py);
-      } catch (e) {
-        reject(e);
-      }
-    };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-
-  return window._pyodideLoading;
-}
+import { runPython } from "@/lib/python/pyodide-client";
 
 interface PythonCodeEditorProps {
   defaultValue?: string;
@@ -55,22 +18,10 @@ export default function PythonCodeEditor({
   const [code, setCode] = useState(defaultValue);
   const [output, setOutput] = useState<string | null>(null);
   const [outputType, setOutputType] = useState<"success" | "error">("success");
-  const [isRunning, setIsRunning] = useState(false);
-  const [pyodideStatus, setPyodideStatus] = useState<"idle" | "loading" | "ready" | "failed">("idle");
-  const pyodideRef = useRef<PyodideInstance | null>(null);
-
-  useEffect(() => {
-    if (readOnly) return;
-    setPyodideStatus("loading");
-    getPyodide()
-      .then((py) => {
-        pyodideRef.current = py;
-        setPyodideStatus("ready");
-      })
-      .catch(() => {
-        setPyodideStatus("failed");
-      });
-  }, [readOnly]);
+  // Phase of the current run. Python (Pyodide) runs in a Web Worker so the page never
+  // freezes: loading the ~10MB runtime and executing code both happen off the main thread.
+  const [phase, setPhase] = useState<"idle" | "loading" | "running">("idle");
+  const isBusy = phase !== "idle";
 
   const handleEditorChange = (value: string | undefined) => {
     const v = value ?? "";
@@ -79,35 +30,27 @@ export default function PythonCodeEditor({
   };
 
   const runCode = async () => {
-    const py = pyodideRef.current;
-    if (!py || isRunning) return;
+    if (isBusy) return;
 
-    setIsRunning(true);
+    setPhase("loading");
     setOutput(null);
 
-    try {
-      py.runPython(`
-import sys, io
-sys.stdout = io.StringIO()
-sys.stderr = sys.stdout
-`);
-      await py.runPythonAsync(code);
-      const stdout = py.runPython("sys.stdout.getvalue()") as string;
-      setOutput(stdout || "(Không có output)");
-      setOutputType("success");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setOutput(msg);
+    const result = await runPython(code, (status) => setPhase(status));
+
+    if (result.error) {
+      setOutput(result.error);
       setOutputType("error");
-    } finally {
-      setIsRunning(false);
+    } else {
+      setOutput(result.output || "(Không có output)");
+      setOutputType("success");
     }
+
+    setPhase("idle");
   };
 
   const runLabel = () => {
-    if (isRunning) return <><i className="fa-solid fa-spinner fa-spin"></i> Đang chạy…</>;
-    if (pyodideStatus === "loading") return <><i className="fa-solid fa-spinner fa-spin"></i> Đang tải Python…</>;
-    if (pyodideStatus === "failed") return <><i className="fa-solid fa-triangle-exclamation"></i> Lỗi tải Python</>;
+    if (phase === "running") return <><i className="fa-solid fa-spinner fa-spin"></i> Đang chạy…</>;
+    if (phase === "loading") return <><i className="fa-solid fa-spinner fa-spin"></i> Đang tải Python…</>;
     return <><i className="fa-solid fa-play"></i> Chạy</>;
   };
 
@@ -117,17 +60,12 @@ sys.stderr = sys.stdout
       <div className="flex items-center justify-between border-b border-gray-700 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs text-gray-400">Python 3</span>
-          {pyodideStatus === "ready" && (
-            <span className="rounded-full bg-emerald-900/60 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-              sandbox sẵn sàng
-            </span>
-          )}
         </div>
         {!readOnly && (
           <button
             type="button"
             onClick={runCode}
-            disabled={pyodideStatus !== "ready" || isRunning}
+            disabled={isBusy}
             className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {runLabel()}

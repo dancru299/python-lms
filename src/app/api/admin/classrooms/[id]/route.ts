@@ -101,6 +101,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       teacherId?: string;
       studentIds?: string[];
     } = body;
+    const programId =
+      typeof body.programId === "string" && body.programId.trim() ? body.programId.trim() : null;
     const startDate = parseDateOnly(body.startDate);
     const endDate = parseDateOnly(body.endDate);
     const scheduleRules = normalizeScheduleRules(body.scheduleRules);
@@ -125,6 +127,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Tên lớp là bắt buộc" }, { status: 400 });
     }
 
+    if (programId) {
+      const program = await prisma.program.findUnique({ where: { id: programId }, select: { id: true } });
+      if (!program) {
+        return NextResponse.json({ error: "Chương trình đào tạo không tồn tại" }, { status: 400 });
+      }
+    }
+
     const nextTeacherId = session.role === "admin" ? teacherId || classroom.teacherId : classroom.teacherId;
     const nextStudentIds = Array.isArray(studentIds) ? studentIds : [];
 
@@ -135,6 +144,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
           name: name.trim(),
           description: description?.trim() || null,
           teacherId: nextTeacherId,
+          programId,
           startDate,
           endDate,
         },

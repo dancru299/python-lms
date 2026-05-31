@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import ClassroomDetailClient from "./ClassroomDetailClient";
+import ClassroomGatingManager from "./ClassroomGatingManager";
+import { getClassroomGatingOverview } from "@/lib/programs/lesson-gating";
 import type {
   ClassroomAssignmentItem,
   ClassroomLessonOption,
@@ -106,6 +108,8 @@ export default async function ClassroomDetailPage({ params }: PageProps) {
     })),
   }));
 
+  const gating = await getClassroomGatingOverview(id);
+
   const assignmentItems: ClassroomAssignmentItem[] = classroom.assignments.map((assignment) => ({
     id: assignment.id,
     title: assignment.title,
@@ -150,6 +154,7 @@ export default async function ClassroomDetailPage({ params }: PageProps) {
             lessons={lessonItems}
             initialAssignments={assignmentItems}
           />
+          <ClassroomGatingManager hasProgram={gating.hasProgram} students={gating.students} />
         </TeacherPageFrame>
     </>
   );

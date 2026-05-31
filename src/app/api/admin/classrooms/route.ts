@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, description, teacherId, studentIds } = body;
+    const programId =
+      typeof body.programId === "string" && body.programId.trim() ? body.programId.trim() : null;
     const startDate = parseDateOnly(body.startDate);
     const endDate = parseDateOnly(body.endDate);
     const scheduleRules = normalizeScheduleRules(body.scheduleRules);
@@ -92,6 +94,13 @@ export async function POST(request: NextRequest) {
         { error: "Tên lớp và giáo viên là bắt buộc" },
         { status: 400 }
       );
+    }
+
+    if (programId) {
+      const program = await prisma.program.findUnique({ where: { id: programId }, select: { id: true } });
+      if (!program) {
+        return NextResponse.json({ error: "Chương trình đào tạo không tồn tại" }, { status: 400 });
+      }
     }
 
     // Generate unique code
@@ -110,6 +119,7 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         teacherId,
+        programId,
         code,
         startDate,
         endDate,

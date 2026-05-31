@@ -11,6 +11,12 @@ interface User {
   role?: string;
 }
 
+interface ProgramOption {
+  id: string;
+  title: string;
+  isActive: boolean;
+}
+
 const WEEKDAYS = [
   { value: 1, label: "Thứ 2" },
   { value: 2, label: "Thứ 3" },
@@ -63,12 +69,14 @@ export default function ClassroomForm({
   const [deleting, setDeleting] = useState(false);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [students, setStudents] = useState<User[]>([]);
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [searchStudent, setSearchStudent] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     teacherId: "",
+    programId: "",
   });
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -77,11 +85,25 @@ export default function ClassroomForm({
   useEffect(() => {
     async function loadData() {
       try {
-        const usersRes = await fetch("/api/admin/users");
+        const [usersRes, programsRes] = await Promise.all([
+          fetch("/api/admin/users"),
+          fetch("/api/admin/programs"),
+        ]);
         const usersData = usersRes.ok ? await usersRes.json() : null;
         if (usersData) {
           setTeachers(usersData.teachers);
           setStudents(usersData.students);
+        }
+
+        const programsData = programsRes.ok ? await programsRes.json() : null;
+        if (programsData?.programs) {
+          setPrograms(
+            programsData.programs.map((program: { id: string; title: string; isActive: boolean }) => ({
+              id: program.id,
+              title: program.title,
+              isActive: program.isActive,
+            }))
+          );
         }
 
         if (mode === "edit" && classroomId) {
@@ -98,6 +120,7 @@ export default function ClassroomForm({
             name: classroom.name || "",
             description: classroom.description || "",
             teacherId: classroom.teacherId || classroom.teacher?.id || "",
+            programId: classroom.programId || "",
           });
           setStartDate(toDateInput(classroom.startDate));
           setEndDate(toDateInput(classroom.endDate));
@@ -345,6 +368,26 @@ export default function ClassroomForm({
                 </p>
               ) : null}
             </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-medium text-gray-700">Chương trình đào tạo</label>
+            <select
+              value={formData.programId}
+              onChange={(e) => setFormData((prev) => ({ ...prev, programId: e.target.value }))}
+              className="input"
+            >
+              <option value="">-- Chưa gắn chương trình --</option>
+              {programs.map((program) => (
+                <option key={program.id} value={program.id}>
+                  {program.title}
+                  {program.isActive ? "" : " (ẩn)"}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-gray-500">
+              Lớp phải được gắn chương trình thì học sinh trong lớp mới thấy roadmap và skill tree ở trang tổng quan.
+            </p>
           </div>
 
           <div className="mt-4">

@@ -52,9 +52,9 @@ export default function LandingPage() {
             <a href="#cach-hoat-dong" className="text-sm text-slate-500 transition hover:text-slate-900">
               Cách hoạt động
             </a>
-            <Link href="/library" className="text-sm font-semibold text-indigo-600 transition hover:text-indigo-700">
-              <i className="fa-solid fa-book-open mr-1.5 text-xs"></i>
-              Thư viện
+            <Link href="/giao-trinh" className="text-sm font-semibold text-indigo-600 transition hover:text-indigo-700">
+              <i className="fa-solid fa-route mr-1.5 text-xs"></i>
+              Giáo trình
             </Link>
           </nav>
 
@@ -384,7 +384,7 @@ export default function LandingPage() {
               <ul className="space-y-2.5 text-sm">
                 <li><a href="#tinh-nang" className="transition hover:text-white">Tính năng</a></li>
                 <li><a href="#cach-hoat-dong" className="transition hover:text-white">Cách hoạt động</a></li>
-                <li><Link href="/library" className="transition hover:text-white">Thư viện bài giảng</Link></li>
+                <li><Link href="/giao-trinh" className="transition hover:text-white">Giáo trình đào tạo</Link></li>
               </ul>
             </div>
 

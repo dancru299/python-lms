@@ -11,6 +11,7 @@ import {
   summarizeLessonProgress,
 } from "@/lib/lesson-progress";
 import { processCodeBlocks, renderExerciseHtml } from "@/lib/lesson-html";
+import { getLessonGateForStudent } from "@/lib/programs/lesson-gating";
 import {
   serializeLessonMedia,
   type LessonContentBlock,
@@ -56,6 +57,50 @@ function LessonUnavailableState({ lessonId }: { lessonId: string }) {
   );
 }
 
+function LessonLockedState({
+  requiredLessonId,
+  requiredLessonTitle,
+}: {
+  requiredLessonId: string | null;
+  requiredLessonTitle: string | null;
+}) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-blue-50">
+      <div className="mx-auto flex min-h-screen max-w-3xl items-center justify-center px-4">
+        <div className="w-full rounded-[2rem] border border-indigo-200 bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+            <i className="fa-solid fa-lock text-2xl"></i>
+          </div>
+          <h1 className="mt-5 text-2xl font-bold text-slate-900">Bài học đang khóa</h1>
+          <p className="mt-3 text-sm leading-7 text-slate-600">
+            {requiredLessonTitle ? (
+              <>
+                Bạn cần hoàn thành bài{" "}
+                <span className="font-semibold text-slate-900">“{requiredLessonTitle}”</span> trước —
+                xem hết các tab và nộp đủ bài tập về nhà — thì bài này mới mở khóa.
+              </>
+            ) : (
+              <>Hãy hoàn thành bài học trước đó (xem hết các tab và nộp đủ bài tập về nhà) để mở khóa bài này.</>
+            )}
+          </p>
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            {requiredLessonId && (
+              <Link href={`/lessons/${requiredLessonId}`} className="btn btn-primary">
+                <i className="fa-solid fa-arrow-right-to-bracket"></i>
+                Tới bài cần hoàn thành
+              </Link>
+            )}
+            <Link href="/dashboard" className="btn btn-secondary">
+              <i className="fa-solid fa-arrow-left"></i>
+              Quay lại lộ trình
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default async function LessonPage({ params }: PageProps) {
   const { id } = await params;
   const session = await getSession();
@@ -88,6 +133,20 @@ export default async function LessonPage({ params }: PageProps) {
 
     if (!lesson) {
       notFound();
+    }
+
+    // Sequential gating: a student may not open a program lesson until the previous one
+    // is finished. Teachers/admins are never gated so they can preview freely.
+    if (session?.role === "student") {
+      const gate = await getLessonGateForStudent(session.userId, id);
+      if (gate.locked) {
+        return (
+          <LessonLockedState
+            requiredLessonId={gate.requiredLessonId}
+            requiredLessonTitle={gate.requiredLessonTitle}
+          />
+        );
+      }
     }
 
     // Fetch sibling lessons in same chapter for prev/next navigation

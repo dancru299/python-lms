@@ -85,11 +85,9 @@ export default function NotificationBell({
         keepalive: true,
       });
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)));
-      setCount((current) => {
-        const next = Math.max(0, current - 1);
-        onCountChange?.(next);
-        return next;
-      });
+      const next = Math.max(0, count - 1);
+      setCount(next);
+      onCountChange?.(next);
     }
     setOpen(false);
     router.push(item.link);

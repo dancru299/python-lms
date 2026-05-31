@@ -170,6 +170,42 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  try {
+    const session = await verifyTeacher();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+
+    const data: { isPublished?: boolean; isLocked?: boolean } = {};
+    if (typeof body.isPublished === "boolean") data.isPublished = body.isPublished;
+    if (typeof body.isLocked === "boolean") data.isLocked = body.isLocked;
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "Không có trường hợp lệ để cập nhật" }, { status: 400 });
+    }
+
+    const existing = await prisma.lesson.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return NextResponse.json({ error: "Bài giảng không tồn tại" }, { status: 404 });
+    }
+
+    const lesson = await prisma.lesson.update({
+      where: { id },
+      data,
+      select: { id: true, isPublished: true, isLocked: true },
+    });
+
+    return NextResponse.json({ success: true, lesson });
+  } catch (error) {
+    console.error("Patch lesson error:", error);
+    return NextResponse.json({ error: "Đã xảy ra lỗi, vui lòng thử lại" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const session = await verifyTeacher();

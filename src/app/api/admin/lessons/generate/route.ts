@@ -6,6 +6,9 @@ import {
 } from "@/lib/ai/provider-types";
 import { requireTeacher } from "@/lib/session";
 
+// AI generation can take up to ~55s; allow the Vercel function the full Hobby cap.
+export const maxDuration = 60;
+
 const PROVIDER_LABELS: Record<LessonAiProvider, string> = {
   gemini: "Google Gemini",
   openai: "OpenAI",

@@ -758,8 +758,12 @@ async function requestOpenAiCompatible(
     payload.response_format = { type: "json_object" };
   }
 
+  // Abort the upstream call before the Vercel function timeout (60s on Hobby) so we
+  // can return a clean error instead of an opaque 504. Raise AI_REQUEST_TIMEOUT_MS on
+  // a plan with a higher maxDuration (e.g. Pro allows up to 300s).
+  const timeoutMs = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 55_000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 85_000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -775,7 +779,7 @@ async function requestOpenAiCompatible(
       err instanceof Error && (err.name === "AbortError" || err.message.includes("abort"));
     throw new ProviderRequestError(
       isAbort
-        ? `Provider "${selection.provider}" không phản hồi trong thời gian cho phép (85 giây).`
+        ? `Provider "${selection.provider}" không phản hồi trong thời gian cho phép (${Math.round(timeoutMs / 1000)} giây).`
         : (err instanceof Error ? err.message : "Network error"),
       isAbort ? 504 : 503,
       selection.provider
