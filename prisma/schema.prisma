@@ -60,7 +60,7 @@ model Lesson {
   title       String
   slug        String?
   content     String? @db.Text
-  duration    Int     @default(60)
+  duration    Int     @default(120)
   difficulty  String  @default("beginner")
   sortOrder   Int     @default(0)
   isLocked    Boolean @default(false)
