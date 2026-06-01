@@ -27,7 +27,7 @@ export default async function CurriculumListPage() {
   const programs = await getPublicPrograms();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50">
       <PublicHeader />
 
       {/* Intro */}
@@ -61,7 +61,7 @@ export default async function CurriculumListPage() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {programs.map((program, index) => (
                 <Link
                   key={program.id}

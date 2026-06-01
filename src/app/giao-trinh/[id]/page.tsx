@@ -82,7 +82,7 @@ export default async function CurriculumDetailPage({ params }: PageProps) {
   ].filter((item): item is { href: string; label: string } => item !== null);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen overflow-x-hidden bg-white">
       <PublicHeader />
 
       {/* ── Hero (light) ── */}
@@ -90,11 +90,11 @@ export default async function CurriculumDetailPage({ params }: PageProps) {
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
         <div className="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <nav className="flex items-center gap-2 text-sm text-slate-400">
-            <Link href="/giao-trinh" className="font-medium text-slate-500 transition hover:text-indigo-600">
+            <Link href="/giao-trinh" className="shrink-0 font-medium text-slate-500 transition hover:text-indigo-600">
               Giáo trình
             </Link>
-            <i className="fa-solid fa-chevron-right text-[10px]"></i>
-            <span className="truncate text-slate-400">{program.title}</span>
+            <i className="fa-solid fa-chevron-right shrink-0 text-[10px]"></i>
+            <span className="min-w-0 truncate text-slate-400">{program.title}</span>
           </nav>
 
           <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 ring-1 ring-indigo-100">
@@ -183,7 +183,7 @@ export default async function CurriculumDetailPage({ params }: PageProps) {
                         )}
                       </div>
 
-                      <div className="grid gap-6 p-5 sm:px-6 md:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-6 p-5 sm:px-6 md:grid-cols-2">
                         {/* Outcomes */}
                         <div>
                           <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -278,7 +278,7 @@ export default async function CurriculumDetailPage({ params }: PageProps) {
             <p className="mt-2 text-sm text-slate-500">
               Những năng lực học viên xây dựng được khi hoàn thành chương trình.
             </p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {program.skills.map((skill) => (
                 <div key={skill.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start gap-3">

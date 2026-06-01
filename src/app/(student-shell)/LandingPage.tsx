@@ -20,6 +20,8 @@ function useScrollReveal() {
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
   useScrollReveal();
 
   useEffect(() => {
@@ -58,11 +60,64 @@ export default function LandingPage() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2">
+          {/* Desktop auth buttons */}
+          <div className="hidden items-center gap-2 md:flex">
             <Link href="/login" className="btn btn-secondary text-sm">Đăng nhập</Link>
             <Link href="/register" className="btn btn-primary text-sm">Bắt đầu miễn phí</Link>
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={menuOpen ? "Đóng menu" : "Mở menu"}
+            aria-expanded={menuOpen}
+            aria-controls="landing-mobile-menu"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 md:hidden"
+          >
+            <i className={`fa-solid ${menuOpen ? "fa-xmark" : "fa-bars"} text-lg`}></i>
+          </button>
         </div>
+
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div id="landing-mobile-menu" className="border-t border-slate-100 bg-white md:hidden">
+            <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
+              <a
+                href="#tinh-nang"
+                onClick={closeMenu}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <i className="fa-solid fa-wand-magic-sparkles w-4 text-center text-slate-400"></i>
+                Tính năng
+              </a>
+              <a
+                href="#cach-hoat-dong"
+                onClick={closeMenu}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <i className="fa-solid fa-list-check w-4 text-center text-slate-400"></i>
+                Cách hoạt động
+              </a>
+              <Link
+                href="/giao-trinh"
+                onClick={closeMenu}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50"
+              >
+                <i className="fa-solid fa-route w-4 text-center text-indigo-500"></i>
+                Giáo trình
+              </Link>
+              <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+                <Link href="/login" onClick={closeMenu} className="btn btn-secondary w-full text-sm">
+                  Đăng nhập
+                </Link>
+                <Link href="/register" onClick={closeMenu} className="btn btn-primary w-full text-sm">
+                  Bắt đầu miễn phí
+                </Link>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* ── Hero ── */}
