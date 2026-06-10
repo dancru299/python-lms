@@ -85,6 +85,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    // Keep the teachers' aggregated homework notification in sync: once every
+    // pending submission for this student+lesson has been graded, mark it read so
+    // the unread badge clears instead of lingering after the queue is emptied.
+    const lessonId = submission.exercise.lessonId;
+    const groupKey = `lesson-homework:${lessonId}:${submission.userId}`;
+    const remainingPending = await prisma.submission.count({
+      where: {
+        userId: submission.userId,
+        status: "pending",
+        exercise: { lessonId },
+      },
+    });
+    if (remainingPending === 0) {
+      await prisma.notification.updateMany({
+        where: { groupKey, type: "new_submission", isRead: false },
+        data: { isRead: true },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: "Chấm điểm thành công!",

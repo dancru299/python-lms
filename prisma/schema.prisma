@@ -249,11 +249,16 @@ model Notification {
   message   String   @db.Text
   link      String?
   isRead    Boolean  @default(false)
+  // Collapses related notifications (e.g. all homework of one lesson by one
+  // student) into a single, updatable entry per recipient instead of one row
+  // per submission. Null for one-off notifications.
+  groupKey  String?
   createdAt DateTime @default(now())
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, groupKey])
   @@index([userId])
 }
 

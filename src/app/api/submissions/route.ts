@@ -114,22 +114,51 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Notify all teachers about new submission
-    const teachers = await prisma.user.findMany({
-      where: { role: { in: ["teacher", "admin"] } },
-      select: { id: true },
-    });
+    // Notify teachers about the submission, but collapse all homework of one
+    // lesson by one student into a SINGLE notification per teacher that updates
+    // as more is submitted — instead of one separate notification per exercise.
+    const [teachers, totalExercises, submittedCount] = await Promise.all([
+      prisma.user.findMany({
+        where: { role: { in: ["teacher", "admin"] } },
+        select: { id: true },
+      }),
+      prisma.exercise.count({ where: { lessonId: exercise.lessonId } }),
+      prisma.submission.count({
+        where: { userId: session.userId, exercise: { lessonId: exercise.lessonId } },
+      }),
+    ]);
 
-    // Create notifications for teachers
-    await prisma.notification.createMany({
-      data: teachers.map(teacher => ({
-        userId: teacher.id,
-        type: "new_submission",
-        title: "Có bài tập mới cần chấm",
-        message: `${student?.name} đã nộp bài "${exercise.title}" trong bài học "${exercise.lesson.title}"`,
-        link: `/admin/grading/${submission.id}`,
-      })),
-    });
+    const groupKey = `lesson-homework:${exercise.lessonId}:${session.userId}`;
+    const studentName = student?.name ?? "Học sinh";
+    const message =
+      submittedCount >= totalExercises
+        ? `${studentName} đã nộp đủ ${totalExercises}/${totalExercises} bài tập trong bài học "${exercise.lesson.title}" — cần chấm.`
+        : `${studentName} đã nộp ${submittedCount}/${totalExercises} bài tập trong bài học "${exercise.lesson.title}" — cần chấm.`;
+
+    // Upsert one notification per teacher keyed by (teacher, lesson, student):
+    // first submission creates it, later submissions refresh the count, bump it
+    // back to unread and to the top of the list.
+    await prisma.$transaction(
+      teachers.map((teacher) =>
+        prisma.notification.upsert({
+          where: { userId_groupKey: { userId: teacher.id, groupKey } },
+          create: {
+            userId: teacher.id,
+            type: "new_submission",
+            title: "Có bài tập cần chấm",
+            message,
+            link: "/admin/grading",
+            groupKey,
+          },
+          update: {
+            message,
+            link: "/admin/grading",
+            isRead: false,
+            createdAt: new Date(),
+          },
+        })
+      )
+    );
 
     return NextResponse.json({
       id: submission.id,
