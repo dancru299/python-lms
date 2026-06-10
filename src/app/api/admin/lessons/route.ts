@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
           title: payload.title,
           duration: payload.duration,
           difficulty: payload.difficulty,
+          theme: payload.theme === "default" ? null : payload.theme,
           sortOrder: nextOrder,
           objectiveKnowledge: payload.objectives.knowledge || null,
           objectiveSkills: payload.objectives.skills || null,

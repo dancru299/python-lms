@@ -69,6 +69,9 @@ model Lesson {
   // public sample (a teaser). All other lessons require enrollment in a program.
   isPublicPreview Boolean @default(false)
 
+  // Visual theme/skin for the whole lesson's slides (null = default).
+  theme String?
+
   // Learning Objectives
   objectiveKnowledge String? @db.Text
   objectiveSkills    String? @db.Text

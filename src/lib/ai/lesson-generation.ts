@@ -8,6 +8,7 @@ import {
   isLessonAiProvider,
 } from "@/lib/ai/provider-types";
 import {
+  normalizeContentBlocks,
   normalizeLessonDraft,
   type LessonDraft,
 } from "@/lib/lessons/lesson-draft";
@@ -879,6 +880,196 @@ export async function generateLessonDraft(options: {
 
     return {
       draft: normalizeLessonDraft(parsed),
+      meta: {
+        provider: selection.provider,
+        model: rawResult.model,
+      },
+    };
+  } catch (error) {
+    throw toProviderRequestError(error, selection.provider);
+  }
+}
+
+function buildSectionCanvasSystemPrompt(): string {
+  return [
+    "You are a senior instructional designer and Python teacher.",
+    "You turn ONE lesson tab's raw content into polished teaching-canvas slides.",
+    "Return ONLY one valid JSON object — no markdown fences, no extra text.",
+    "All user-facing text MUST stay in Vietnamese and PRESERVE the original meaning, examples, code and metaphors. Do NOT invent new facts and do NOT translate code.",
+    "Keep the response within 4000 tokens.",
+  ].join("\n");
+}
+
+function buildSectionCanvasUserPrompt(options: {
+  title: string;
+  content: string;
+  lessonTitle?: string;
+  isFirst?: boolean;
+  layoutHints?: string[];
+}): string {
+  const { title, content, lessonTitle, isFirst, layoutHints } = options;
+
+  return [
+    `You are given ONE lesson tab titled "${title}". Convert ONLY this tab into teaching-canvas slides.`,
+    "Do NOT create extra tabs, do NOT merge in unrelated ideas, do NOT drop any code block or example from the source.",
+    "Return JSON with exactly this shape:",
+    `{
+  "contentBlocks": [
+    {
+      "id": "canvas-1",
+      "type": "teaching_canvas",
+      "title": "string — SHORT canvas headline in Vietnamese (max 6 words)",
+      "layout": "hero | cards | highlight | timeline | compare | checklist | chat | flow | code_explain | mindmap | quiz | playground | statement | cover | two_col_text | banner | text | split | code",
+      "accent": "(optional) indigo | teal | amber | rose | emerald — accent color to vary slide look",
+      "ratio": "(optional, only for split/code slides) even | wide-text | wide-side",
+      "mainHtml": "HTML string — main explanation (empty for hero/cards/compare/timeline layout)",
+      "code": "plain Python code only, no HTML tags, empty string if none",
+      "mediaId": "",
+      "notesHtml": "",
+      "reveal": true,
+      "steps": [ { "id": "step-1", "text": "short Vietnamese bullet sentence" } ],
+      "cards": [ { "icon": "fa-icon-name", "title": "Card title", "description": "Short description" } ]
+    }
+  ]
+}`,
+    "",
+    "Layout selection rules — VARY the layout across canvases, do NOT repeat one layout for the whole tab:",
+    isFirst
+      ? `- 'hero': the VERY FIRST canvas of this tab MUST be a hero opener. title = the lesson title "${lessonTitle ?? title}". mainHtml = ONE short motivating sentence wrapped in <p>. No code, no steps, reveal=false.`
+      : "- 'hero': do NOT use hero for this tab (only the opening tab has one).",
+    "- 'cards': when listing 2–4 parallel concepts/items each needing an icon. Use the 'cards' array — leave mainHtml empty. FA solid icon names (fa-lightbulb, fa-robot, fa-rocket, fa-database, fa-code, fa-gear, fa-bolt, fa-star, fa-triangle-exclamation, fa-wand-magic-sparkles).",
+    "- 'highlight': a key concept, definition or memorable rule. mainHtml holds the highlighted content. Great for 'bí mật', 'lưu ý', 'ghi nhớ'.",
+    "- 'timeline': a process or ordered sequence of steps. Put each step as ONE entry in 'steps' (in order), leave mainHtml empty. Use for 'các bước', 'quy trình', 'lần lượt'.",
+    "- 'compare': comparing exactly TWO things (A vs B, đúng/sai, trước/sau, có/không ép kiểu). Use 'cards' with EXACTLY 2 entries: cards[0]=left side, cards[1]=right side (icon + title + description). Leave mainHtml empty.",
+    "- 'checklist': a summary / takeaways slide. Put each takeaway as ONE entry in 'steps'; optional one-line intro in mainHtml. Use for 'tổng kết', 'ghi nhớ', 'tóm tắt'.",
+    "- 'chat': a dialogue between two speakers (e.g. máy tính ↔ học sinh, hỏi ↔ đáp). Use 'cards' where each card = one line: title = speaker name, description = what they say (icon optional). Leave mainHtml empty. Great for input/output examples.",
+    "- 'flow': a SHORT horizontal pipeline of 2–4 nodes with arrows (e.g. \"12\" → int() → 12, or Input → Process → Output). Put each node as ONE SHORT entry in 'steps'. Leave mainHtml empty. Ideal for data transformation / ép kiểu.",
+    "- 'code_explain': read a code example with per-line notes. Put the Python in 'code', and ONE explanation per code line (in order) as 'steps'. Use when the goal is to UNDERSTAND existing code line by line.",
+    "- 'mindmap': a one-level summary tree. title = central topic, each branch = ONE entry in 'steps'. Good as an alternative summary slide.",
+    "- 'quiz': a quick multiple-choice check (NOT graded). mainHtml = the question. 'cards' = 2–4 options where each option's title = the option text and EXACTLY ONE option has \"correct\": true. notesHtml = a short explanation shown after answering. Use AT MOST ONE quiz per tab, only when it reinforces the key idea.",
+    "- 'playground': let the student edit & run Python in the slide. Put a SHORT runnable starter program in 'code'. No steps. Use AT MOST ONE per tab when hands-on practice helps.",
+    "- 'statement': ONE short memorable sentence shown large & centered (a golden rule / key takeaway). Put the sentence in mainHtml, a short label in title. No code/steps.",
+    "- 'two_col_text': a longer prose explanation that reads better in two newspaper-style columns. Put 3–5 short <p> in mainHtml.",
+    "- 'banner': a short section-divider slide between major parts. title = the part name, mainHtml = one optional sub-line.",
+    "- ('cover' exists for a chapter opener with a background image but needs a real image; prefer 'hero' unless an image is provided.)",
+    "- 'code': a canvas focused on a Python example. mainHtml = ONE short explanation sentence, code = runnable Python, steps walk through it.",
+    "",
+    "Optional polish: you MAY set 'accent' (indigo/teal/amber/rose/emerald) to vary the color from slide to slide, and 'ratio' on split/code slides. Keep it tasteful — don't randomize wildly.",
+    "- 'text': pure prose explanation when nothing above fits.",
+    layoutHints && layoutHints.length > 0
+      ? `- Preferred layout for this tab: "${layoutHints[0]}" — use it for the MAIN canvas unless clearly unsuitable.${
+          layoutHints.length > 1
+            ? ` Other layouts that may fit: ${layoutHints.slice(1).join(", ")}.`
+            : ""
+        }`
+      : "",
+    "",
+    "Quality rules (the slides must look polished and fit on screen):",
+    '- EVERY object in contentBlocks MUST include "type": "teaching_canvas". Never emit other block types.',
+    "- Produce 2–4 canvases for this tab. Each canvas teaches exactly ONE idea — split a long tab into several canvases instead of one crowded slide.",
+    "- Canvas titles must be SHORT (max 6 words). Never reuse the full tab title as a canvas title.",
+    "- Keep mainHtml SHORT: at most ~45 words / 2 short paragraphs per canvas so it never overflows. Move detail into 2–4 reveal steps.",
+    "- Keep existing Python code and program output VERBATIM. Put program output inside a <pre> in mainHtml, never in the code field.",
+    "- reveal steps: 2–4 short Vietnamese sentences.",
+    "- code field: PLAIN Python only — no <code>, no <div>, no HTML. Empty string when not needed.",
+    "- For a 'code' canvas keep the LEFT side light: at most one short sentence + one short <pre> output (≤1 line) + up to 3 steps. Do NOT stack a heading, a paragraph, an output block AND many steps on the same canvas — split instead.",
+    "- Keep code lines short and readable. Put explanatory comments on their OWN line above the code, not as long trailing inline comments.",
+    "- mainHtml: valid concise HTML using h3, p, ul, ol, li, strong, em, code.",
+    "",
+    "Source tab content:",
+    "<tab>",
+    content.trim(),
+    "</tab>",
+  ].join("\n");
+}
+
+const VI_TITLE_FALLBACK = "Bài học";
+
+/** Deterministic hero canvas — guarantees an opening slide even if the model skips it. */
+function buildHeroCanvasBlock(lessonTitle: string, content: string): Record<string, unknown> {
+  const firstSentence = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !/^(python|plaintext|code|output)\s*$/i.test(line));
+  const tagline =
+    firstSentence && firstSentence.length <= 140
+      ? firstSentence
+      : "Bắt đầu hành trình khám phá bài học nào!";
+
+  return {
+    id: `canvas-hero-${Date.now()}`,
+    type: "teaching_canvas",
+    title: lessonTitle.trim() || VI_TITLE_FALLBACK,
+    layout: "hero",
+    mainHtml: `<p>${tagline}</p>`,
+    code: "",
+    mediaId: "",
+    notesHtml: "",
+    reveal: false,
+    steps: [],
+  };
+}
+
+export async function generateSectionCanvas(options: {
+  title: string;
+  content: string;
+  lessonTitle?: string;
+  isFirst?: boolean;
+  layoutHints?: string[];
+  provider?: string;
+  model?: string;
+}): Promise<{
+  contentBlocks: unknown[];
+  meta: { provider: LessonAiProvider; model: string };
+}> {
+  const selection = resolveLessonGenerationSelection(
+    options.provider,
+    options.model
+  );
+  const systemPrompt = buildSectionCanvasSystemPrompt();
+  const userPrompt = buildSectionCanvasUserPrompt({
+    title: options.title,
+    content: options.content,
+    lessonTitle: options.lessonTitle,
+    isFirst: options.isFirst,
+    layoutHints: options.layoutHints,
+  });
+
+  try {
+    const rawResult =
+      PROVIDERS[selection.provider].kind === "gemini"
+        ? await generateWithGemini(selection, systemPrompt, userPrompt)
+        : await generateWithOpenAiCompatible(selection, systemPrompt, userPrompt);
+
+    const parsed = parseJsonObject(rawResult.text);
+    // Be lenient about how the model wraps the blocks: a bare array, or under
+    // contentBlocks / blocks / sections.
+    const root =
+      typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : {};
+    const rawBlocks = Array.isArray(parsed)
+      ? parsed
+      : root.contentBlocks ?? root.blocks ?? root.sections ?? [];
+    const blocks = (normalizeContentBlocks(rawBlocks) as Record<string, unknown>[] | null) ?? [];
+
+    // Guarantee an opening hero slide on the first tab even if the model skipped
+    // it, and never let a stray hero appear on later tabs.
+    let finalBlocks: Record<string, unknown>[];
+    if (options.isFirst) {
+      const hasHero = blocks.some((block) => block.layout === "hero");
+      finalBlocks = hasHero
+        ? blocks
+        : [
+            buildHeroCanvasBlock(options.lessonTitle ?? options.title, options.content),
+            ...blocks,
+          ];
+    } else {
+      finalBlocks = blocks.filter((block) => block.layout !== "hero");
+    }
+
+    return {
+      contentBlocks: finalBlocks,
       meta: {
         provider: selection.provider,
         model: rawResult.model,

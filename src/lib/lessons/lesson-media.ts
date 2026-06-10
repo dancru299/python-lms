@@ -90,13 +90,34 @@ export type LessonTeachingCanvasLayout =
   | "media"
   | "hero"
   | "cards"
-  | "highlight";
+  | "highlight"
+  | "timeline"
+  | "compare"
+  | "checklist"
+  | "chat"
+  | "flow"
+  | "code_explain"
+  | "mindmap"
+  | "quiz"
+  | "playground"
+  | "statement"
+  | "cover"
+  | "two_col_text"
+  | "banner";
+
+// Optional per-canvas layout customization (stored in JSON, no DB change).
+export type CanvasAccent = "indigo" | "teal" | "amber" | "rose" | "emerald";
+// Width balance between the main text column and the support (code/image) column.
+// Content always reads top-to-bottom, left-to-right; this only tunes column widths.
+export type CanvasRatio = "even" | "wide-text" | "wide-side";
 
 export interface CanvasCard {
   icon: string;
   title: string;
   description: string;
   color?: string;
+  // Only used by the 'quiz' layout: marks an option as the correct answer.
+  correct?: boolean;
 }
 
 export interface LessonTeachingCanvasStep {
@@ -117,6 +138,9 @@ export interface LessonTeachingCanvasBlock {
   steps: LessonTeachingCanvasStep[];
   reveal?: boolean;
   cards?: CanvasCard[];
+  // Per-canvas layout customization (optional).
+  accent?: CanvasAccent;
+  ratio?: CanvasRatio;
 }
 
 export type LessonContentBlock =

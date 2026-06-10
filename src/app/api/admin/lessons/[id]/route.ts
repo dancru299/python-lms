@@ -87,6 +87,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           title: payload.title,
           duration: payload.duration,
           difficulty: payload.difficulty,
+          theme: payload.theme === "default" ? null : payload.theme,
           objectiveKnowledge: payload.objectives.knowledge || null,
           objectiveSkills: payload.objectives.skills || null,
           objectiveAttitude: payload.objectives.attitude || null,

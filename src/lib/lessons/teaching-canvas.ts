@@ -14,7 +14,20 @@ export type TeachingCanvasKind =
   | "note"
   | "hero"
   | "cards"
-  | "highlight";
+  | "highlight"
+  | "timeline"
+  | "compare"
+  | "checklist"
+  | "chat"
+  | "flow"
+  | "code_explain"
+  | "mindmap"
+  | "quiz"
+  | "playground"
+  | "statement"
+  | "cover"
+  | "two_col_text"
+  | "banner";
 
 export interface TeachingCanvasStep {
   id: string;
@@ -33,6 +46,9 @@ export interface TeachingCanvas {
   cards?: CanvasCard[];
   steps: TeachingCanvasStep[];
   sourceBlockIds: string[];
+  // Per-canvas layout customization (carried through from the source block).
+  accent?: string;
+  ratio?: string;
 }
 
 export interface TeachingCanvasSectionSource {
@@ -182,6 +198,8 @@ function buildFromTeachingCanvasBlocks(section: TeachingCanvasSectionSource) {
               text: step.text || stripHtml(step.html || ""),
             })),
       sourceBlockIds: [block.id],
+      accent: block.accent,
+      ratio: block.ratio,
     }));
 }
 
@@ -190,6 +208,19 @@ function getTeachingCanvasKind(block: LessonTeachingCanvasBlock): TeachingCanvas
     case "hero": return "hero";
     case "cards": return "cards";
     case "highlight": return "highlight";
+    case "timeline": return "timeline";
+    case "compare": return "compare";
+    case "checklist": return "checklist";
+    case "chat": return "chat";
+    case "flow": return "flow";
+    case "code_explain": return "code_explain";
+    case "mindmap": return "mindmap";
+    case "quiz": return "quiz";
+    case "playground": return "playground";
+    case "statement": return "statement";
+    case "cover": return "cover";
+    case "two_col_text": return "two_col_text";
+    case "banner": return "banner";
     case "code": return "code";
     case "media": return "media";
     case "split":
@@ -516,7 +547,12 @@ function blockToHtml(block: LessonContentBlock) {
 </section>`;
   }
 
-  return `<div class="lesson-callout lesson-callout-${block.tone}">${block.html}</div>`;
+  // Callout (and any unexpected block shape): guard the fields so a missing
+  // tone/html never renders as the literal string "undefined".
+  const fallback = block as { tone?: string; html?: string };
+  return `<div class="lesson-callout lesson-callout-${fallback.tone || "info"}">${
+    fallback.html || ""
+  }</div>`;
 }
 
 function splitHtmlIntoFragments(html: string) {

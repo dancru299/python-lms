@@ -44,9 +44,27 @@ export interface LessonDraft {
   exercises: LessonExerciseDraft[];
 }
 
+export const LESSON_THEMES = [
+  "default",
+  "ocean",
+  "sunset",
+  "forest",
+  "grape",
+] as const;
+
+export type LessonTheme = (typeof LESSON_THEMES)[number];
+
 export interface LessonMutationPayload extends LessonDraft {
   chapterId: string;
   draftId: string;
+  theme: LessonTheme;
+}
+
+export function normalizeLessonTheme(value: unknown): LessonTheme {
+  const candidate = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return (LESSON_THEMES as readonly string[]).includes(candidate)
+    ? (candidate as LessonTheme)
+    : "default";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -65,9 +83,42 @@ function asArray(value: unknown): unknown[] {
 
 function normalizeCanvasLayout(value: unknown): string {
   const candidate = asString(value).toLowerCase();
-  return ["text", "split", "code", "media", "hero", "cards", "highlight"].includes(candidate)
+  return [
+    "text",
+    "split",
+    "code",
+    "media",
+    "hero",
+    "cards",
+    "highlight",
+    "timeline",
+    "compare",
+    "checklist",
+    "chat",
+    "flow",
+    "code_explain",
+    "mindmap",
+    "quiz",
+    "playground",
+    "statement",
+    "cover",
+    "two_col_text",
+    "banner",
+  ].includes(candidate)
     ? candidate
     : "split";
+}
+
+function normalizeCanvasAccent(value: unknown): string | undefined {
+  const candidate = asString(value).toLowerCase();
+  return ["indigo", "teal", "amber", "rose", "emerald"].includes(candidate)
+    ? candidate
+    : undefined;
+}
+
+function normalizeCanvasRatio(value: unknown): string | undefined {
+  const candidate = asString(value).toLowerCase();
+  return ["even", "wide-text", "wide-side"].includes(candidate) ? candidate : undefined;
 }
 
 function normalizeCanvasCards(value: unknown): unknown[] | undefined {
@@ -80,7 +131,13 @@ function normalizeCanvasCards(value: unknown): unknown[] | undefined {
       const title = asString(src.title);
       const description = asString(src.description);
       if (!title && !description) return null;
-      return { icon, title, description, color: asString(src.color) || undefined };
+      return {
+        icon,
+        title,
+        description,
+        color: asString(src.color) || undefined,
+        ...(src.correct === true ? { correct: true } : {}),
+      };
     })
     .filter((c) => c !== null);
   return cards.length > 0 ? cards : undefined;
@@ -108,7 +165,10 @@ function normalizeCanvasSteps(value: unknown, canvasId: string): unknown[] {
     .filter((step) => step !== null);
 }
 
-function normalizeContentBlocks(value: unknown): unknown {
+// Block types the lesson editor itself produces and that render correctly as-is.
+const KNOWN_EDITOR_BLOCK_TYPES = ["rich_text", "image", "code", "step_guide", "callout"];
+
+export function normalizeContentBlocks(value: unknown): unknown {
   const blocks = asArray(value)
     .map((block, index) => {
       const source = asRecord(block);
@@ -117,29 +177,56 @@ function normalizeContentBlocks(value: unknown): unknown {
       }
 
       const type = asString(source.type);
-      if (type !== "teaching_canvas") {
+
+      // Preserve the editor's own block types untouched.
+      if (KNOWN_EDITOR_BLOCK_TYPES.includes(type)) {
         return source;
       }
 
+      // Anything else — a teaching_canvas, or a block from an AI response whose
+      // type is missing/unrecognized — is salvaged into a clean teaching canvas.
+      // This prevents a malformed block from later rendering as literal
+      // "undefined" through the generic callout fallback.
       const canvasId = asString(source.id) || `canvas-${index + 1}`;
-      const title = asString(source.title) || `Canvas ${index + 1}`;
-      const mainHtml = asString(source.mainHtml) || asString(source.html);
-
-      const layout = normalizeCanvasLayout(source.layout);
+      const titleText = asString(source.title);
+      const salvagedHtml =
+        asString(source.mainHtml) ||
+        asString(source.html) ||
+        asString(source.content) ||
+        (asString(source.text) ? `<p>${asString(source.text)}</p>` : "");
+      const code = asString(source.code);
       const cards = normalizeCanvasCards(source.cards);
+      const steps = normalizeCanvasSteps(source.steps, canvasId);
+
+      // Drop an unknown-type block that carries no usable content at all.
+      if (
+        type !== "teaching_canvas" &&
+        !titleText &&
+        !salvagedHtml &&
+        !code &&
+        !cards &&
+        steps.length === 0
+      ) {
+        return null;
+      }
+
+      const title = titleText || `Canvas ${index + 1}`;
+      const accent = normalizeCanvasAccent(source.accent);
+      const ratio = normalizeCanvasRatio(source.ratio);
       return {
         id: canvasId,
         type: "teaching_canvas",
         title,
-        layout,
-        mainHtml: mainHtml || `<p>${title}</p>`,
-        code: asString(source.code),
+        layout: normalizeCanvasLayout(source.layout),
+        mainHtml: salvagedHtml || `<p>${title}</p>`,
+        code,
         mediaId: asString(source.mediaId),
         notesHtml: asString(source.notesHtml),
-        reveal:
-          typeof source.reveal === "boolean" ? source.reveal : true,
-        steps: normalizeCanvasSteps(source.steps, canvasId),
+        reveal: typeof source.reveal === "boolean" ? source.reveal : true,
+        steps,
         ...(cards ? { cards } : {}),
+        ...(accent ? { accent } : {}),
+        ...(ratio ? { ratio } : {}),
       };
     })
     .filter((block) => block !== null);
@@ -286,6 +373,7 @@ export function normalizeLessonMutationPayload(
   return {
     chapterId: asString(root.chapterId),
     draftId: asString(root.draftId),
+    theme: normalizeLessonTheme(root.theme),
     ...draft,
   };
 }

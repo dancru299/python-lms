@@ -16,7 +16,38 @@ import type {
   LessonAiProvider,
 } from "@/lib/ai/provider-types";
 import type { LessonDraft } from "@/lib/lessons/lesson-draft";
+import {
+  hasSlideTemplateMarkers,
+  parseSlideTemplate,
+  suggestLayouts,
+} from "@/lib/lessons/slide-template";
 import toast from "react-hot-toast";
+
+// Runs an async mapper over items with a bounded number of in-flight calls so a
+// templated paste doesn't fire one AI request per tab all at once.
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  return results;
+}
 
 interface Section extends EditableLessonSection {
   id: string;
@@ -56,6 +87,7 @@ export interface LessonEditorLesson {
   title: string;
   duration: number;
   difficulty: string;
+  theme: string | null;
   objectiveKnowledge: string | null;
   objectiveSkills: string | null;
   objectiveAttitude: string | null;
@@ -295,6 +327,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
   const [aiContent, setAiContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiProgress, setAiProgress] = useState<{ done: number; total: number } | null>(null);
   const [aiDraftReady, setAiDraftReady] = useState(false);
   const [aiMeta, setAiMeta] = useState<{ provider: string; model: string } | null>(null);
   const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
@@ -322,6 +355,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     title: initialLesson?.title ?? "",
     duration: initialLesson?.duration ?? 120,
     difficulty: initialLesson?.difficulty ?? "beginner",
+    theme: initialLesson?.theme ?? "default",
     objectives: {
       knowledge: initialLesson?.objectiveKnowledge || "",
       skills: initialLesson?.objectiveSkills || "",
@@ -507,6 +541,157 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     setExercises((current) => current.filter((exercise) => exercise.id !== id));
   };
 
+  // Hybrid path: the paste already carries explicit [SLIDE/TAB] markers, so split
+  // it into exact tabs locally (instant, lossless, respects the teacher's order),
+  // then ask the AI to beautify ONE tab at a time into canvases. Any tab the AI
+  // can't handle keeps its parsed HTML, so the tab structure is never lost.
+  // Returns true when it handled the paste, false when the markers yielded
+  // nothing usable so the caller should fall back to the whole-document AI path.
+  const generateFromTemplate = async (): Promise<boolean> => {
+    const parsed = parseSlideTemplate(aiContent);
+
+    if (parsed.sections.length === 0 && parsed.exercises.length === 0) {
+      return false;
+    }
+
+    setIsGenerating(true);
+    setAiProgress({ done: 0, total: parsed.sections.length });
+    const generatedAt = Date.now();
+    let aiFailures = 0;
+    let lastMeta: { provider: string; model: string } | null = null;
+
+    try {
+      // Lesson title + exercises are derived deterministically — no AI needed.
+      setFormData((prev) => ({ ...prev, title: parsed.title || prev.title }));
+
+      if (parsed.exercises.length > 0) {
+        setExercises(
+          parsed.exercises.map((ex, idx) => ({
+            id: `${initialLesson ? "tpl-ex" : "ex-tpl"}-${generatedAt}-${idx}`,
+            type: ex.type,
+            title: ex.title,
+            question: ex.question,
+            answer: ex.answer,
+            difficulty: ex.difficulty,
+            points: ex.points,
+            answerVisible: ex.answerVisible,
+          }))
+        );
+      }
+
+      const builtSections = await mapWithConcurrency(
+        parsed.sections,
+        3,
+        async (tab, idx): Promise<Section> => {
+          const id = `${initialLesson ? "tpl-sec" : "sec-tpl"}-${generatedAt}-${idx}`;
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60_000);
+            let res: Response;
+            try {
+              res = await fetch("/api/admin/lessons/generate-canvas", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: tab.fullTitle,
+                  content: tab.rawText,
+                  lessonTitle: parsed.title ?? formData.title,
+                  isFirst: idx === 0,
+                  layoutHints: suggestLayouts(tab),
+                  provider: aiProvider,
+                  model: aiModel,
+                }),
+                signal: controller.signal,
+              });
+            } finally {
+              clearTimeout(timeoutId);
+            }
+
+            if (!res.ok) {
+              throw new Error(await readAiErrorMessage(res));
+            }
+
+            const data = (await res.json()) as {
+              contentBlocks?: LessonContentBlock[];
+              meta?: { provider: string; model: string };
+            };
+            const contentBlocks = Array.isArray(data.contentBlocks)
+              ? data.contentBlocks
+              : [];
+            if (data.meta) lastMeta = data.meta;
+
+            if (contentBlocks.length > 0) {
+              return {
+                id,
+                title: tab.title,
+                content: lessonContentBlocksToHtml(contentBlocks),
+                contentFormat: "canvas",
+                contentBlocks,
+              };
+            }
+
+            throw new Error("AI không trả về canvas hợp lệ");
+          } catch (error) {
+            // Graceful fallback: keep the teacher's exact content as HTML slides.
+            aiFailures += 1;
+            console.warn(`Tab "${tab.title}" dùng bản HTML gốc:`, error);
+            return {
+              id,
+              title: tab.title,
+              content: tab.html,
+              contentFormat: "html",
+              contentBlocks: null,
+            };
+          } finally {
+            setAiProgress((prev) =>
+              prev ? { ...prev, done: prev.done + 1 } : prev
+            );
+          }
+        }
+      );
+
+      if (builtSections.length > 0) {
+        setSections(builtSections);
+        setActiveSection(builtSections[0]?.id ?? null);
+      }
+      if (lastMeta) setAiMeta(lastMeta);
+
+      setCreationMode("manual");
+      setAiDraftReady(true);
+
+      const tabCount = builtSections.length;
+      if (aiFailures === 0) {
+        toast.success(
+          `Đã tách ${tabCount} tab theo mẫu và dựng slide bằng AI. Hãy kiểm tra lại trước khi lưu.`
+        );
+      } else if (aiFailures < parsed.sections.length) {
+        toast(
+          `Đã tách ${tabCount} tab. ${aiFailures} tab giữ nguyên bản HTML gốc do AI lỗi.`,
+          { icon: "⚠️", duration: 6000 }
+        );
+      } else {
+        toast(
+          `Đã tách ${tabCount} tab theo mẫu (giữ nguyên nội dung). AI chưa dựng được slide — kiểm tra cấu hình provider/model.`,
+          { icon: "⚠️", duration: 7000 }
+        );
+      }
+      return true;
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Đã xảy ra lỗi khi tách theo mẫu.",
+        { duration: 6000 }
+      );
+      console.warn("Template hybrid generation failed:", error);
+      // We already took the template path; don't also run the whole-doc AI path.
+      return true;
+    } finally {
+      setIsGenerating(false);
+      setAiProgress(null);
+    }
+  };
+
   const handleAiGenerate = async () => {
     if (!aiContent.trim()) {
       toast.error("Vui lòng nhập nội dung để AI phân tích!");
@@ -528,6 +713,13 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         "AI sẽ thay toàn bộ nội dung hiện tại (sections, bài tập, tiêu đề). Tiếp tục?"
       );
       if (!confirmed) return;
+    }
+
+    // Auto-detect the [SLIDE...] template and take the lossless hybrid path.
+    // If the markers yield nothing usable, fall through to the whole-doc AI path.
+    if (hasSlideTemplateMarkers(aiContent)) {
+      const handled = await generateFromTemplate();
+      if (handled) return;
     }
 
     setIsGenerating(true);
@@ -794,8 +986,16 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
               </span>
               AI Trợ Lý Soạn Bài Giảng
             </h2>
-            <p className="text-gray-500 mb-6">
+            <p className="text-gray-500 mb-2">
               Hãy dán toàn bộ nội dung tài liệu, bản thảo hoặc sách vào đây. Bạn có thể chọn provider và model phù hợp, hệ thống AI sẽ tự động phân tích và tạo cấu trúc Tabs, trích xuất mục tiêu, và tạo sẵn bài tập dự thảo cho bạn.
+            </p>
+            <p className="mb-6 flex items-start gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+              <i className="fa-solid fa-bolt mt-0.5"></i>
+              <span>
+                Mẹo: nếu nội dung đã có mốc <strong>[SLIDE/TAB]</strong>, hệ thống tự
+                tách đúng từng tab theo thứ tự bạn viết (giữ nguyên chữ &amp; code),
+                rồi chỉ dùng AI để dựng slide cho từng tab — nhanh và không gộp nhầm.
+              </span>
             </p>
 
             <div className="mb-6 grid gap-4 rounded-2xl border border-purple-100 bg-white/80 p-4 md:grid-cols-[1fr_1.4fr]">
@@ -894,7 +1094,12 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
                 className="btn btn-primary whitespace-nowrap bg-gradient-to-r from-purple-600 to-indigo-600 border-none shadow-md hover:shadow-lg disabled:opacity-70"
               >
                 {isGenerating ? (
-                  <><i className="fa-solid fa-spinner fa-spin mr-2"></i> Đang phân tích...</>
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                    {aiProgress
+                      ? ` Đang dựng slide (${aiProgress.done}/${aiProgress.total})...`
+                      : " Đang phân tích..."}
+                  </>
                 ) : (
                   <><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Tự động điền</>
                 )}
@@ -989,15 +1194,33 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Thời lượng (phút)</label>
-            <input
-              type="number"
-              value={formData.duration}
-              onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
-              min={15}
-              className="input w-32"
-            />
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Thời lượng (phút)</label>
+              <input
+                type="number"
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+                min={15}
+                className="input w-32"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giao diện (theme cả bài)
+              </label>
+              <select
+                value={formData.theme}
+                onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
+                className="input"
+              >
+                <option value="default">⚪ Mặc định</option>
+                <option value="ocean">🌊 Ocean (xanh biển)</option>
+                <option value="sunset">🌇 Sunset (cam ấm)</option>
+                <option value="forest">🌲 Forest (xanh lá)</option>
+                <option value="grape">🍇 Grape (tím)</option>
+              </select>
+            </div>
           </div>
         </div>
 

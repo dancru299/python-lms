@@ -58,6 +58,7 @@ export interface Lesson {
   content: string;
   duration: number;
   difficulty: string;
+  theme: string | null;
   objectiveKnowledge: string | null;
   objectiveSkills: string | null;
   objectiveAttitude: string | null;
@@ -738,6 +739,7 @@ export default function LessonClientPage({
                     sectionTitle={section.title}
                     canvases={teachingCanvasesBySection.get(section.id) || []}
                     media={lesson.media}
+                    theme={lesson.theme}
                   />
                 ) : (
                   <div className="rounded-2xl bg-white py-12 text-center text-gray-500 shadow-lg">
@@ -1307,7 +1309,7 @@ export default function LessonClientPage({
 
         .teaching-canvas .lesson-content h2,
         .teaching-canvas .lesson-content h3 {
-          margin-top: 1rem;
+          margin-top: 0.5rem;
         }
 
         .teaching-canvas .lesson-content p,
@@ -1497,7 +1499,7 @@ export default function LessonClientPage({
         /* Paragraphs */
         .lesson-content p {
           color: #374151;
-          margin-bottom: 0.9rem;
+          margin-bottom: 0.5rem;
           line-height: 1.8;
           font-size: 0.975rem;
         }
@@ -1628,13 +1630,13 @@ export default function LessonClientPage({
         .lesson-content .code-block, .lesson-content pre, .code-block {
           background: #1f1f1f;
           color: #f8fafc;
-          padding: 1.25rem 1.5rem;
+          padding: 0.5rem 1.5rem;
           border-radius: 0.5rem;
           overflow-x: auto;
           font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 0.875rem;
           line-height: 1.75;
-          margin: 1.25rem 0;
+          margin: 1rem 0;
           white-space: pre-wrap;
           word-wrap: break-word;
           letter-spacing: 0.01em;

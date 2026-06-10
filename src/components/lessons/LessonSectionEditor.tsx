@@ -16,7 +16,9 @@ import {
   lessonContentBlocksToHtml,
 } from "@/lib/lessons/teaching-canvas";
 import type {
+  CanvasAccent,
   CanvasCard,
+  CanvasRatio,
   LessonContentBlock,
   LessonImageAnnotation,
   LessonMediaView,
@@ -763,10 +765,63 @@ function LessonCanvasBuilder({
                 <option value="hero">🎯 Hero (mở đầu bài)</option>
                 <option value="cards">🃏 Cards (danh sách icon)</option>
                 <option value="highlight">💡 Điểm nhấn</option>
+                <option value="timeline">🪜 Timeline (các bước)</option>
+                <option value="compare">⚖️ So sánh (A vs B)</option>
+                <option value="checklist">✅ Checklist (tổng kết)</option>
+                <option value="chat">💬 Hội thoại (chat)</option>
+                <option value="flow">➡️ Flow ngang (pipeline)</option>
+                <option value="code_explain">🔎 Code + giải thích dòng</option>
+                <option value="mindmap">🧠 Mindmap (sơ đồ cây)</option>
+                <option value="quiz">❓ Quiz trắc nghiệm</option>
+                <option value="playground">🐍 Playground (chạy code)</option>
+                <option value="statement">💬 Statement (câu chốt lớn)</option>
+                <option value="cover">🖼️ Cover (ảnh nền tràn)</option>
+                <option value="two_col_text">🗞️ Hai cột chữ</option>
+                <option value="banner">🚩 Banner (ngăn cách)</option>
                 <option value="split">Nội dung + phụ trợ</option>
                 <option value="text">Chỉ nội dung</option>
                 <option value="code">Ưu tiên code</option>
                 <option value="media">Ưu tiên ảnh</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Màu nhấn
+              </label>
+              <select
+                value={activeCanvas.accent || ""}
+                onChange={(event) =>
+                  updateCanvas(activeCanvas.id, {
+                    accent: (event.target.value || undefined) as CanvasAccent | undefined,
+                  })
+                }
+                className="input text-sm"
+              >
+                <option value="">Mặc định (Indigo)</option>
+                <option value="teal">Teal</option>
+                <option value="amber">Amber</option>
+                <option value="rose">Rose</option>
+                <option value="emerald">Emerald</option>
+                <option value="indigo">Indigo</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Tỉ lệ cột (slide có code/ảnh)
+              </label>
+              <select
+                value={activeCanvas.ratio || ""}
+                onChange={(event) =>
+                  updateCanvas(activeCanvas.id, {
+                    ratio: (event.target.value || undefined) as CanvasRatio | undefined,
+                  })
+                }
+                className="input text-sm"
+              >
+                <option value="">Tự động</option>
+                <option value="even">Cân bằng 50/50</option>
+                <option value="wide-text">Chữ rộng hơn</option>
+                <option value="wide-side">Code/ảnh rộng hơn</option>
               </select>
             </div>
           </div>
@@ -872,11 +927,20 @@ function LessonCanvasBuilder({
                   )}
                 </div>
               </div>
-              {activeCanvas.layout === "cards" ? (
+              {activeCanvas.layout === "cards" ||
+              activeCanvas.layout === "compare" ||
+              activeCanvas.layout === "chat" ||
+              activeCanvas.layout === "quiz" ? (
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Danh sách cards
+                      {activeCanvas.layout === "compare"
+                        ? "Hai vế so sánh (2 thẻ)"
+                        : activeCanvas.layout === "chat"
+                          ? "Lượt thoại (tiêu đề = người nói, mô tả = câu)"
+                          : activeCanvas.layout === "quiz"
+                            ? "Đáp án (tích vào ô đúng)"
+                            : "Danh sách cards"}
                     </label>
                     <button
                       type="button"
@@ -934,16 +998,38 @@ function LessonCanvasBuilder({
                             placeholder="Mô tả ngắn"
                           />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = (activeCanvas.cards || []).filter((_, i) => i !== ci);
-                            updateCanvas(activeCanvas.id, { cards: next });
-                          }}
-                          className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
-                        >
-                          <i className="fa-solid fa-xmark text-xs"></i>
-                        </button>
+                        <div className="flex flex-col items-center gap-1.5">
+                          {activeCanvas.layout === "quiz" && (
+                            <label
+                              className={`flex h-7 cursor-pointer items-center gap-1 rounded-lg px-1.5 text-[10px] font-bold ${
+                                card.correct ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"
+                              }`}
+                              title="Đáp án đúng"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={card.correct === true}
+                                onChange={(e) => {
+                                  const next = [...(activeCanvas.cards || [])];
+                                  next[ci] = { ...next[ci], correct: e.target.checked };
+                                  updateCanvas(activeCanvas.id, { cards: next });
+                                }}
+                                className="h-3 w-3"
+                              />
+                              Đúng
+                            </label>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (activeCanvas.cards || []).filter((_, i) => i !== ci);
+                              updateCanvas(activeCanvas.id, { cards: next });
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <i className="fa-solid fa-xmark text-xs"></i>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
