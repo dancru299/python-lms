@@ -99,13 +99,17 @@ function extractRoleHint(body: string): { roleHint?: string; body: string } {
 }
 
 // Turns a long marker title into a concise tab/nav label. Teachers write titles
-// as "MAIN CONCEPT - flavour text"; the nav only needs the main concept.
+// as "MAIN CONCEPT: flavour text" or "MAIN CONCEPT - flavour text"; the nav only
+// needs the main concept. The colon usually has NO leading space ("CẨN THẬN:"),
+// so we split on ":" regardless of spacing — but only on a SPACE-PADDED dash, so
+// a hyphenated word/compound isn't cut. Anything still too long is truncated.
+const MAX_LABEL_LENGTH = 28;
 function shortLabel(title: string): string {
   const trimmed = title.trim();
-  const beforeDash = trimmed.split(/\s[-–—:]\s/)[0].trim();
-  let label = beforeDash || trimmed;
-  if (label.length > 42) {
-    label = `${label.slice(0, 42).replace(/\s+\S*$/, "").trim()}…`;
+  const beforeSep = trimmed.split(/\s*:\s*|\s[-–—]\s/)[0].trim();
+  let label = beforeSep || trimmed;
+  if (label.length > MAX_LABEL_LENGTH) {
+    label = `${label.slice(0, MAX_LABEL_LENGTH).replace(/\s+\S*$/, "").trim()}…`;
   }
   return label || trimmed;
 }
@@ -418,6 +422,45 @@ function autoSuggestLayouts(tab: ParsedSlideTab): string[] {
   return hints;
 }
 
+// A content tab whose body is shorter than this (whitespace-collapsed chars)
+// doesn't earn its own nav entry — it gets folded into the previous tab so the
+// lesson flow isn't padded with stubs. Code counts toward the length, so a
+// code-heavy slide is never considered thin. Tabs with an explicit "Vai trò gợi
+// ý" are intentional and are never merged (nor merged into). Tune here.
+const MIN_SECTION_CHARS = 200;
+
+function mergeShortSections(sections: ParsedSlideTab[]): ParsedSlideTab[] {
+  const merged: ParsedSlideTab[] = [];
+
+  for (const section of sections) {
+    const prev = merged[merged.length - 1];
+    const contentLength = section.rawText.replace(/\s+/g, " ").trim().length;
+    const isThin =
+      !section.roleHint && contentLength > 0 && contentLength < MIN_SECTION_CHARS;
+
+    if (prev && !prev.roleHint && isThin) {
+      // Fold the stub into the previous tab, keeping its title as a sub-heading
+      // so neither the AI context (rawText) nor the no-AI fallback (html) loses it.
+      const heading = section.fullTitle.trim();
+      prev.rawText = [prev.rawText, heading, section.rawText]
+        .filter(Boolean)
+        .join("\n\n");
+      prev.html = [
+        prev.html,
+        heading ? `<h3>${escapeText(heading)}</h3>` : "",
+        section.html,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      continue;
+    }
+
+    merged.push({ ...section });
+  }
+
+  return merged;
+}
+
 export function parseSlideTemplate(text: string): ParsedSlideTemplate {
   const segments = splitSegments(text);
 
@@ -457,5 +500,5 @@ export function parseSlideTemplate(text: string): ParsedSlideTemplate {
     });
   }
 
-  return { title, sections, exercises };
+  return { title, sections: mergeShortSections(sections), exercises };
 }
