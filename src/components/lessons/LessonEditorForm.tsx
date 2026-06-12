@@ -11,6 +11,7 @@ import {
   lessonContentBlocksToHtml,
 } from "@/lib/lessons/teaching-canvas";
 import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
+import type { LessonReviewReport } from "@/lib/lessons/lesson-review";
 import type {
   LessonAiClientConfig,
   LessonAiProvider,
@@ -55,6 +56,67 @@ interface Section extends EditableLessonSection {
   content: string;
   contentFormat?: string;
   contentBlocks?: LessonContentBlock[] | null;
+}
+
+type LessonObjectives = LessonDraft["objectives"];
+type LessonReviewResponse = LessonReviewReport & {
+  meta?: { provider: string; model: string } | null;
+};
+type LessonRepairResponse = {
+  lesson?: unknown;
+  repairSummary?: string[];
+  review?: LessonReviewResponse;
+  meta?: { provider: string; model: string } | null;
+};
+
+function asClientRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asClientArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asClientString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function hasMissingObjectives(objectives: LessonObjectives): boolean {
+  return (
+    !objectives.knowledge.trim() ||
+    !objectives.skills.trim() ||
+    !objectives.attitude.trim()
+  );
+}
+
+function mergeMissingObjectives(
+  current: LessonObjectives,
+  generated: LessonObjectives
+): LessonObjectives {
+  return {
+    knowledge: current.knowledge.trim() || generated.knowledge.trim(),
+    skills: current.skills.trim() || generated.skills.trim(),
+    attitude: current.attitude.trim() || generated.attitude.trim(),
+  };
+}
+
+function normalizeObjectivesPayload(value: unknown): LessonObjectives | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const source = value as Record<string, unknown>;
+  const knowledge = typeof source.knowledge === "string" ? source.knowledge.trim() : "";
+  const skills = typeof source.skills === "string" ? source.skills.trim() : "";
+  const attitude = typeof source.attitude === "string" ? source.attitude.trim() : "";
+
+  if (!knowledge && !skills && !attitude) {
+    return null;
+  }
+
+  return { knowledge, skills, attitude };
 }
 
 export interface LessonEditorExercise {
@@ -330,6 +392,10 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   const [aiProgress, setAiProgress] = useState<{ done: number; total: number } | null>(null);
   const [aiDraftReady, setAiDraftReady] = useState(false);
   const [aiMeta, setAiMeta] = useState<{ provider: string; model: string } | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [lessonReview, setLessonReview] = useState<LessonReviewResponse | null>(null);
+  const [repairSummary, setRepairSummary] = useState<string[]>([]);
   const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
     initialAiConfig.defaultProvider
   );
@@ -434,6 +500,273 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     }
 
     return "Lỗi khi gọi AI API";
+  };
+
+  const generateObjectives = async (options: {
+    title?: string;
+    content: string;
+  }): Promise<LessonObjectives | null> => {
+    const res = await fetch("/api/admin/lessons/generate-objectives", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: options.title,
+        content: options.content,
+        provider: aiProvider,
+        model: aiModel,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(await readAiErrorMessage(res));
+    }
+
+    const data = (await res.json()) as {
+      objectives?: unknown;
+      meta?: { provider: string; model: string };
+    };
+    if (data.meta) setAiMeta(data.meta);
+    return normalizeObjectivesPayload(data.objectives);
+  };
+
+  const buildSectionsForPayload = (sourceSections: Section[] = sections) =>
+    sourceSections
+      .filter((section) => section.title.trim())
+      .map((section) => {
+        const contentBlocks = Array.isArray(section.contentBlocks)
+          ? section.contentBlocks
+          : null;
+
+        return {
+          ...section,
+          content: contentBlocks?.length
+            ? lessonContentBlocksToHtml(contentBlocks)
+            : section.content,
+          contentFormat:
+            contentBlocks?.length && section.contentFormat !== "html"
+              ? section.contentFormat || "canvas"
+              : section.contentFormat || "html",
+          contentBlocks,
+        };
+      });
+
+  const buildLessonPayload = (options?: {
+    form?: typeof formData;
+    sections?: Section[];
+    exercises?: LessonEditorExercise[];
+  }) => {
+    const nextForm = options?.form ?? formData;
+    const nextExercises = options?.exercises ?? exercises;
+
+    return {
+      ...nextForm,
+      draftId,
+      sections: buildSectionsForPayload(options?.sections),
+      exercises: nextExercises.filter((exercise) => exercise.title.trim()),
+    };
+  };
+
+  const coerceRepairedForm = (lesson: unknown): typeof formData => {
+    const source = asClientRecord(lesson) ?? {};
+    const objectives =
+      normalizeObjectivesPayload(source.objectives) ?? formData.objectives;
+    const duration = Number(source.duration);
+
+    return {
+      ...formData,
+      title: asClientString(source.title) || formData.title,
+      duration: Number.isFinite(duration) ? duration : formData.duration,
+      difficulty: asClientString(source.difficulty) || formData.difficulty,
+      theme: asClientString(source.theme) || formData.theme,
+      objectives: mergeMissingObjectives(objectives, formData.objectives),
+    };
+  };
+
+  const coerceRepairedSections = (lesson: unknown): Section[] => {
+    const source = asClientRecord(lesson) ?? {};
+    const repairedSections = asClientArray(source.sections);
+    if (repairedSections.length === 0) return sections;
+
+    return repairedSections.map((item, index) => {
+      const sectionSource = asClientRecord(item) ?? {};
+      const previous = sections[index];
+      const contentBlocks = Array.isArray(sectionSource.contentBlocks)
+        ? (sectionSource.contentBlocks as LessonContentBlock[])
+        : previous?.contentBlocks ?? null;
+      const content =
+        asClientString(sectionSource.content) ||
+        (contentBlocks?.length ? lessonContentBlocksToHtml(contentBlocks) : previous?.content || "");
+
+      return {
+        id:
+          asClientString(sectionSource.id) ||
+          previous?.id ||
+          `${initialLesson ? "repair-sec" : "sec-repair"}-${Date.now()}-${index}`,
+        title:
+          asClientString(sectionSource.title) ||
+          previous?.title ||
+          `Tab ${index + 1}`,
+        content,
+        contentFormat:
+          asClientString(sectionSource.contentFormat) ||
+          (contentBlocks?.length ? "canvas" : previous?.contentFormat || "html"),
+        contentBlocks,
+      };
+    });
+  };
+
+  const coerceRepairedExercises = (lesson: unknown): LessonEditorExercise[] => {
+    const source = asClientRecord(lesson) ?? {};
+    const repairedExercises = asClientArray(source.exercises);
+    if (repairedExercises.length === 0) return exercises;
+
+    return repairedExercises.map((item, index) => {
+      const exerciseSource = asClientRecord(item) ?? {};
+      const previous = exercises[index];
+      const type = asClientString(exerciseSource.type);
+      const difficulty = asClientString(exerciseSource.difficulty);
+      const points = Number(exerciseSource.points);
+
+      return {
+        id:
+          asClientString(exerciseSource.id) ||
+          previous?.id ||
+          `${initialLesson ? "repair-ex" : "ex-repair"}-${Date.now()}-${index}`,
+        type: type === "homework" ? "homework" : "practice",
+        title:
+          asClientString(exerciseSource.title) ||
+          previous?.title ||
+          `Bài tập ${index + 1}`,
+        question:
+          asClientString(exerciseSource.question) ||
+          previous?.question ||
+          "<p>Hoàn thành yêu cầu bài tập.</p>",
+        answer: asClientString(exerciseSource.answer) || previous?.answer || "",
+        difficulty:
+          difficulty === "hard" || difficulty === "medium" || difficulty === "easy"
+            ? difficulty
+            : previous?.difficulty || "easy",
+        points: Number.isFinite(points) ? points : previous?.points || 10,
+        answerVisible:
+          typeof exerciseSource.answerVisible === "boolean"
+            ? exerciseSource.answerVisible
+            : previous?.answerVisible ?? true,
+      };
+    });
+  };
+
+  const runLessonReview = async (
+    lesson = buildLessonPayload(),
+    options?: { silent?: boolean }
+  ) => {
+    setIsReviewing(true);
+    try {
+      const res = await fetch("/api/admin/lessons/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lesson,
+          provider: aiProvider,
+          model: aiModel,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(await readAiErrorMessage(res));
+      }
+
+      const report = (await res.json()) as LessonReviewResponse;
+      setLessonReview(report);
+      if (report.meta) setAiMeta(report.meta);
+
+      if (!options?.silent) {
+        if (report.status === "fail") {
+          toast.error("Báo cáo duyệt bài có lỗi cần sửa trước khi lưu.", {
+            duration: 5000,
+          });
+        } else if (report.status === "warning") {
+          toast("Bài dùng được nhưng còn điểm nên xem lại.", {
+            icon: "!",
+            duration: 5000,
+          });
+        } else {
+          toast.success("Bài đã qua lượt duyệt tự động.");
+        }
+      }
+
+      return report;
+    } catch (error) {
+      if (!options?.silent) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Không thể duyệt bài giảng lúc này."
+        );
+      }
+      console.warn("Lesson review request failed:", error);
+      return null;
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const runLessonRepair = async () => {
+    const currentLesson = buildLessonPayload();
+    const currentReview =
+      lessonReview ?? (await runLessonReview(currentLesson, { silent: true }));
+
+    if (!currentReview) {
+      toast.error("Cần có báo cáo duyệt bài trước khi AI sửa lỗi.");
+      return;
+    }
+
+    setIsRepairing(true);
+    try {
+      const res = await fetch("/api/admin/lessons/repair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lesson: currentLesson,
+          review: currentReview,
+          provider: aiProvider,
+          model: aiModel,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(await readAiErrorMessage(res));
+      }
+
+      const data = (await res.json()) as LessonRepairResponse;
+      const repairedLesson = data.lesson ?? currentLesson;
+      const nextForm = coerceRepairedForm(repairedLesson);
+      const nextSections = coerceRepairedSections(repairedLesson);
+      const nextExercises = coerceRepairedExercises(repairedLesson);
+
+      setFormData(nextForm);
+      setSections(nextSections);
+      setExercises(nextExercises);
+      setActiveSection(nextSections[0]?.id ?? null);
+      setRepairSummary(Array.isArray(data.repairSummary) ? data.repairSummary : []);
+      if (data.meta) setAiMeta(data.meta);
+
+      await runLessonReview(
+        buildLessonPayload({
+          form: nextForm,
+          sections: nextSections,
+          exercises: nextExercises,
+        }),
+        { silent: true }
+      );
+      toast.success("AI đã sửa bản nháp và duyệt lại một lượt.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Không thể sửa bản nháp lúc này."
+      );
+      console.warn("Lesson repair request failed:", error);
+    } finally {
+      setIsRepairing(false);
+    }
   };
 
   // Section handlers
@@ -559,24 +892,33 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     const generatedAt = Date.now();
     let aiFailures = 0;
     let lastMeta: { provider: string; model: string } | null = null;
+    const objectivePromise = hasMissingObjectives(formData.objectives)
+      ? generateObjectives({
+          title: parsed.title || formData.title,
+          content: aiContent,
+        }).catch((error) => {
+          console.warn("Objective generation failed:", error);
+          return null;
+        })
+      : Promise.resolve(null);
 
     try {
       // Lesson title + exercises are derived deterministically — no AI needed.
       setFormData((prev) => ({ ...prev, title: parsed.title || prev.title }));
 
-      if (parsed.exercises.length > 0) {
-        setExercises(
-          parsed.exercises.map((ex, idx) => ({
-            id: `${initialLesson ? "tpl-ex" : "ex-tpl"}-${generatedAt}-${idx}`,
-            type: ex.type,
-            title: ex.title,
-            question: ex.question,
-            answer: ex.answer,
-            difficulty: ex.difficulty,
-            points: ex.points,
-            answerVisible: ex.answerVisible,
-          }))
-        );
+      const templateExercises = parsed.exercises.map((ex, idx) => ({
+        id: `${initialLesson ? "tpl-ex" : "ex-tpl"}-${generatedAt}-${idx}`,
+        type: ex.type,
+        title: ex.title,
+        question: ex.question,
+        answer: ex.answer,
+        difficulty: ex.difficulty,
+        points: ex.points,
+        answerVisible: ex.answerVisible,
+      }));
+
+      if (templateExercises.length > 0) {
+        setExercises(templateExercises);
       }
 
       const builtSections = await mapWithConcurrency(
@@ -654,7 +996,30 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         setSections(builtSections);
         setActiveSection(builtSections[0]?.id ?? null);
       }
+      const generatedObjectives = await objectivePromise;
+      const nextFormData = {
+        ...formData,
+        title: parsed.title || formData.title,
+        objectives: generatedObjectives
+          ? mergeMissingObjectives(formData.objectives, generatedObjectives)
+          : formData.objectives,
+      };
+      if (generatedObjectives) {
+        setFormData((prev) => ({
+          ...prev,
+          title: parsed.title || prev.title,
+          objectives: mergeMissingObjectives(prev.objectives, generatedObjectives),
+        }));
+      }
       if (lastMeta) setAiMeta(lastMeta);
+      void runLessonReview(
+        buildLessonPayload({
+          form: nextFormData,
+          sections: builtSections,
+          exercises: templateExercises.length > 0 ? templateExercises : exercises,
+        }),
+        { silent: true }
+      );
 
       setCreationMode("manual");
       setAiDraftReady(true);
@@ -747,6 +1112,26 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         meta?: { provider: string; model: string };
       };
       const generatedAt = Date.now();
+      const nextFormData = {
+        ...formData,
+        title: generatedData.title || formData.title,
+        duration: generatedData.duration || (initialLesson ? formData.duration : 120),
+        difficulty:
+          generatedData.difficulty || (initialLesson ? formData.difficulty : "beginner"),
+        objectives: {
+          knowledge:
+            generatedData.objectives.knowledge ||
+            (initialLesson ? formData.objectives.knowledge : ""),
+          skills:
+            generatedData.objectives.skills ||
+            (initialLesson ? formData.objectives.skills : ""),
+          attitude:
+            generatedData.objectives.attitude ||
+            (initialLesson ? formData.objectives.attitude : ""),
+        },
+      };
+      let generatedSectionsForReview = sections;
+      let generatedExercisesForReview = exercises;
 
       if (generatedData.meta) {
         setAiMeta(generatedData.meta);
@@ -755,20 +1140,10 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       // Update Form Data — dùng trực tiếp giá trị đã chuẩn hóa từ server
       setFormData((prev) => ({
         ...prev,
-        title: generatedData.title || prev.title,
-        duration: generatedData.duration || (initialLesson ? prev.duration : 120),
-        difficulty: generatedData.difficulty || (initialLesson ? prev.difficulty : "beginner"),
-        objectives: {
-          knowledge:
-            generatedData.objectives.knowledge ||
-            (initialLesson ? prev.objectives.knowledge : ""),
-          skills:
-            generatedData.objectives.skills ||
-            (initialLesson ? prev.objectives.skills : ""),
-          attitude:
-            generatedData.objectives.attitude ||
-            (initialLesson ? prev.objectives.attitude : ""),
-        },
+        title: nextFormData.title,
+        duration: nextFormData.duration,
+        difficulty: nextFormData.difficulty,
+        objectives: nextFormData.objectives,
       }));
 
       // Update Sections — server đã chuẩn hóa, chỉ cần gán id + derive content từ contentBlocks
@@ -787,6 +1162,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
             contentBlocks,
           };
         });
+        generatedSectionsForReview = newSections;
         setSections(newSections);
         setActiveSection(newSections[0]?.id || null);
       }
@@ -803,8 +1179,18 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           points: ex.points,
           answerVisible: ex.answerVisible,
         }));
+        generatedExercisesForReview = newExercises;
         setExercises(newExercises);
       }
+
+      void runLessonReview(
+        buildLessonPayload({
+          form: nextFormData,
+          sections: generatedSectionsForReview,
+          exercises: generatedExercisesForReview,
+        }),
+        { silent: true }
+      );
 
       // Chuyển về tab manual để user review
       setCreationMode("manual");
@@ -843,37 +1229,12 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
     setSaving(true);
     try {
-      const sectionsForSave = sections
-        .filter((section) => section.title.trim())
-        .map((section) => {
-          const contentBlocks = Array.isArray(section.contentBlocks)
-            ? section.contentBlocks
-            : null;
-
-          return {
-            ...section,
-            content: contentBlocks?.length
-              ? lessonContentBlocksToHtml(contentBlocks)
-              : section.content,
-            contentFormat:
-              contentBlocks?.length && section.contentFormat !== "html"
-                ? section.contentFormat || "canvas"
-                : section.contentFormat || "html",
-            contentBlocks,
-          };
-        });
-
       const res = await fetch(
         initialLesson ? `/api/admin/lessons/${initialLesson.id}` : "/api/admin/lessons",
         {
           method: initialLesson ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...formData,
-            draftId,
-            sections: sectionsForSave,
-            exercises: exercises.filter((e) => e.title.trim()),
-          }),
+          body: JSON.stringify(buildLessonPayload()),
         }
       );
 
@@ -1139,6 +1500,15 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
             </div>
           </div>
         )}
+
+        <LessonReviewPanel
+          report={lessonReview}
+          isReviewing={isReviewing}
+          isRepairing={isRepairing}
+          repairSummary={repairSummary}
+          onReview={() => void runLessonReview()}
+          onRepair={() => void runLessonRepair()}
+        />
 
         {/* Section 1: Basic Info */}
         <div className="card p-6">
@@ -1526,6 +1896,234 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   );
 }
 
+function reviewStatusMeta(status: LessonReviewReport["status"]) {
+  if (status === "fail") {
+    return {
+      label: "Cần sửa",
+      icon: "fa-triangle-exclamation",
+      card: "border-red-200 bg-red-50 text-red-900",
+      badge: "bg-red-600 text-white",
+      score: "text-red-700",
+    };
+  }
+
+  if (status === "warning") {
+    return {
+      label: "Nên xem lại",
+      icon: "fa-circle-exclamation",
+      card: "border-amber-200 bg-amber-50 text-amber-900",
+      badge: "bg-amber-500 text-white",
+      score: "text-amber-700",
+    };
+  }
+
+  return {
+    label: "Đạt",
+    icon: "fa-circle-check",
+    card: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    badge: "bg-emerald-600 text-white",
+    score: "text-emerald-700",
+  };
+}
+
+function reviewSeverityMeta(severity: LessonReviewReport["issues"][number]["severity"]) {
+  if (severity === "critical") {
+    return {
+      label: "Lỗi",
+      icon: "fa-circle-xmark",
+      badge: "bg-red-100 text-red-700",
+      border: "border-red-200",
+    };
+  }
+
+  if (severity === "warning") {
+    return {
+      label: "Cảnh báo",
+      icon: "fa-triangle-exclamation",
+      badge: "bg-amber-100 text-amber-700",
+      border: "border-amber-200",
+    };
+  }
+
+  return {
+    label: "Gợi ý",
+    icon: "fa-lightbulb",
+    badge: "bg-sky-100 text-sky-700",
+    border: "border-sky-200",
+  };
+}
+
+function LessonReviewPanel({
+  report,
+  isReviewing,
+  isRepairing,
+  repairSummary,
+  onReview,
+  onRepair,
+}: {
+  report: LessonReviewResponse | null;
+  isReviewing: boolean;
+  isRepairing: boolean;
+  repairSummary: string[];
+  onReview: () => void;
+  onRepair: () => void;
+}) {
+  if (!report) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <i className="fa-solid fa-clipboard-check"></i>
+            </span>
+            <div>
+              <div className="font-bold text-slate-900">Agent duyệt bài giảng</div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Chạy một lượt kiểm tra nội dung, canvas, mục tiêu và bài tập trước khi lưu.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onReview}
+            disabled={isReviewing}
+            className="btn btn-secondary whitespace-nowrap"
+          >
+            {isReviewing ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin"></i> Đang duyệt...
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-magnifying-glass-chart"></i> Duyệt bài
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const meta = reviewStatusMeta(report.status);
+  const sortedIssues = [...report.issues].sort((a, b) => {
+    const order = { critical: 0, warning: 1, suggestion: 2 };
+    return order[a.severity] - order[b.severity];
+  });
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${meta.card}`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${meta.badge}`}>
+              <i className={`fa-solid ${meta.icon}`}></i>
+              {meta.label}
+            </span>
+            <span className={`text-2xl font-black ${meta.score}`}>{report.score}/100</span>
+            {report.meta && (
+              <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-600">
+                {report.meta.provider} · {report.meta.model}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 font-bold">Báo cáo duyệt bài</div>
+          <p className="mt-1 text-sm leading-6">{report.summary}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.sections} tab</span>
+            <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.canvases} canvas</span>
+            <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.exercises} bài tập</span>
+            <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.critical} lỗi</span>
+            <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.warnings} cảnh báo</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {report.issues.length > 0 && (
+            <button
+              type="button"
+              onClick={onRepair}
+              disabled={isRepairing || isReviewing}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-70"
+            >
+              {isRepairing ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin mr-2"></i> Đang sửa
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-screwdriver-wrench mr-2"></i> AI sửa lỗi đề xuất
+                </>
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onReview}
+            disabled={isReviewing || isRepairing}
+            className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow-sm ring-1 ring-black/5 hover:bg-slate-50 disabled:opacity-70"
+          >
+            {isReviewing ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin mr-2"></i> Đang duyệt
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-rotate-right mr-2"></i> Duyệt lại
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {repairSummary.length > 0 && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white/85 p-3 text-sm text-slate-700">
+          <div className="mb-2 font-bold text-slate-900">AI vừa sửa</div>
+          <ul className="list-disc space-y-1 pl-5">
+            {repairSummary.map((item, index) => (
+              <li key={`${item}-${index}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {sortedIssues.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          {sortedIssues.map((issue) => {
+            const severity = reviewSeverityMeta(issue.severity);
+            return (
+              <div
+                key={issue.id}
+                className={`rounded-xl border bg-white/85 p-3 text-slate-800 shadow-sm ${severity.border}`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${severity.badge}`}>
+                    <i className={`fa-solid ${severity.icon}`}></i>
+                    {severity.label}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                    {issue.target}
+                  </span>
+                  <span className="text-sm font-bold text-slate-900">{issue.title}</span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{issue.detail}</p>
+                {issue.suggestion && (
+                  <p className="mt-1 text-sm leading-6 text-slate-700">
+                    <span className="font-bold">Gợi ý sửa:</span> {issue.suggestion}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-white/85 p-3 text-sm font-semibold text-emerald-700">
+          Không có issue nào trong lượt duyệt này.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Exercise Editor Component
 function ExerciseEditor({
   exercise,
@@ -1623,4 +2221,3 @@ print(my_list)`}
     </div>
   );
 }
-

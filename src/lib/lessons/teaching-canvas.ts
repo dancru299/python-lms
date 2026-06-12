@@ -177,30 +177,92 @@ export function lessonContentBlocksToHtml(blocks: LessonContentBlock[]) {
     .join("\n\n");
 }
 
+const STEP_LAYOUT_KINDS = new Set<TeachingCanvasKind>([
+  "steps",
+  "timeline",
+  "checklist",
+  "flow",
+  "code_explain",
+  "mindmap",
+]);
+
 function buildFromTeachingCanvasBlocks(section: TeachingCanvasSectionSource) {
   return (section.contentBlocks || [])
     .filter(isTeachingCanvasBlock)
-    .map((block, index): TeachingCanvas => ({
-      id: block.id || `${section.id}-canvas-${index + 1}`,
-      kind: getTeachingCanvasKind(block),
-      title: block.title || `${section.title} ${index + 1}`,
-      html: block.mainHtml || "",
-      notesHtml: block.notesHtml || "",
-      code: block.code?.trim() || undefined,
-      mediaId: block.mediaId?.trim() || undefined,
-      cards: block.cards,
-      steps:
-        block.reveal === false
-          ? []
-          : block.steps.map((step, stepIndex) => ({
-              id: step.id || `${block.id}-step-${stepIndex + 1}`,
-              html: step.html || escapeHtml(step.text),
-              text: step.text || stripHtml(step.html || ""),
-            })),
-      sourceBlockIds: [block.id],
-      accent: block.accent,
-      ratio: block.ratio,
-    }));
+    .map((block, index): TeachingCanvas => {
+      const id = block.id || `${section.id}-canvas-${index + 1}`;
+      const kind = getTeachingCanvasKind(block);
+      let html = block.mainHtml || "";
+      let steps =
+        block.reveal === false ? [] : normalizeTeachingCanvasSteps(block.steps, id);
+
+      if (block.reveal !== false && steps.length === 0 && STEP_LAYOUT_KINDS.has(kind)) {
+        const listSteps = extractListSteps(html, `${id}-main-list`);
+        if (listSteps.length > 0) {
+          steps = listSteps;
+          html = removeListHtml(html);
+        }
+      }
+
+      return {
+        id,
+        kind,
+        title: block.title || `${section.title} ${index + 1}`,
+        html,
+        notesHtml: block.notesHtml || "",
+        code: block.code?.trim() || undefined,
+        mediaId: block.mediaId?.trim() || undefined,
+        cards: block.cards,
+        steps,
+        sourceBlockIds: [block.id],
+        accent: block.accent,
+        ratio: block.ratio,
+      };
+    });
+}
+
+function normalizeTeachingCanvasSteps(value: unknown, idPrefix: string): TeachingCanvasStep[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((step, stepIndex): TeachingCanvasStep | null => {
+      if (typeof step === "string") {
+        const text = step.trim();
+        if (!text) return null;
+        return {
+          id: `${idPrefix}-step-${stepIndex + 1}`,
+          html: escapeHtml(text),
+          text,
+        };
+      }
+
+      if (!step || typeof step !== "object") return null;
+      const source = step as Record<string, unknown>;
+      const html = stringField(source.html);
+      const title = stringField(source.title) || stringField(source.label);
+      const body =
+        stringField(source.text) ||
+        stringField(source.description) ||
+        stringField(source.content) ||
+        stripHtml(html);
+      const text = [title, body && body !== title ? body : ""].filter(Boolean).join(": ");
+      if (!text) return null;
+
+      return {
+        id: stringField(source.id) || `${idPrefix}-step-${stepIndex + 1}`,
+        html: html || escapeHtml(text),
+        text,
+      };
+    })
+    .filter((step): step is TeachingCanvasStep => step !== null);
+}
+
+function stringField(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function removeListHtml(html: string) {
+  return html.replace(/<(ul|ol)\b[\s\S]*?<\/\1>/gi, "").trim();
 }
 
 function getTeachingCanvasKind(block: LessonTeachingCanvasBlock): TeachingCanvasKind {

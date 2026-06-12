@@ -124,6 +124,41 @@ function isHeadingLine(line: string): boolean {
   return /[\p{L}]/u.test(trimmed);
 }
 
+const BARE_CODE_BREAK_PREFIX =
+  /^(MUC TIEU|DE BAI|YEU CAU|LUU Y|GOI Y|NHIEM VU|THAO TAC|DU DOAN|KET QUA|GIAI THICH|DAP AN|LOI GIAI|BAI GIAI|CODE MAU|CODE GOI Y|THU THACH|KIEM TRA|CAU HOI|MO RONG|BIEN THE|PROMPT|TASK|MISSION|INSTRUCTION|REQUIREMENT|FIX|ANSWER|SOLUTION|EXPLANATION)\b/;
+
+function isBareCodeBreakLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > 120) return false;
+  if (trimmed.startsWith("#") || trimmed.startsWith(">>>")) return false;
+  if (/^[A-Za-z_][\w.]*\s*(=|\+=|-=|\*=|\/=|%=)/.test(trimmed)) return false;
+  if (/^[A-Za-z_][\w.]*\s*\(/.test(trimmed)) return false;
+  return BARE_CODE_BREAK_PREFIX.test(normalizeVi(trimmed.replace(/[:：]\s*$/, "")));
+}
+
+function isLikelyBareCodeContinuation(line: string, isOutput: boolean): boolean {
+  if (isOutput) return true;
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (/^(#|\/\/|>>>|\.\.\.)/.test(trimmed)) return true;
+  if (/^[A-Za-z_][\w.]*\s*(=|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|<|>)/.test(trimmed)) {
+    return true;
+  }
+  if (/^[A-Za-z_][\w.]*\s*\(/.test(trimmed)) return true;
+  if (/^(for|while|if|elif|else|def|class|return|import|from|try|except|with|match)\b/.test(trimmed)) {
+    return true;
+  }
+  return /^[\])}]/.test(trimmed);
+}
+
+function nextMeaningfulLine(lines: string[], start: number): string | null {
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim()) return line;
+  }
+  return null;
+}
+
 function splitSegments(text: string): RawSegment[] {
   const lines = text.split(/\r?\n/);
   const segments: RawSegment[] = [];
@@ -202,18 +237,36 @@ function slideTextToHtml(rawText: string): string {
       continue;
     }
 
-    // Bare fence word ("Python" / "Plaintext"): collect until a blank line,
-    // heading, marker, or another fence.
+    // Bare fence word ("Python" / "Plaintext"): collect verbatim code. Blank
+    // lines can be part of code, so only use them as a stop when the next real
+    // line looks like prose/section text instead of another code line.
     if (CODE_FENCE.test(trimmed)) {
       const isOutput = OUTPUT_FENCE.test(trimmed);
       const collected: string[] = [];
       let j = i + 1;
       for (; j < lines.length; j += 1) {
         const next = lines[j];
-        if (!next.trim()) break;
-        if (MARKER_LINE.test(next) || MD_FENCE.test(next.trim())) break;
-        if (CODE_FENCE.test(next.trim())) break;
-        if (isHeadingLine(next)) break;
+        const nextTrimmed = next.trim();
+        if (MARKER_LINE.test(next) || MD_FENCE.test(nextTrimmed)) break;
+        if (CODE_FENCE.test(nextTrimmed)) break;
+        if (isHeadingLine(next) || isBareCodeBreakLine(next)) break;
+        if (!nextTrimmed) {
+          const lookahead = nextMeaningfulLine(lines, j + 1);
+          if (!lookahead) break;
+          const lookaheadTrimmed = lookahead.trim();
+          const nextIsBlockBoundary =
+            MARKER_LINE.test(lookahead) ||
+            MD_FENCE.test(lookaheadTrimmed) ||
+            CODE_FENCE.test(lookaheadTrimmed) ||
+            isHeadingLine(lookahead) ||
+            isBareCodeBreakLine(lookahead);
+          if (
+            nextIsBlockBoundary ||
+            !isLikelyBareCodeContinuation(lookahead, isOutput)
+          ) {
+            break;
+          }
+        }
         collected.push(next);
       }
       i = j - 1;

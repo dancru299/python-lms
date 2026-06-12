@@ -286,8 +286,9 @@ export default function TeachingCanvasRenderer({
         [class*="canvas-theme-"] .canvas-mindmap-center { background: var(--canvas-accent); }
         [class*="canvas-theme-"] .canvas-flow-arrow { color: var(--canvas-accent); }
         [class*="canvas-theme-"] .canvas-highlight-box,
-        [class*="canvas-theme-"] .canvas-codeexplain-note,
         [class*="canvas-theme-"] .canvas-mindmap-branch { border-left-color: var(--canvas-accent); }
+        [class*="canvas-theme-"] .canvas-codeexplain-popover-head { color: var(--canvas-accent); }
+        [class*="canvas-theme-"] .canvas-codeexplain-line.is-active { box-shadow: inset 3px 0 0 var(--canvas-accent); }
 
         .teaching-canvas-inner {
           position: absolute;
@@ -660,17 +661,41 @@ export default function TeachingCanvasRenderer({
         .canvas-checklist-text p { margin: 0; }
 
         /* ── Chat ── */
+        .teaching-canvas-chat .canvas-autofit-inner {
+          height: 100%;
+        }
+
         .canvas-chat {
           display: flex;
           flex-direction: column;
           gap: 0.8rem;
+          width: 100%;
+          height: 100%;
+          overflow-y: auto;
+          padding-right: 0.35rem;
+          scrollbar-gutter: stable;
+        }
+
+        .canvas-chat::-webkit-scrollbar {
+          width: 0.45rem;
+        }
+
+        .canvas-chat::-webkit-scrollbar-track {
+          border-radius: 999px;
+          background: rgba(226, 232, 240, 0.75);
+        }
+
+        .canvas-chat::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: #c7d2fe;
         }
 
         .canvas-chat-row {
           display: flex;
           align-items: flex-end;
           gap: 0.7rem;
-          max-width: 80%;
+          width: min(82%, 42rem);
+          max-width: 100%;
         }
 
         .canvas-chat-row.is-left { align-self: flex-start; }
@@ -697,6 +722,8 @@ export default function TeachingCanvasRenderer({
           display: flex;
           flex-direction: column;
           gap: 0.15rem;
+          min-width: 0;
+          max-width: calc(100% - 3.2rem);
         }
 
         .canvas-chat-row.is-left .canvas-chat-bubble { background: #eef2ff; border-bottom-left-radius: 0.3rem; }
@@ -710,51 +737,106 @@ export default function TeachingCanvasRenderer({
           letter-spacing: 0.04em;
         }
 
-        .canvas-chat-text { margin: 0; font-size: 1.02rem; line-height: 1.45; color: #1e293b; }
+        .canvas-chat-text {
+          margin: 0;
+          font-size: 1.02rem;
+          line-height: 1.45;
+          color: #1e293b;
+          white-space: normal;
+        }
+        .canvas-chat-text p { margin: 0; }
 
         /* ── Flow (horizontal) ── */
         .canvas-flow {
           display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 0.5rem;
-          justify-content: center;
+          align-items: stretch;
+          justify-content: stretch;
+          gap: 0.85rem;
           flex: 1;
+          width: 100%;
+          min-height: 15.5rem;
         }
 
-        .canvas-flow-cell { display: inline-flex; align-items: center; gap: 0.5rem; }
+        .canvas-flow-cell {
+          position: relative;
+          display: inline-flex;
+          flex: 1 1 0;
+          min-width: 0;
+          align-items: stretch;
+          gap: 0.6rem;
+        }
 
         .canvas-flow-node {
+          position: relative;
+          display: flex;
+          min-height: 7.2rem;
+          width: 100%;
+          align-items: center;
+          justify-content: center;
           background: #fff;
           border: 2px solid #c7d2fe;
           border-radius: 0.9rem;
-          padding: 0.85rem 1.15rem;
-          font-size: 1.05rem;
+          padding: 1.45rem 0.95rem 1rem;
+          font-size: 0.96rem;
           font-weight: 700;
+          line-height: 1.45;
           color: #1e293b;
           box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
-          max-width: 16rem;
           text-align: center;
+          transition: opacity 0.22s ease, transform 0.22s ease;
+          overflow-wrap: anywhere;
         }
 
         .canvas-flow-node p { margin: 0; }
-        .canvas-flow-arrow { color: #6366f1; font-size: 1.2rem; }
+        .canvas-flow-index {
+          position: absolute;
+          top: 0.55rem;
+          left: 0.65rem;
+          display: inline-flex;
+          height: 1.35rem;
+          min-width: 1.35rem;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: #ccfbf1;
+          color: #0f766e;
+          font-size: 0.72rem;
+          font-weight: 900;
+        }
+        .canvas-flow-arrow {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          color: #14b8a6;
+          font-size: 1.2rem;
+        }
+        .canvas-flow-arrow.is-hidden {
+          visibility: hidden;
+          opacity: 0;
+        }
+        .canvas-flow-cell.is-hidden { pointer-events: none; }
+        .canvas-flow-cell.is-hidden .canvas-flow-node,
+        .canvas-flow-cell.is-hidden .canvas-flow-arrow {
+          visibility: hidden;
+          opacity: 0;
+        }
 
         /* ── Code + explanation ── */
         .canvas-codeexplain {
-          display: grid;
-          grid-template-columns: 1.05fr 0.95fr;
-          gap: 1.1rem;
+          position: relative;
           flex: 1;
           min-height: 0;
+          padding-top: 0.25rem;
         }
 
         .canvas-codeexplain-panel {
+          position: relative;
           display: flex;
           flex-direction: column;
           min-height: 0;
           border-radius: 0.9rem;
-          overflow: hidden;
+          overflow: visible;
           background: #0f172a;
           box-shadow: 0 10px 28px rgba(15, 23, 42, 0.25);
         }
@@ -779,62 +861,88 @@ export default function TeachingCanvasRenderer({
 
         .canvas-codeexplain-code {
           margin: 0;
-          padding: 0.9rem 1.1rem;
+          padding: 0.9rem 1.1rem 1.05rem;
           overflow: auto;
           font-family: ui-monospace, SFMono-Regular, monospace;
           font-size: 0.92rem;
           line-height: 1.7;
+          min-height: 14.5rem;
+          max-height: 19rem;
         }
 
         .canvas-codeexplain-line {
+          position: relative;
           display: grid;
           grid-template-columns: 1.6rem 1fr;
           gap: 0.7rem;
           white-space: pre;
-          border-radius: 0.3rem;
+          border-radius: 0.4rem;
+          padding: 0 0.35rem;
+          transition: background 0.2s ease, box-shadow 0.2s ease;
         }
 
         .canvas-codeexplain-line:hover { background: rgba(99, 102, 241, 0.12); }
         .canvas-codeexplain-ln { color: #475569; text-align: right; user-select: none; }
         .canvas-codeexplain-code code { color: #e2e8f0; }
-
-        .canvas-codeexplain-notes {
-          margin: 0;
-          padding: 0;
-          list-style: none;
-          display: flex;
-          flex-direction: column;
-          gap: 0.6rem;
-          overflow: auto;
+        .canvas-codeexplain-line.is-active {
+          background: rgba(99, 102, 241, 0.18);
+          box-shadow: inset 3px 0 0 #818cf8;
         }
+        .canvas-codeexplain-line.is-active .canvas-codeexplain-ln { color: #a5b4fc; }
 
-        .canvas-codeexplain-note {
-          display: flex;
-          flex-direction: column;
-          gap: 0.3rem;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-left: 3px solid #6366f1;
-          border-radius: 0 0.7rem 0.7rem 0;
-          padding: 0.6rem 0.85rem;
-          font-size: 0.98rem;
-          line-height: 1.45;
+        .canvas-codeexplain-popover {
+          position: absolute;
+          z-index: 3;
+          top: 3.65rem;
+          right: 1.15rem;
+          width: min(21rem, 42%);
+          border: 1px solid #c7d2fe;
+          border-radius: 1rem;
+          background: #fff;
           color: #1e293b;
+          box-shadow: 0 18px 46px rgba(30, 41, 59, 0.2);
+          padding: 0.85rem 1rem 0.95rem;
+          animation: canvas-popover-in 220ms ease-out;
         }
 
-        .canvas-codeexplain-badge {
-          align-self: flex-start;
-          background: #eef2ff;
-          color: #4338ca;
-          font-size: 0.7rem;
-          font-weight: 800;
-          letter-spacing: 0.03em;
+        .canvas-codeexplain-popover::before {
+          content: "";
+          position: absolute;
+          left: -0.58rem;
+          top: 1.25rem;
+          width: 1rem;
+          height: 1rem;
+          transform: rotate(45deg);
+          background: #fff;
+          border-left: 1px solid #c7d2fe;
+          border-bottom: 1px solid #c7d2fe;
+        }
+
+        .canvas-codeexplain-popover-head {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          margin-bottom: 0.45rem;
+          color: #4f46e5;
+          font-size: 0.72rem;
+          font-weight: 900;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
-          padding: 0.12rem 0.5rem;
-          border-radius: 999px;
         }
 
-        .canvas-codeexplain-note-text p { margin: 0; }
+        .canvas-codeexplain-popover-text {
+          font-size: 0.95rem;
+          line-height: 1.5;
+          font-weight: 600;
+        }
+        .canvas-codeexplain-popover-text p { margin: 0.25rem 0; }
+        .canvas-codeexplain-popover-text :first-child { margin-top: 0; }
+        .canvas-codeexplain-popover-text :last-child { margin-bottom: 0; }
+
+        @keyframes canvas-popover-in {
+          from { opacity: 0; transform: translateY(8px) scale(0.96); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
 
         /* ── Mindmap ── */
         .canvas-mindmap {
@@ -843,6 +951,10 @@ export default function TeachingCanvasRenderer({
           justify-content: center;
           gap: 0;
           flex: 1;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          padding: 0 clamp(0.75rem, 3vw, 2rem);
         }
 
         .canvas-mindmap-center {
@@ -852,16 +964,21 @@ export default function TeachingCanvasRenderer({
           padding: 1.2rem 1.6rem;
           font-size: 1.5rem;
           font-weight: 800;
-          max-width: 16rem;
+          width: clamp(9rem, 24%, 15rem);
+          max-width: 15rem;
+          min-width: 0;
           text-align: center;
           box-shadow: 0 8px 24px rgba(79, 70, 229, 0.3);
-          flex: none;
+          flex: 0 1 clamp(9rem, 24%, 15rem);
+          line-height: 1.25;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         /* Trunk: single line from the center node out to the branch spine. */
         .canvas-mindmap-trunk {
-          flex: none;
-          width: 2.5rem;
+          flex: 0 0 clamp(1.25rem, 4vw, 2.5rem);
+          width: clamp(1.25rem, 4vw, 2.5rem);
           height: 3px;
           background: #c7d2fe;
         }
@@ -874,7 +991,10 @@ export default function TeachingCanvasRenderer({
           flex-direction: column;
           gap: 0.7rem;
           position: relative;
-          flex: none;
+          flex: 1 1 auto;
+          min-width: 0;
+          max-width: min(39rem, 100%);
+          box-sizing: border-box;
         }
 
         /* Vertical spine all branches tap off — converges back to the trunk. */
@@ -899,6 +1019,30 @@ export default function TeachingCanvasRenderer({
           color: #1e293b;
           box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
           position: relative;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          line-height: 1.45;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+
+        .canvas-mindmap.is-dense .canvas-mindmap-center {
+          font-size: 1.28rem;
+          padding: 1rem 1.25rem;
+        }
+
+        .canvas-mindmap-branch.is-long {
+          font-size: 0.95rem;
+          padding: 0.65rem 0.9rem;
+        }
+
+        .canvas-mindmap-branch :where(p, span, strong, em, code) {
+          max-width: 100%;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         /* Horizontal connector from the spine to each branch. */
@@ -932,22 +1076,58 @@ export default function TeachingCanvasRenderer({
           box-shadow: none;
         }
 
-        /* Flow stacked vertically when there are many nodes. */
-        .canvas-flow.is-vertical { flex-direction: column; flex-wrap: nowrap; }
-        .canvas-flow.is-vertical .canvas-flow-cell { flex-direction: column; }
+        /* Flow adapts to node count instead of forcing 4 nodes into a narrow column. */
+        .canvas-flow.is-row { flex-wrap: nowrap; }
+        .canvas-flow.is-row .canvas-flow-cell { align-items: stretch; }
+        .canvas-flow.is-row .canvas-flow-node { max-width: none; }
 
-        /* Code+explanation: stacked (code on top) for long code. */
-        .canvas-codeexplain.is-stacked {
-          grid-template-columns: 1fr;
-          grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+        .canvas-flow.is-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          align-content: center;
+          gap: 1rem 1.25rem;
         }
-        .canvas-codeexplain.is-stacked .canvas-codeexplain-notes {
-          flex-direction: row;
-          flex-wrap: wrap;
-          gap: 0.6rem;
+        .canvas-flow.is-grid.is-grid-two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
-        .canvas-codeexplain.is-stacked .canvas-codeexplain-note {
-          flex: 1 1 14rem;
+        .canvas-flow.is-grid .canvas-flow-cell {
+          display: flex;
+          min-height: 6.3rem;
+        }
+        .canvas-flow.is-grid .canvas-flow-node { min-height: 6.3rem; }
+        .canvas-flow.is-grid .canvas-flow-arrow {
+          position: absolute;
+          right: -0.95rem;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 0.95rem;
+        }
+        .canvas-flow.is-grid .canvas-flow-cell:nth-child(3n) .canvas-flow-arrow {
+          display: none;
+        }
+        .canvas-flow.is-grid.is-grid-two .canvas-flow-cell:nth-child(3n) .canvas-flow-arrow {
+          display: inline-flex;
+        }
+        .canvas-flow.is-grid.is-grid-two .canvas-flow-cell:nth-child(2n) .canvas-flow-arrow {
+          display: none;
+        }
+
+        .canvas-flow.is-vertical {
+          flex-direction: column;
+          flex-wrap: nowrap;
+          align-items: center;
+          justify-content: center;
+          min-height: 0;
+        }
+        .canvas-flow.is-vertical .canvas-flow-cell {
+          width: min(100%, 34rem);
+          flex: 0 0 auto;
+          flex-direction: column;
+          align-items: center;
+        }
+        .canvas-flow.is-vertical .canvas-flow-node {
+          min-height: 4.4rem;
+          padding: 1.15rem 1.4rem 0.85rem;
         }
 
         /* ── Quiz ── */
@@ -1101,8 +1281,8 @@ export default function TeachingCanvasRenderer({
         [class*="canvas-accent-"] .canvas-quiz-mark { background: var(--canvas-accent-soft); color: var(--canvas-accent); }
         [class*="canvas-accent-"] .canvas-highlight-box { border-left-color: var(--canvas-accent); }
         [class*="canvas-accent-"] .canvas-highlight-label { color: var(--canvas-accent); }
-        [class*="canvas-accent-"] .canvas-codeexplain-note { border-left-color: var(--canvas-accent); }
-        [class*="canvas-accent-"] .canvas-codeexplain-badge { background: var(--canvas-accent-soft); color: var(--canvas-accent); }
+        [class*="canvas-accent-"] .canvas-codeexplain-popover-head { color: var(--canvas-accent); }
+        [class*="canvas-accent-"] .canvas-codeexplain-line.is-active { box-shadow: inset 3px 0 0 var(--canvas-accent); }
         [class*="canvas-accent-"] .canvas-mindmap-center { background: var(--canvas-accent); }
         [class*="canvas-accent-"] .canvas-mindmap-branch { border-left-color: var(--canvas-accent); }
 
@@ -1727,6 +1907,31 @@ function AutoFit({ children }: { children: ReactNode }) {
   );
 }
 
+function renderInlineLessonHtml(value: string) {
+  return sanitizeLessonHtml(
+    value
+      .replace(/&lt;br\s*\/?&gt;/gi, "<br />")
+      .replace(/\r?\n/g, "<br />")
+  );
+}
+
+function renderCodeExplainNoteHtml(value: string) {
+  return renderInlineLessonHtml(
+    value.replace(
+      /^\s*(<p>\s*)?(?:Dòng|Dong|Line)\s*\d+\s*[:.)-]\s*/i,
+      (_match, paragraphStart) => paragraphStart || ""
+    )
+  );
+}
+
+function textLengthForLayout(value: string): number {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim().length;
+}
+
 function CanvasSlide(props: SlideProps) {
   switch (props.canvas.kind) {
     case "hero":      return <HeroSlide       {...props} />;
@@ -1985,7 +2190,12 @@ function ChatSlide({ canvas, visibleSteps }: SlideProps) {
                 </span>
                 <div className="canvas-chat-bubble">
                   {m.title && <span className="canvas-chat-name">{m.title}</span>}
-                  <p className="canvas-chat-text">{m.description}</p>
+                  <div
+                    className="canvas-chat-text"
+                    dangerouslySetInnerHTML={{
+                      __html: renderInlineLessonHtml(m.description || ""),
+                    }}
+                  />
                 </div>
               </div>
             );
@@ -1999,7 +2209,6 @@ function ChatSlide({ canvas, visibleSteps }: SlideProps) {
 /* ─── Flow ngang / pipeline ─── */
 function FlowSlide({ canvas, visibleSteps }: SlideProps) {
   const allSteps = canvas.steps ?? [];
-  const steps = allSteps.slice(0, Math.max(1, visibleSteps));
   if (allSteps.length === 0) {
     return (
       <article className="teaching-canvas teaching-canvas-concept">
@@ -2013,32 +2222,57 @@ function FlowSlide({ canvas, visibleSteps }: SlideProps) {
       </article>
     );
   }
-  // ≥4 nodes read better stacked vertically than wrapped horizontally.
-  const vertical = allSteps.length >= 4;
+  const visibleCount = Math.max(1, visibleSteps);
+  const longestStep = allSteps.reduce(
+    (max, step) => Math.max(max, (step.text || step.html || "").length),
+    0
+  );
+  const layout =
+    allSteps.length <= 3 || (allSteps.length === 4 && longestStep <= 72)
+      ? "row"
+      : allSteps.length <= 6
+        ? "grid"
+        : "vertical";
+  const flowClass = [
+    "canvas-flow",
+    `is-${layout}`,
+    layout === "grid" && allSteps.length <= 4 ? "is-grid-two" : "",
+  ].filter(Boolean).join(" ");
+
   return (
     <article className="teaching-canvas teaching-canvas-flow">
       <span className="canvas-kicker kicker-teal">Luồng xử lý</span>
       <h3 className="canvas-title">{canvas.title}</h3>
       <AutoFit>
-        <div className={`canvas-flow${vertical ? " is-vertical" : ""}`}>
-          {steps.map((step, i) => (
-            <div
-              key={step.id || i}
-              className={`canvas-flow-cell${i === visibleSteps - 1 ? " canvas-reveal-new" : ""}`}
-            >
+        <div className={flowClass}>
+          {allSteps.map((step, i) => {
+            const isVisible = i < visibleCount;
+            const arrowVisible = i + 1 < visibleCount;
+            const arrowIcon = layout === "vertical" ? "fa-arrow-down" : "fa-arrow-right";
+
+            return (
               <div
-                className="canvas-flow-node"
-                dangerouslySetInnerHTML={{
-                  __html: sanitizeLessonHtml(step.html || step.text || ""),
-                }}
-              />
-              {i < steps.length - 1 && (
-                <span className="canvas-flow-arrow">
-                  <i className={`fa-solid ${vertical ? "fa-arrow-down" : "fa-arrow-right"}`}></i>
-                </span>
-              )}
-            </div>
-          ))}
+                key={step.id || i}
+                className={[
+                  "canvas-flow-cell",
+                  isVisible ? "" : "is-hidden",
+                  i === visibleSteps - 1 ? "canvas-reveal-new" : "",
+                ].filter(Boolean).join(" ")}
+              >
+                <div
+                  className="canvas-flow-node"
+                  dangerouslySetInnerHTML={{
+                    __html: `<span class="canvas-flow-index">${i + 1}</span>${sanitizeLessonHtml(step.html || step.text || "")}`,
+                  }}
+                />
+                {i < allSteps.length - 1 && (
+                  <span className={`canvas-flow-arrow${arrowVisible ? "" : " is-hidden"}`}>
+                    <i className={`fa-solid ${arrowIcon}`}></i>
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </AutoFit>
     </article>
@@ -2062,17 +2296,28 @@ function CodeExplainSlide({ canvas, visibleSteps }: SlideProps) {
     );
   }
   const lines = code.split("\n");
-  const notes = (canvas.steps ?? []).slice(0, Math.max(1, visibleSteps));
-  // Long code reads better stacked (code on top, notes below); short code sits
-  // beside the notes in two columns.
-  const longest = lines.reduce((max, l) => Math.max(max, l.length), 0);
-  const stacked = lines.length > 9 || longest > 52;
+  const notes = canvas.steps ?? [];
+  const activeNoteIndex = Math.max(0, Math.min(Math.max(1, visibleSteps) - 1, Math.max(notes.length - 1, 0)));
+  const explainableLineIndexes = lines
+    .map((line, index) => (line.trim() ? index : -1))
+    .filter((index) => index !== -1);
+  const activeLineIndex = Math.max(
+    0,
+    Math.min(
+      explainableLineIndexes[activeNoteIndex] ?? activeNoteIndex,
+      Math.max(lines.length - 1, 0)
+    )
+  );
+  const currentNote = notes[activeNoteIndex];
+  const lineCenterRem = 3.88 + activeLineIndex * 1.565;
+  const popoverTop = Math.max(2.25, Math.min(lineCenterRem - 1.25, 13.4));
+
   return (
     <article className="teaching-canvas teaching-canvas-codeexplain">
       <span className="canvas-kicker kicker-amber">Đọc code</span>
       <h3 className="canvas-title">{canvas.title}</h3>
       <AutoFit>
-        <div className={`canvas-codeexplain${stacked ? " is-stacked" : ""}`}>
+        <div className="canvas-codeexplain">
           <div className="canvas-codeexplain-panel">
             <div className="canvas-codeexplain-bar">
               <span className="canvas-codeexplain-dot" style={{ background: "#ff5f56" }}></span>
@@ -2082,31 +2327,34 @@ function CodeExplainSlide({ canvas, visibleSteps }: SlideProps) {
             </div>
             <pre className="canvas-codeexplain-code">
               {lines.map((line, i) => (
-                <div key={i} className="canvas-codeexplain-line">
+                <div
+                  key={i}
+                  className={`canvas-codeexplain-line${i === activeLineIndex && currentNote ? " is-active" : ""}`}
+                >
                   <span className="canvas-codeexplain-ln">{i + 1}</span>
                   <code>{line || " "}</code>
                 </div>
               ))}
             </pre>
+            {currentNote && (
+              <div
+                key={currentNote.id || activeNoteIndex}
+                className="canvas-codeexplain-popover"
+                style={{ top: `${popoverTop}rem` }}
+              >
+                <div className="canvas-codeexplain-popover-head">
+                  <i className="fa-solid fa-comment-dots"></i>
+                  <span>Giải thích dòng {activeLineIndex + 1}</span>
+                </div>
+                <div
+                  className="canvas-codeexplain-popover-text"
+                  dangerouslySetInnerHTML={{
+                    __html: renderCodeExplainNoteHtml(currentNote.html || currentNote.text || ""),
+                  }}
+                />
+              </div>
+            )}
           </div>
-          {notes.length > 0 && (
-            <ol className="canvas-codeexplain-notes">
-              {notes.map((step, i) => (
-                <li
-                  key={step.id || i}
-                  className={`canvas-codeexplain-note${i === visibleSteps - 1 ? " canvas-reveal-new" : ""}`}
-                >
-                  <span className="canvas-codeexplain-badge">Dòng {i + 1}</span>
-                  <div
-                    className="canvas-codeexplain-note-text"
-                    dangerouslySetInnerHTML={{
-                      __html: sanitizeLessonHtml(step.html || step.text || ""),
-                    }}
-                  />
-                </li>
-              ))}
-            </ol>
-          )}
         </div>
       </AutoFit>
     </article>
@@ -2117,6 +2365,9 @@ function CodeExplainSlide({ canvas, visibleSteps }: SlideProps) {
 function MindmapSlide({ canvas, visibleSteps }: SlideProps) {
   const allBranches = canvas.steps ?? [];
   const branches = allBranches.slice(0, Math.max(1, visibleSteps));
+  const isDense =
+    textLengthForLayout(canvas.title) > 36 ||
+    branches.some((branch) => textLengthForLayout(branch.html || branch.text || "") > 76);
   if (allBranches.length === 0) {
     return (
       <article className="teaching-canvas teaching-canvas-concept">
@@ -2133,19 +2384,23 @@ function MindmapSlide({ canvas, visibleSteps }: SlideProps) {
   return (
     <article className="teaching-canvas teaching-canvas-mindmap">
       <AutoFit>
-        <div className="canvas-mindmap">
+        <div className={`canvas-mindmap${isDense ? " is-dense" : ""}`}>
           <div className="canvas-mindmap-center">{canvas.title}</div>
           <span className="canvas-mindmap-trunk" aria-hidden="true"></span>
           <ul className="canvas-mindmap-branches">
-            {branches.map((b, i) => (
-              <li
-                key={b.id || i}
-                className={`canvas-mindmap-branch${i === visibleSteps - 1 ? " canvas-reveal-new" : ""}`}
-                dangerouslySetInnerHTML={{
-                  __html: sanitizeLessonHtml(b.html || b.text || ""),
-                }}
-              />
-            ))}
+            {branches.map((b, i) => {
+              const rawBranch = b.html || b.text || "";
+              const isLong = textLengthForLayout(rawBranch) > 76;
+              return (
+                <li
+                  key={b.id || i}
+                  className={`canvas-mindmap-branch${isLong ? " is-long" : ""}${i === visibleSteps - 1 ? " canvas-reveal-new" : ""}`}
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeLessonHtml(rawBranch),
+                  }}
+                />
+              );
+            })}
           </ul>
         </div>
       </AutoFit>

@@ -146,12 +146,30 @@ function normalizeCanvasCards(value: unknown): unknown[] | undefined {
 function normalizeCanvasSteps(value: unknown, canvasId: string): unknown[] {
   return asArray(value)
     .map((step, index) => {
+      if (typeof step === "string") {
+        const text = asString(step);
+        if (!text) return null;
+        return {
+          id: `${canvasId}-step-${index + 1}`,
+          text,
+          html: text,
+        };
+      }
+
       const source = asRecord(step);
       if (!source) {
         return null;
       }
 
-      const text = asString(source.text) || asString(source.html);
+      const title = asString(source.title) || asString(source.label);
+      const body =
+        asString(source.text) ||
+        asString(source.description) ||
+        asString(source.content) ||
+        asString(source.html);
+      const text = [title, body && body !== title ? body : ""]
+        .filter(Boolean)
+        .join(": ");
       if (!text) {
         return null;
       }

@@ -10,6 +10,7 @@ import {
 import {
   normalizeContentBlocks,
   normalizeLessonDraft,
+  type LessonObjectivesDraft,
   type LessonDraft,
 } from "@/lib/lessons/lesson-draft";
 
@@ -22,6 +23,14 @@ interface LessonGenerationSelection {
 
 interface LessonGenerationResult {
   draft: LessonDraft;
+  meta: {
+    provider: LessonAiProvider;
+    model: string;
+  };
+}
+
+interface LessonObjectivesResult {
+  objectives: LessonObjectivesDraft;
   meta: {
     provider: LessonAiProvider;
     model: string;
@@ -445,6 +454,7 @@ function buildUserPrompt(content: string): string {
     "- 'text': Pure prose explanation, no code or image needed.",
     "",
     "Additional rules:",
+    "- objectives.knowledge / objectives.skills / objectives.attitude are REQUIRED. If the source has no explicit objectives, infer them from the lesson title, concepts, code examples, and exercises. Never leave them blank.",
     "- Create 2–5 sections. Section titles must be short tab labels.",
     "- Each section: 2–5 teaching_canvas blocks. Each canvas teaches exactly one idea.",
     "- reveal steps: 2–5 short Vietnamese sentences. Use steps to reveal key points progressively.",
@@ -513,6 +523,73 @@ function buildUserPrompt(content: string): string {
     content.trim(),
     "</source>",
   ].join("\n");
+}
+
+function buildObjectivesSystemPrompt(): string {
+  return [
+    "You are a senior instructional designer and Python teacher for Vietnamese middle-school students.",
+    "Create concise lesson objectives from raw lesson material.",
+    "Return ONLY one valid JSON object — no markdown fences, no extra text.",
+    "All user-facing text MUST be in Vietnamese.",
+  ].join("\n");
+}
+
+function buildObjectivesUserPrompt(options: {
+  title?: string;
+  content: string;
+}): string {
+  return [
+    "Return JSON with exactly this shape:",
+    `{
+  "objectives": {
+    "knowledge": "1-2 concise Vietnamese sentences about what students will understand",
+    "skills": "1-2 concise Vietnamese sentences about what students will be able to do",
+    "attitude": "1 concise Vietnamese sentence about confidence, curiosity, carefulness, or learning mindset"
+  }
+}`,
+    "",
+    "Rules:",
+    "- NEVER leave any objective blank.",
+    "- If the source already states objectives, preserve and polish them.",
+    "- If the source has no explicit objectives, infer realistic objectives from the lesson title, concepts, code examples, and exercises.",
+    "- Keep each field short enough for a textarea preview: about 18-35 Vietnamese words.",
+    "- Match the level of students in grades 6-9 learning Python.",
+    "",
+    `Lesson title: ${options.title?.trim() || "(not provided)"}`,
+    "",
+    "Source material:",
+    "<source>",
+    options.content.trim(),
+    "</source>",
+  ].join("\n");
+}
+
+function hasMissingObjectives(objectives: LessonObjectivesDraft): boolean {
+  return (
+    !objectives.knowledge.trim() ||
+    !objectives.skills.trim() ||
+    !objectives.attitude.trim()
+  );
+}
+
+function mergeMissingObjectives(
+  base: LessonObjectivesDraft,
+  fallback: LessonObjectivesDraft
+): LessonObjectivesDraft {
+  return {
+    knowledge: base.knowledge.trim() || fallback.knowledge.trim(),
+    skills: base.skills.trim() || fallback.skills.trim(),
+    attitude: base.attitude.trim() || fallback.attitude.trim(),
+  };
+}
+
+function normalizeGeneratedObjectives(parsed: unknown): LessonObjectivesDraft {
+  const root =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  const source = root.objectives ?? root;
+  return normalizeLessonDraft({ objectives: source }).objectives;
 }
 
 function cleanJsonText(rawText: string): string {
@@ -854,6 +931,41 @@ async function generateWithOpenAiCompatible(
   }
 }
 
+async function requestLessonObjectives(
+  selection: LessonGenerationSelection,
+  options: {
+    title?: string;
+    content: string;
+  }
+): Promise<{ objectives: LessonObjectivesDraft; model: string }> {
+  const rawResult =
+    PROVIDERS[selection.provider].kind === "gemini"
+      ? await generateWithGemini(
+          selection,
+          buildObjectivesSystemPrompt(),
+          buildObjectivesUserPrompt(options)
+        )
+      : await generateWithOpenAiCompatible(
+          selection,
+          buildObjectivesSystemPrompt(),
+          buildObjectivesUserPrompt(options)
+        );
+
+  const objectives = normalizeGeneratedObjectives(parseJsonObject(rawResult.text));
+  if (hasMissingObjectives(objectives)) {
+    throw new ProviderRequestError(
+      "AI không trả đủ 3 mục tiêu bài giảng.",
+      502,
+      selection.provider
+    );
+  }
+
+  return {
+    objectives,
+    model: rawResult.model,
+  };
+}
+
 export async function generateLessonDraft(options: {
   content: string;
   provider?: string;
@@ -877,12 +989,56 @@ export async function generateLessonDraft(options: {
           );
 
     const parsed = parseJsonObject(rawResult.text);
+    let draft = normalizeLessonDraft(parsed);
+
+    if (hasMissingObjectives(draft.objectives)) {
+      const objectiveResult = await requestLessonObjectives(selection, {
+        title: draft.title,
+        content: options.content,
+      });
+      draft = {
+        ...draft,
+        objectives: mergeMissingObjectives(
+          draft.objectives,
+          objectiveResult.objectives
+        ),
+      };
+    }
 
     return {
-      draft: normalizeLessonDraft(parsed),
+      draft,
       meta: {
         provider: selection.provider,
         model: rawResult.model,
+      },
+    };
+  } catch (error) {
+    throw toProviderRequestError(error, selection.provider);
+  }
+}
+
+export async function generateLessonObjectives(options: {
+  content: string;
+  title?: string;
+  provider?: string;
+  model?: string;
+}): Promise<LessonObjectivesResult> {
+  const selection = resolveLessonGenerationSelection(
+    options.provider,
+    options.model
+  );
+
+  try {
+    const result = await requestLessonObjectives(selection, {
+      title: options.title,
+      content: options.content,
+    });
+
+    return {
+      objectives: result.objectives,
+      meta: {
+        provider: selection.provider,
+        model: result.model,
       },
     };
   } catch (error) {
