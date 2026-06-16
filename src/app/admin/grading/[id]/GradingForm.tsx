@@ -7,12 +7,22 @@ interface GradingFormProps {
   submissionId: string;
   maxScore: number;
   graderId: string;
+  isGraded?: boolean;
+  initialScore?: number;
+  initialFeedback?: string;
 }
 
-export default function GradingForm({ submissionId, maxScore, graderId }: GradingFormProps) {
+export default function GradingForm({
+  submissionId,
+  maxScore,
+  graderId,
+  isGraded = false,
+  initialScore,
+  initialFeedback = "",
+}: GradingFormProps) {
   const router = useRouter();
-  const [score, setScore] = useState<number>(maxScore);
-  const [feedback, setFeedback] = useState("");
+  const [score, setScore] = useState<number>(initialScore ?? maxScore);
+  const [feedback, setFeedback] = useState(initialFeedback);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -134,7 +144,7 @@ export default function GradingForm({ submissionId, maxScore, graderId }: Gradin
           ) : (
             <>
               <i className="fa-solid fa-check"></i>
-              Hoàn thành chấm điểm
+              {isGraded ? "Cập nhật điểm" : "Hoàn thành chấm điểm"}
             </>
           )}
         </button>

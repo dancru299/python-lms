@@ -1,29 +1,23 @@
 import Link from "next/link";
-import prisma from "@/lib/prisma";
 import { requireTeacher } from "@/lib/session";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
+import { getPendingGradingGroups } from "@/lib/grading-queue";
 
 export default async function GradingPage() {
-  const session = await requireTeacher();
+  await requireTeacher();
 
-  const submissions = await prisma.submission.findMany({
-    where: { status: "pending" },
-    include: {
-      exercise: { include: { lesson: { include: { chapter: true } } } },
-      user: { select: { name: true, email: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const groups = await getPendingGradingGroups();
+  const pendingTotal = groups.reduce((sum, g) => sum + g.pendingCount, 0);
 
   return (
     <TeacherPageFrame
       title="Khu chấm bài"
-      subtitle="Hàng chờ được tách thành khu làm việc riêng để giáo viên nhìn rõ thứ tự ưu tiên, học sinh nộp bài và số điểm tối đa trước khi mở từng bài."
+      subtitle="Mỗi học sinh chỉ hiện một mục cho từng bài học, gộp toàn bộ bài tập đang chờ chấm để giáo viên nhìn rõ tiến độ trước khi mở từng bài."
       summaryPills={[
-        { label: "Bài chờ chấm", value: submissions.length, tone: "amber" },
+        { label: "Bài chờ chấm", value: pendingTotal, tone: "amber" },
         {
           label: "Ưu tiên hiện tại",
-          value: submissions.length > 0 ? "Xử lý hàng chờ" : "Hết hàng chờ",
+          value: groups.length > 0 ? "Xử lý hàng chờ" : "Hết hàng chờ",
           tone: "indigo",
         },
         {
@@ -51,14 +45,14 @@ export default async function GradingPage() {
         {[
           {
             label: "Tổng bài chờ chấm",
-            value: submissions.length,
-            description: "Danh sách được sắp từ bài nộp sớm nhất để tránh bỏ sót.",
+            value: pendingTotal,
+            description: "Gộp theo từng học sinh, sắp từ bài nộp sớm nhất để tránh bỏ sót.",
             icon: "fa-hourglass-half",
             iconClass: "bg-amber-100 text-amber-600",
           },
           {
             label: "Mục tiêu thao tác",
-            value: submissions.length > 0 ? "Mở bài và chấm ngay" : "Không còn bài tồn",
+            value: pendingTotal > 0 ? "Mở bài và chấm ngay" : "Không còn bài tồn",
             description: "Từ đây có thể đi thẳng vào form chấm chi tiết cho từng bài.",
             icon: "fa-bullseye",
             iconClass: "bg-sky-100 text-sky-600",
@@ -91,47 +85,43 @@ export default async function GradingPage() {
           <div>
             <h2 className="text-2xl font-bold text-slate-900">Danh sách chờ chấm</h2>
             <p className="text-sm text-slate-500">
-              Mỗi hàng hiển thị đầy đủ bài tập, bài giảng, học sinh và thời gian nộp để bạn ra quyết định nhanh hơn.
+              Mỗi học sinh hiện một mục cho từng bài học, gộp toàn bộ bài tập đang chờ chấm. Mở mục để chấm lần lượt và xem lại các bài đã chấm.
             </p>
           </div>
 
-          {submissions.length > 0 ? (
+          {groups.length > 0 ? (
             <div className="space-y-4">
-              {submissions.map((submission) => (
+              {groups.map((group) => (
                 <Link
-                  key={submission.id}
-                  href={`/admin/grading/${submission.id}`}
+                  key={group.key}
+                  href={`/admin/grading/${group.firstPendingSubmissionId}`}
                   className="card block rounded-[1.5rem] p-5 transition hover:-translate-y-1 hover:shadow-lg"
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="badge badge-primary">
-                          {submission.exercise.lesson.chapter.title}
-                        </span>
-                        <span className="text-sm text-slate-500">{submission.exercise.lesson.title}</span>
+                        <span className="badge badge-primary">{group.chapterTitle}</span>
+                        <span className="text-sm text-slate-500">{group.lessonTitle}</span>
                       </div>
 
                       <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                        {submission.exercise.title}
+                        {group.studentName}
                       </h3>
 
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                        <span>
-                          Học sinh: <span className="font-medium text-slate-900">{submission.user.name}</span>
-                        </span>
+                        <span>{group.studentEmail}</span>
                         <span>•</span>
-                        <span>{submission.user.email}</span>
-                      </div>
-
-                      <div className="mt-2 text-sm text-slate-500">
-                        Nộp lúc: {new Date(submission.createdAt).toLocaleString("vi-VN")}
+                        <span>
+                          Nộp sớm nhất: {new Date(group.earliestSubmittedAt).toLocaleString("vi-VN")}
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="badge badge-warning">Chờ chấm</span>
-                      <span className="badge badge-primary">{submission.maxScore} điểm</span>
+                      <span className="badge badge-warning">
+                        {group.pendingCount}/{group.totalExercises} bài chờ chấm
+                      </span>
+                      <span className="badge badge-primary">{group.maxScore} điểm</span>
                       <i className="fa-solid fa-chevron-right text-slate-300"></i>
                     </div>
                   </div>

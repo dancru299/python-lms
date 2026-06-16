@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import prisma from "@/lib/prisma";
 import { getUnreadNotificationCount } from "@/lib/notifications";
+import { getPendingGradingGroups } from "@/lib/grading-queue";
 import NotificationInbox from "@/components/notifications/NotificationInbox";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import { requireTeacher } from "@/lib/session";
@@ -73,71 +74,41 @@ function NotificationsFallback() {
 }
 
 async function AdminPendingSubmissionsSection() {
-  const recentSubmissions = await prisma.submission.findMany({
-    where: { status: "pending" },
-    select: {
-      id: true,
-      maxScore: true,
-      exercise: {
-        select: {
-          title: true,
-          lesson: {
-            select: {
-              title: true,
-              chapter: {
-                select: {
-                  title: true,
-                },
-              },
-            },
-          },
-        },
-      },
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+  const groups = await getPendingGradingGroups(8);
 
   return (
     <div className="space-y-4">
-      {recentSubmissions.length > 0 ? (
-        recentSubmissions.map((submission) => (
+      {groups.length > 0 ? (
+        groups.map((group) => (
           <Link
-            key={submission.id}
-            href={`/admin/grading/${submission.id}`}
+            key={group.key}
+            href={`/admin/grading/${group.firstPendingSubmissionId}`}
             className="card block rounded-[1.5rem] p-5 transition hover:shadow-md"
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="badge badge-primary">
-                    {submission.exercise.lesson.chapter.title}
+                    {group.chapterTitle}
                   </span>
                   <span className="text-sm text-slate-500">
-                    {submission.exercise.lesson.title}
+                    {group.lessonTitle}
                   </span>
                 </div>
                 <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                  {submission.exercise.title}
+                  {group.studentName}
                 </h3>
                 <div className="mt-2 text-sm text-slate-500">
-                  Học sinh:{" "}
-                  <span className="font-medium text-slate-900">
-                    {submission.user.name}
-                  </span>
+                  {group.studentEmail}
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="badge badge-warning">Chờ chấm</span>
+                <span className="badge badge-warning">
+                  {group.pendingCount}/{group.totalExercises} bài chờ chấm
+                </span>
                 <span className="badge badge-primary">
-                  {submission.maxScore} điểm
+                  {group.maxScore} điểm
                 </span>
               </div>
             </div>

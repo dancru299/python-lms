@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireTeacher } from "@/lib/session";
 import prisma from "@/lib/prisma";
 import Link from "next/link";
@@ -29,9 +29,19 @@ export default async function GradingDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  if (submission.status === "graded") {
-    redirect("/admin/grading");
-  }
+  const isGraded = submission.status === "graded";
+
+  // All of this student's submissions for the same lesson — both pending and
+  // already graded — so the teacher can chấm lần lượt và xem lại bài đã chấm
+  // without losing the lesson context.
+  const siblings = await prisma.submission.findMany({
+    where: {
+      userId: submission.userId,
+      exercise: { lessonId: submission.exercise.lessonId },
+    },
+    include: { exercise: { select: { title: true } } },
+    orderBy: { createdAt: "asc" },
+  });
 
   return (
     <>
@@ -78,6 +88,58 @@ export default async function GradingDetailPage({ params }: PageProps) {
               </div>
             </div>
 
+            {/* Sibling submissions — chuyển nhanh giữa các bài của học sinh
+                trong cùng bài học, và mở lại bài đã chấm để xem điểm/nhận xét. */}
+            {siblings.length > 1 && (
+              <div className="rounded-xl border border-gray-200 bg-white p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900">
+                    <i className="fa-solid fa-list-check mr-2 text-indigo-500"></i>
+                    Bài tập của học sinh trong bài học này
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    {siblings.filter((s) => s.status === "graded").length}/
+                    {siblings.length} đã chấm
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {siblings.map((sib, index) => {
+                    const isCurrent = sib.id === submission.id;
+                    const sibGraded = sib.status === "graded";
+                    return (
+                      <Link
+                        key={sib.id}
+                        href={`/admin/grading/${sib.id}`}
+                        className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-sm transition ${
+                          isCurrent
+                            ? "border-indigo-300 bg-indigo-50"
+                            : "border-gray-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="min-w-0 flex items-center gap-2">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-semibold text-slate-600">
+                            {index + 1}
+                          </span>
+                          <span className="truncate font-medium text-slate-800">
+                            {sib.exercise.title}
+                          </span>
+                        </span>
+                        {sibGraded ? (
+                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            {sib.score}/{sib.maxScore}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            Chờ chấm
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Exercise Info */}
             <div className="rounded-xl border border-gray-200 bg-white p-5">
               <div className="mb-3 flex items-center gap-2 text-xs text-gray-400">
@@ -122,14 +184,27 @@ export default async function GradingDetailPage({ params }: PageProps) {
 
             {/* Grading form */}
             <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <h3 className="mb-4 font-bold text-gray-900">
-                <i className="fa-solid fa-pen-to-square mr-2 text-green-600"></i>
-                Chấm điểm
-              </h3>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="font-bold text-gray-900">
+                  <i className="fa-solid fa-pen-to-square mr-2 text-green-600"></i>
+                  {isGraded ? "Xem lại & sửa điểm" : "Chấm điểm"}
+                </h3>
+                {isGraded && (
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-700">
+                    Đã chấm: {submission.score}/{submission.maxScore}
+                    {submission.gradedAt
+                      ? ` · ${new Date(submission.gradedAt).toLocaleString("vi-VN")}`
+                      : ""}
+                  </span>
+                )}
+              </div>
               <GradingForm
                 submissionId={submission.id}
                 maxScore={submission.maxScore || submission.exercise.points}
                 graderId={session.userId}
+                isGraded={isGraded}
+                initialScore={submission.score ?? undefined}
+                initialFeedback={submission.feedback ?? ""}
               />
             </div>
           </div>
