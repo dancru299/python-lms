@@ -58,6 +58,11 @@ export default async function StudentClassroomDetailPage({
     where: {
       classroomId: id,
       isPublished: true,
+      // Chỉ hiện bài giao cho cả lớp hoặc giao trực tiếp cho HS này.
+      OR: [
+        { targets: { none: {} } },
+        { targets: { some: { studentId: session.userId } } },
+      ],
     },
     include: {
       lesson: { select: { id: true, title: true } },

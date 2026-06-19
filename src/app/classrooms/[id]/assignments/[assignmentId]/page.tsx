@@ -46,6 +46,22 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
     redirect("/classrooms");
   }
 
+  // Bài giao cho một số HS cụ thể => HS ngoài danh sách không được mở.
+  const targetCount = await prisma.classroomAssignmentTarget.count({
+    where: { assignmentId },
+  });
+  if (targetCount > 0) {
+    const targeted = await prisma.classroomAssignmentTarget.findUnique({
+      where: {
+        assignmentId_studentId: { assignmentId, studentId: session.userId },
+      },
+      select: { id: true },
+    });
+    if (!targeted) {
+      redirect(`/classrooms/${classroomId}`);
+    }
+  }
+
   const profileUser = await prisma.user.findUnique({
     where: { id: session.userId },
     select: {
@@ -145,7 +161,7 @@ export default async function StudentAssignmentPage({ params }: PageProps) {
 
           <StudentAssignmentSubmitForm
             assignmentId={assignment.id}
-            answerTemplate={assignment.answerTemplate || null}
+            answerTemplate={mySubmission ? assignment.answerTemplate || null : null}
             dueAt={assignment.dueAt ? assignment.dueAt.toISOString() : null}
             existingSubmission={
               mySubmission

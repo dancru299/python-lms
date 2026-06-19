@@ -50,6 +50,27 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
+    // Bài giao cho một số HS cụ thể => HS ngoài danh sách không được xem.
+    if (!isTeacherSide) {
+      const targetCount = await prisma.classroomAssignmentTarget.count({
+        where: { assignmentId },
+      });
+      if (targetCount > 0) {
+        const isTargeted = await prisma.classroomAssignmentTarget.findUnique({
+          where: {
+            assignmentId_studentId: { assignmentId, studentId: session.userId },
+          },
+          select: { id: true },
+        });
+        if (!isTargeted) {
+          return NextResponse.json(
+            { error: "Không có quyền truy cập" },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     const mySubmission = session.role === "student"
       ? await prisma.classroomAssignmentSubmission.findUnique({
           where: {
@@ -61,7 +82,13 @@ export async function GET(request: Request, { params }: RouteParams) {
         })
       : null;
 
-    return NextResponse.json({ assignment, mySubmission });
+    // Chỉ lộ đáp án mẫu cho GV/admin, hoặc học sinh đã nộp bài (tránh xem trước đáp án).
+    const canSeeAnswer = isTeacherSide || mySubmission !== null;
+    const safeAssignment = canSeeAnswer
+      ? assignment
+      : { ...assignment, answerTemplate: null };
+
+    return NextResponse.json({ assignment: safeAssignment, mySubmission });
   } catch (error) {
     console.error("Get assignment info error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

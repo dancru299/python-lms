@@ -40,7 +40,19 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const assignments = await prisma.classroomAssignment.findMany({
-      where: { classroomId, isPublished: true },
+      where: {
+        classroomId,
+        isPublished: true,
+        // HS chỉ thấy bài giao cho cả lớp (không có target) hoặc giao trực tiếp cho mình.
+        ...(session.role === "student"
+          ? {
+              OR: [
+                { targets: { none: {} } },
+                { targets: { some: { studentId: session.userId } } },
+              ],
+            }
+          : {}),
+      },
       include: {
         lesson: { select: { id: true, title: true } },
         submissions: session.role === "student"
@@ -55,13 +67,19 @@ export async function GET(request: Request, { params }: RouteParams) {
       orderBy: { createdAt: "desc" },
     });
 
-    const transformed = assignments.map((assignment) => ({
-      ...assignment,
-      mySubmission: Array.isArray(assignment.submissions)
+    const transformed = assignments.map((assignment) => {
+      const mySubmission = Array.isArray(assignment.submissions)
         ? assignment.submissions[0] || null
-        : null,
-      submissions: undefined,
-    }));
+        : null;
+      // Chỉ lộ đáp án mẫu cho GV/admin, hoặc học sinh đã nộp bài (tránh xem trước đáp án).
+      const canSeeAnswer = session.role !== "student" || mySubmission !== null;
+      return {
+        ...assignment,
+        answerTemplate: canSeeAnswer ? assignment.answerTemplate : null,
+        mySubmission,
+        submissions: undefined,
+      };
+    });
 
     return NextResponse.json({ assignments: transformed });
   } catch (error) {

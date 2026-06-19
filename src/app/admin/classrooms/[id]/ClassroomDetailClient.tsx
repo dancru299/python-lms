@@ -35,7 +35,7 @@ export interface ClassroomAssignmentItem {
   submissionsCount: number;
 }
 
-type AssignmentFilter = "all" | "homework" | "test";
+type AssignmentFilter = "all" | "test";
 type FormNotice = { tone: "success" | "error"; message: string } | null;
 
 interface Props {
@@ -102,31 +102,32 @@ export default function ClassroomDetailClient({
   const [assignments, setAssignments] = useState(initialAssignments);
   const [studentQuery, setStudentQuery] = useState("");
   const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>("all");
-  const [loadingHomework, setLoadingHomework] = useState(false);
   const [loadingTest, setLoadingTest] = useState(false);
-  const [homeworkNotice, setHomeworkNotice] = useState<FormNotice>(null);
   const [testNotice, setTestNotice] = useState<FormNotice>(null);
-  const [homeworkFileKey, setHomeworkFileKey] = useState(0);
   const [testFileKey, setTestFileKey] = useState(0);
-
-  const [homeworkForm, setHomeworkForm] = useState({
-    lessonId: "",
-    title: "",
-    description: "",
-    maxScore: 10,
-    file: null as File | null,
-  });
 
   const [testForm, setTestForm] = useState({
     lessonId: "",
     title: "",
     description: "",
-    durationMinutes: 45,
+    durationMinutes: 45 as number | "none",
     maxScore: 10,
     file: null as File | null,
+    audience: "all" as "all" | "selected",
+    studentIds: [] as string[],
+    dueMode: "auto" as "auto" | "custom" | "none",
+    dueAt: "",
   });
 
-  const homeworkCount = assignments.filter((assignment) => assignment.type === "homework").length;
+  const toggleTestStudent = (studentId: string) => {
+    setTestForm((prev) => ({
+      ...prev,
+      studentIds: prev.studentIds.includes(studentId)
+        ? prev.studentIds.filter((id) => id !== studentId)
+        : [...prev.studentIds, studentId],
+    }));
+  };
+
   const testCount = assignments.filter((assignment) => assignment.type === "test").length;
   const totalSubmissions = assignments.reduce((sum, assignment) => sum + assignment.submissionsCount, 0);
   const normalizedStudentQuery = studentQuery.trim().toLowerCase();
@@ -178,56 +179,6 @@ export default function ClassroomDetailClient({
     ]);
   };
 
-  const createHomework = async () => {
-    setHomeworkNotice(null);
-
-    if (!homeworkForm.lessonId) {
-      setHomeworkNotice({ tone: "error", message: "Vui lòng chọn bài giảng cho BTVN." });
-      return;
-    }
-    if (!homeworkForm.file) {
-      setHomeworkNotice({ tone: "error", message: "Vui lòng tải lên file đề BTVN định dạng .docx." });
-      return;
-    }
-
-    setLoadingHomework(true);
-    try {
-      const formData = new FormData();
-      formData.set("type", "homework");
-      formData.set("lessonId", homeworkForm.lessonId);
-      formData.set("title", homeworkForm.title);
-      formData.set("description", homeworkForm.description);
-      formData.set("maxScore", String(homeworkForm.maxScore || 10));
-      formData.set("questionDocx", homeworkForm.file);
-
-      const res = await fetch(`/api/admin/classrooms/${classroomId}/assignments`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setHomeworkNotice({ tone: "error", message: data.error || "Không thể giao BTVN." });
-        return;
-      }
-
-      appendAssignment(data.assignment);
-      setHomeworkForm({
-        lessonId: "",
-        title: "",
-        description: "",
-        maxScore: 10,
-        file: null,
-      });
-      setHomeworkFileKey((prev) => prev + 1);
-      setHomeworkNotice({ tone: "success", message: "Đã giao bài tập về nhà thành công." });
-    } catch {
-      setHomeworkNotice({ tone: "error", message: "Đã xảy ra lỗi khi giao bài tập về nhà." });
-    } finally {
-      setLoadingHomework(false);
-    }
-  };
-
   const createTest = async () => {
     setTestNotice(null);
 
@@ -237,6 +188,14 @@ export default function ClassroomDetailClient({
     }
     if (!testForm.file) {
       setTestNotice({ tone: "error", message: "Vui lòng tải lên file đề kiểm tra định dạng .docx." });
+      return;
+    }
+    if (testForm.audience === "selected" && testForm.studentIds.length === 0) {
+      setTestNotice({ tone: "error", message: "Vui lòng chọn ít nhất một học sinh để giao bài." });
+      return;
+    }
+    if (testForm.dueMode === "custom" && !testForm.dueAt) {
+      setTestNotice({ tone: "error", message: "Vui lòng chọn thời điểm hạn nộp." });
       return;
     }
 
@@ -250,6 +209,16 @@ export default function ClassroomDetailClient({
       formData.set("durationMinutes", String(testForm.durationMinutes));
       formData.set("maxScore", String(testForm.maxScore || 10));
       formData.set("questionDocx", testForm.file);
+      // Rỗng => API hiểu là giao cho toàn bộ lớp.
+      if (testForm.audience === "selected") {
+        formData.set("studentIds", JSON.stringify(testForm.studentIds));
+      }
+      // Hạn nộp: auto => không gửi (API lấy buổi kế tiếp); none => không có hạn; custom => ngày đã chọn.
+      if (testForm.dueMode === "custom") {
+        formData.set("dueAt", testForm.dueAt);
+      } else if (testForm.dueMode === "none") {
+        formData.set("dueAt", "none");
+      }
 
       const res = await fetch(`/api/admin/classrooms/${classroomId}/assignments`, {
         method: "POST",
@@ -270,6 +239,10 @@ export default function ClassroomDetailClient({
         durationMinutes: 45,
         maxScore: 10,
         file: null,
+        audience: "all",
+        studentIds: [],
+        dueMode: "auto",
+        dueAt: "",
       });
       setTestFileKey((prev) => prev + 1);
       setTestNotice({ tone: "success", message: "Đã giao bài kiểm tra thành công." });
@@ -320,7 +293,7 @@ export default function ClassroomDetailClient({
                   {assignments[0]?.title || "Chưa có bài nào được giao"}
                 </div>
                 <div className="mt-2 text-sm text-slate-200">
-                  {assignments[0]?.createdAtLabel || "Bắt đầu bằng một BTVN hoặc bài kiểm tra đầu tiên"}
+                  {assignments[0]?.createdAtLabel || "Bắt đầu bằng bài kiểm tra đầu tiên"}
                 </div>
               </div>
             </div>
@@ -334,13 +307,6 @@ export default function ClassroomDetailClient({
                 description: "Sẵn sàng để gắn vào đầu việc",
                 icon: "fa-book-open",
                 tone: "bg-sky-100 text-sky-600",
-              },
-              {
-                label: "BTVN đã giao",
-                value: homeworkCount,
-                description: "Luồng luyện tập thường xuyên",
-                icon: "fa-house-laptop",
-                tone: "bg-emerald-100 text-emerald-600",
               },
               {
                 label: "Bài kiểm tra",
@@ -463,7 +429,7 @@ export default function ClassroomDetailClient({
                 Gắn đầu việc với đúng bài giảng để xem lại và chấm bài nhanh hơn.
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                Dùng BTVN cho luyện tập thường xuyên, dùng bài kiểm tra khi cần thời lượng rõ ràng.
+                Đặt thời lượng làm bài rõ ràng cho mỗi bài kiểm tra trước khi giao cho lớp.
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 Nhật ký bên dưới là nơi theo dõi toàn bộ đầu việc đã giao cho lớp.
@@ -478,7 +444,7 @@ export default function ClassroomDetailClient({
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">Trung tâm giao việc</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                  Hai khối thao tác được tách rõ để nhìn vào là biết đang giao bài luyện tập hay tạo bài kiểm tra.
+                  Tải lên đề kiểm tra và giao cho cả lớp với thời lượng làm bài rõ ràng.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -491,102 +457,7 @@ export default function ClassroomDetailClient({
               </div>
             </div>
 
-            <div className="mt-6 grid gap-6 xl:grid-cols-2">
-              <article className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50/60 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 ring-1 ring-emerald-100">
-                      <i className="fa-solid fa-house-laptop"></i>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900">Giao bài tập về nhà</h3>
-                      <p className="mt-1 text-sm leading-6 text-slate-500">
-                        Phù hợp cho nhịp luyện tập sau buổi học hoặc các đầu việc ôn tập thường xuyên.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="badge badge-success">BTVN</span>
-                </div>
-
-                {homeworkNotice ? <div className="mt-5"><NoticeBlock notice={homeworkNotice} /></div> : null}
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Bài giảng liên quan</label>
-                    <select
-                      className="input bg-white"
-                      value={homeworkForm.lessonId}
-                      onChange={(e) => setHomeworkForm((prev) => ({ ...prev, lessonId: e.target.value }))}
-                      disabled={lessons.length === 0}
-                    >
-                      <option value="">{lessons.length === 0 ? "Chưa có bài giảng khả dụng" : "-- Chọn bài giảng --"}</option>
-                      {lessons.map((lesson) => (
-                        <option key={lesson.id} value={lesson.id}>
-                          {lesson.chapterTitle} - {lesson.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Điểm tối đa</label>
-                    <input
-                      type="number"
-                      min={1}
-                      className="input bg-white"
-                      value={homeworkForm.maxScore}
-                      onChange={(e) => setHomeworkForm((prev) => ({ ...prev, maxScore: Number(e.target.value) }))}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Tiêu đề BTVN</label>
-                    <input
-                      className="input bg-white"
-                      value={homeworkForm.title}
-                      onChange={(e) => setHomeworkForm((prev) => ({ ...prev, title: e.target.value }))}
-                      placeholder="VD: BTVN Hàm và vòng lặp"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Đề bài BTVN (.docx)</label>
-                    <input
-                      key={homeworkFileKey}
-                      type="file"
-                      accept=".docx"
-                      className="input bg-white file:mr-4 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-700"
-                      onChange={(e) => setHomeworkForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Mô tả ngắn</label>
-                  <textarea
-                    className="input min-h-[110px] bg-white"
-                    value={homeworkForm.description}
-                    onChange={(e) => setHomeworkForm((prev) => ({ ...prev, description: e.target.value }))}
-                    placeholder="Ghi chú thêm cho học sinh..."
-                  />
-                </div>
-
-                <div className="mt-5 flex justify-end">
-                  <button
-                    onClick={createHomework}
-                    disabled={loadingHomework || lessons.length === 0}
-                    className="btn btn-success rounded-xl disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {loadingHomework ? (
-                      <>
-                        <i className="fa-solid fa-spinner fa-spin"></i> Đang giao...
-                      </>
-                    ) : (
-                      <>
-                        <i className="fa-solid fa-paper-plane"></i> Giao BTVN
-                      </>
-                    )}
-                  </button>
-                </div>
-              </article>
-
+            <div className="mt-6">
               <article className="rounded-[1.5rem] border border-amber-100 bg-amber-50/60 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-4">
@@ -623,15 +494,21 @@ export default function ClassroomDetailClient({
                     </select>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Thời gian</label>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">Thời gian làm bài</label>
                     <select
                       className="input bg-white"
                       value={testForm.durationMinutes}
-                      onChange={(e) => setTestForm((prev) => ({ ...prev, durationMinutes: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setTestForm((prev) => ({
+                          ...prev,
+                          durationMinutes: e.target.value === "none" ? "none" : Number(e.target.value),
+                        }))
+                      }
                     >
                       <option value={15}>15 phút</option>
                       <option value={45}>45 phút</option>
                       <option value={60}>60 phút</option>
+                      <option value="none">Không có thời gian</option>
                     </select>
                   </div>
                   <div>
@@ -654,6 +531,33 @@ export default function ClassroomDetailClient({
                     />
                   </div>
                   <div className="md:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-slate-700">Hạn nộp</label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <select
+                        className="input bg-white"
+                        value={testForm.dueMode}
+                        onChange={(e) =>
+                          setTestForm((prev) => ({
+                            ...prev,
+                            dueMode: e.target.value as "auto" | "custom" | "none",
+                          }))
+                        }
+                      >
+                        <option value="auto">Theo buổi học kế tiếp</option>
+                        <option value="custom">Tự chọn thời điểm</option>
+                        <option value="none">Không có hạn nộp</option>
+                      </select>
+                      {testForm.dueMode === "custom" && (
+                        <input
+                          type="datetime-local"
+                          className="input bg-white"
+                          value={testForm.dueAt}
+                          onChange={(e) => setTestForm((prev) => ({ ...prev, dueAt: e.target.value }))}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
                     <label className="mb-2 block text-sm font-medium text-slate-700">Đề kiểm tra (.docx)</label>
                     <input
                       key={testFileKey}
@@ -663,6 +567,90 @@ export default function ClassroomDetailClient({
                       onChange={(e) => setTestForm((prev) => ({ ...prev, file: e.target.files?.[0] || null }))}
                     />
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Giao cho</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTestForm((prev) => ({ ...prev, audience: "all" }))}
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                        testForm.audience === "all"
+                          ? "bg-slate-900 text-white"
+                          : "border border-slate-200 bg-white text-slate-600 hover:border-amber-200 hover:text-amber-600"
+                      }`}
+                    >
+                      Toàn bộ lớp ({students.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTestForm((prev) => ({ ...prev, audience: "selected" }))}
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                        testForm.audience === "selected"
+                          ? "bg-slate-900 text-white"
+                          : "border border-slate-200 bg-white text-slate-600 hover:border-amber-200 hover:text-amber-600"
+                      }`}
+                    >
+                      Chọn học sinh
+                    </button>
+                  </div>
+
+                  {testForm.audience === "selected" && (
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                      {students.length === 0 ? (
+                        <p className="px-1 py-3 text-sm text-slate-500">Lớp chưa có học sinh để giao.</p>
+                      ) : (
+                        <>
+                          <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                            <span className="text-xs font-medium text-slate-500">
+                              Đã chọn {testForm.studentIds.length}/{students.length} học sinh
+                            </span>
+                            <div className="flex gap-3 text-xs font-medium">
+                              <button
+                                type="button"
+                                className="text-amber-600 hover:underline"
+                                onClick={() =>
+                                  setTestForm((prev) => ({
+                                    ...prev,
+                                    studentIds: students.map((s) => s.id),
+                                  }))
+                                }
+                              >
+                                Chọn tất cả
+                              </button>
+                              <button
+                                type="button"
+                                className="text-slate-500 hover:underline"
+                                onClick={() => setTestForm((prev) => ({ ...prev, studentIds: [] }))}
+                              >
+                                Bỏ chọn
+                              </button>
+                            </div>
+                          </div>
+                          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                            {students.map((student) => (
+                              <label
+                                key={student.id}
+                                className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 shrink-0 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                  checked={testForm.studentIds.includes(student.id)}
+                                  onChange={() => toggleTestStudent(student.id)}
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-slate-800">{student.name}</span>
+                                  <span className="block truncate text-xs text-slate-400">{student.email}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4">
@@ -708,7 +696,6 @@ export default function ClassroomDetailClient({
               <div className="flex flex-wrap gap-2">
                 {[
                   { value: "all" as const, label: "Tất cả" },
-                  { value: "homework" as const, label: "BTVN" },
                   { value: "test" as const, label: "Kiểm tra" },
                 ].map((filter) => {
                   const isActive = assignmentFilter === filter.value;
@@ -764,8 +751,10 @@ export default function ClassroomDetailClient({
                             {assignment.type === "test" ? "Thời gian" : "Loại bài"}
                           </div>
                           <div className="mt-2 text-lg font-semibold text-slate-900">
-                            {assignment.type === "test" && assignment.durationMinutes
-                              ? `${assignment.durationMinutes} phút`
+                            {assignment.type === "test"
+                              ? assignment.durationMinutes
+                                ? `${assignment.durationMinutes} phút`
+                                : "Không giới hạn"
                               : "BTVN"}
                           </div>
                         </div>
@@ -787,7 +776,7 @@ export default function ClassroomDetailClient({
               {filteredAssignments.length === 0 && (
                 <div className="rounded-[1.25rem] border border-dashed border-slate-300 px-6 py-12 text-center text-slate-500">
                   {assignments.length === 0
-                    ? "Chưa có bài tập hoặc bài kiểm tra nào được giao."
+                    ? "Chưa có bài kiểm tra nào được giao."
                     : "Bộ lọc hiện tại chưa có dữ liệu phù hợp."}
                 </div>
               )}

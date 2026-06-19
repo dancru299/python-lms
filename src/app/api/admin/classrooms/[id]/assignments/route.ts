@@ -111,6 +111,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       String(formData.get("description") || "").trim() || null;
     const maxScore = Number(formData.get("maxScore") || 10);
 
+    // Danh sách học sinh được giao (JSON array). Rỗng/không có => giao cho toàn bộ lớp.
+    const studentIdsRaw = String(formData.get("studentIds") || "").trim();
+    let targetStudentIds: string[] = [];
+    if (studentIdsRaw) {
+      try {
+        const parsed = JSON.parse(studentIdsRaw);
+        if (Array.isArray(parsed)) {
+          targetStudentIds = [...new Set(parsed.map((x) => String(x)).filter(Boolean))];
+        }
+      } catch {
+        // JSON hỏng => bỏ qua, coi như giao cho toàn bộ lớp.
+      }
+    }
+
     if (type !== "homework" && type !== "test") {
       return NextResponse.json(
         { error: "Lo?i bài giao không h?p l?" },
@@ -207,12 +221,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (type === "test") {
-      durationMinutes = Number(formData.get("durationMinutes") || 0);
-      if (![15, 45, 60].includes(durationMinutes)) {
-        return NextResponse.json(
-          { error: "Th?i gian làm bài ch? h? tr? 15, 45 ho?c 60 phút" },
-          { status: 400 },
-        );
+      // "none"/rỗng/0 => không giới hạn thời gian làm bài (durationMinutes = null).
+      const durationRaw = String(formData.get("durationMinutes") || "").trim();
+      if (durationRaw && durationRaw !== "none" && durationRaw !== "0") {
+        durationMinutes = Number(durationRaw);
+        if (![15, 45, 60].includes(durationMinutes)) {
+          return NextResponse.json(
+            { error: "Thời gian làm bài chỉ hỗ trợ 15, 45, 60 phút hoặc không giới hạn" },
+            { status: 400 },
+          );
+        }
+      } else {
+        durationMinutes = null;
       }
 
       if (!uploadedQuestionDocx) {
@@ -248,11 +268,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Hạn nộp: ưu tiên giá trị giáo viên nhập tay, nếu không thì lấy buổi học kế tiếp.
+    // Hạn nộp:
+    //  - "none"     => không đặt hạn nộp (dueAt = null)
+    //  - có ngày    => dùng đúng thời điểm giáo viên chọn
+    //  - rỗng       => mặc định theo buổi học kế tiếp
     let dueAt: Date | null = null;
     let sessionId: string | null = null;
     const dueAtRaw = String(formData.get("dueAt") || "").trim();
-    if (dueAtRaw) {
+    if (dueAtRaw === "none") {
+      dueAt = null;
+    } else if (dueAtRaw) {
       const parsed = new Date(dueAtRaw);
       if (!Number.isNaN(parsed.getTime())) {
         dueAt = parsed;
@@ -299,11 +324,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       where: { classroomId },
       select: { studentId: true },
     });
+    const memberIds = new Set(classroomStudents.map((s) => s.studentId));
 
-    if (classroomStudents.length > 0) {
+    // Chỉ giữ những HS thực sự thuộc lớp; có chọn => tạo target, không chọn => giao cả lớp.
+    const validTargetIds = targetStudentIds.filter((studentId) =>
+      memberIds.has(studentId),
+    );
+
+    if (validTargetIds.length > 0) {
+      await prisma.classroomAssignmentTarget.createMany({
+        data: validTargetIds.map((studentId) => ({
+          assignmentId: assignment.id,
+          studentId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const recipientIds =
+      validTargetIds.length > 0
+        ? validTargetIds
+        : classroomStudents.map((s) => s.studentId);
+
+    if (recipientIds.length > 0) {
       await prisma.notification.createMany({
-        data: classroomStudents.map((student) => ({
-          userId: student.studentId,
+        data: recipientIds.map((studentId) => ({
+          userId: studentId,
           type: type === "test" ? "classroom_test_created" : "classroom_assignment_created",
           title: type === "test" ? "Có bài kiểm tra mới" : "Có bài tập mới",
           message: `${assignment.title} đã được giao trong lớp học. Nhấn để mở và làm bài.`,

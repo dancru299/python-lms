@@ -72,6 +72,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Bài giao cho một số HS cụ thể => HS ngoài danh sách không được nộp.
+    const targetCount = await prisma.classroomAssignmentTarget.count({
+      where: { assignmentId },
+    });
+    if (targetCount > 0) {
+      const isTargeted = await prisma.classroomAssignmentTarget.findUnique({
+        where: {
+          assignmentId_studentId: { assignmentId, studentId: session.userId },
+        },
+        select: { id: true },
+      });
+      if (!isTargeted) {
+        return NextResponse.json(
+          { error: "Bài này không được giao cho bạn" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Mỗi học sinh chỉ được nộp MỘT lần. Đã có bài nộp => không cho nộp lại.
     const existing = await prisma.classroomAssignmentSubmission.findUnique({
       where: {
         assignmentId_studentId: {
@@ -79,12 +99,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           studentId: session.userId,
         },
       },
-      select: { status: true },
+      select: { id: true },
     });
 
-    if (existing?.status === "graded") {
+    if (existing) {
       return NextResponse.json(
-        { error: "Bài này đã được chấm điểm, bạn không thể nộp lại." },
+        { error: "Bạn đã nộp bài này rồi, không thể nộp lại." },
         { status: 409 }
       );
     }
@@ -96,30 +116,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const isLate = assignment.dueAt ? new Date() > assignment.dueAt : false;
 
-    const submission = await prisma.classroomAssignmentSubmission.upsert({
-      where: {
-        assignmentId_studentId: {
+    let submission;
+    try {
+      submission = await prisma.classroomAssignmentSubmission.create({
+        data: {
           assignmentId,
           studentId: session.userId,
+          content,
+          status: "submitted",
+          isLate,
         },
-      },
-      create: {
-        assignmentId,
-        studentId: session.userId,
-        content,
-        status: "submitted",
-        isLate,
-      },
-      update: {
-        content,
-        status: "submitted",
-        isLate,
-        score: null,
-        feedback: null,
-        gradedAt: null,
-        gradedBy: null,
-      },
-    });
+      });
+    } catch (err) {
+      // Phòng trường hợp double-submit cùng lúc: vi phạm unique (assignmentId, studentId).
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code?: string }).code === "P2002"
+      ) {
+        return NextResponse.json(
+          { error: "Bạn đã nộp bài này rồi, không thể nộp lại." },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     await prisma.notification.create({
       data: {

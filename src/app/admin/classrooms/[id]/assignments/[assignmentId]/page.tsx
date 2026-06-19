@@ -5,6 +5,7 @@ import Link from "next/link";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import AssignmentQuestionPreview from "@/components/AssignmentQuestionPreview";
 import GradeClassroomSubmissionForm from "./GradeClassroomSubmissionForm";
+import EditAssignmentForm from "./EditAssignmentForm";
 
 interface PageProps {
   params: Promise<{ id: string; assignmentId: string }>;
@@ -113,6 +114,16 @@ export default async function ClassroomAssignmentDetailPage({
               <pre className="code-block">{assignment.answerTemplate}</pre>
             </div>
           )}
+
+          <EditAssignmentForm
+            classroomId={classroomId}
+            assignmentId={assignment.id}
+            type={assignment.type}
+            title={assignment.title}
+            maxScore={assignment.maxScore}
+            durationMinutes={assignment.durationMinutes}
+            dueAt={assignment.dueAt ? assignment.dueAt.toISOString() : null}
+          />
         </div>
 
         <div className="card p-6">
