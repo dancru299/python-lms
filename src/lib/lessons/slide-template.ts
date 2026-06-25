@@ -119,6 +119,15 @@ function isHeadingLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed.endsWith(":") || trimmed.length > 90) return false;
   if (trimmed.startsWith("#") || trimmed.startsWith(">>>")) return false;
+  // Python block-opener lines (else:, try:, finally:, for ...:, def ...:) end with
+  // ":" but are CODE — must stay inside the code block, not become a heading.
+  if (
+    /^(if|elif|else|for|while|def|class|try|except|finally|with|match|case|async)\b/.test(
+      trimmed
+    )
+  ) {
+    return false;
+  }
   // Assignments / statements end with ":" only as control-flow; treat "x =" as code.
   if (/[=;{}]/.test(trimmed.slice(0, -1)) && !/\(\)/.test(trimmed)) return false;
   return /[\p{L}]/u.test(trimmed);
@@ -322,6 +331,19 @@ function difficultyFromLabel(label: string): LessonExerciseDraft["difficulty"] {
   return "medium";
 }
 
+// Item heading: a known word (longest variants first) + a NUMBER, e.g. "Bài 1:",
+// "Thử thách 2)", "Nhiệm vụ 3.", "Câu hỏi 1 -". The number is required so a single
+// content activity ("Nhiệm vụ: Tính cước…", no number) is NOT seen as an exercise.
+const EXERCISE_ITEM_MARKER =
+  /^\s*(Bài luyện tập|Bài tập|Thử thách|Nhiệm vụ|Câu hỏi|Yêu cầu|Exercise|Task|Ví dụ|Bài|Câu|Phần)\s*\d+\s*[:.)\-–—]/i;
+
+// True when a tab body actually contains numbered exercise items. A tab whose
+// title matches "LUYỆN TẬP/THỰC HÀNH" but has NO numbered items (e.g. a single
+// "THỰC HÀNH NHANH" playground activity) is content, not an exercise list.
+function hasExerciseItems(body: string): boolean {
+  return body.split(/\r?\n/).some((line) => EXERCISE_ITEM_MARKER.test(line));
+}
+
 /**
  * Splits an exercise tab into individual exercises. Items start at lines like
  * "Bài 1:", "Thử thách 1:" (practice) or "Nhiệm vụ 1:" (homework). Within each
@@ -332,10 +354,7 @@ function parseExerciseTab(
   body: string,
   type: LessonExerciseDraft["type"]
 ): LessonExerciseDraft[] {
-  // Item heading: a known word (longest variants first) + a number, e.g.
-  // "Bài 1:", "Thử thách 2)", "Nhiệm vụ 3.", "Câu hỏi 1 -".
-  const itemMarker =
-    /^\s*(Bài luyện tập|Bài tập|Thử thách|Nhiệm vụ|Câu hỏi|Yêu cầu|Exercise|Task|Ví dụ|Bài|Câu|Phần)\s*\d+\s*[:.)\-–—]/i;
+  const itemMarker = EXERCISE_ITEM_MARKER;
   // Header that starts the model answer (so it never bleeds into the question).
   const isAnswerHeader = (line: string) =>
     /^(DAP AN|LOI GIAI|BAI GIAI|CODE MAU|CODE GOI Y|GOI Y DAP AN|ANSWER|SOLUTION)\b/.test(
@@ -529,13 +548,21 @@ export function parseSlideTemplate(text: string): ParsedSlideTemplate {
 
     const normalizedTitle = normalizeVi(segment.title);
 
-    // Homework checked first because "BÀI TẬP VỀ NHÀ" also contains nothing that
-    // matches the practice set; practice covers in-class drills.
-    if (/\b(BAI TAP|VE NHA|HOMEWORK|BTVN)\b/.test(normalizedTitle)) {
+    // Route to exercises ONLY when the title matches AND the body has numbered
+    // items. A "THỰC HÀNH NHANH" playground tab (single activity, no "Bài N:")
+    // falls through to become a content section instead of a broken exercise.
+    // Homework checked first because "BÀI TẬP VỀ NHÀ" is its own bucket.
+    if (
+      /\b(BAI TAP|VE NHA|HOMEWORK|BTVN)\b/.test(normalizedTitle) &&
+      hasExerciseItems(segment.body)
+    ) {
       exercises.push(...parseExerciseTab(segment.body, "homework"));
       continue;
     }
-    if (/\b(LUYEN TAP|PRACTICE|THUC HANH|ON LUYEN)\b/.test(normalizedTitle)) {
+    if (
+      /\b(LUYEN TAP|PRACTICE|THUC HANH|ON LUYEN)\b/.test(normalizedTitle) &&
+      hasExerciseItems(segment.body)
+    ) {
       exercises.push(...parseExerciseTab(segment.body, "practice"));
       continue;
     }

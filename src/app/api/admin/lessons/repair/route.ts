@@ -3,10 +3,17 @@ import {
   generateAiJsonObject,
   generateLessonObjectives,
 } from "@/lib/ai/lesson-generation";
-import { normalizeLessonDraft } from "@/lib/lessons/lesson-draft";
-import type { LessonReviewIssue } from "@/lib/lessons/lesson-review";
+import { normalizeContentBlocks, normalizeLessonDraft } from "@/lib/lessons/lesson-draft";
+import { normalizeGeneratedCanvasBlocks } from "@/lib/lessons/canvas-structure";
+import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
+import type {
+  LessonFloorReport,
+  LessonReviewDimension,
+  LessonReviewIssue,
+} from "@/lib/lessons/lesson-review";
 import {
   dedupeReviewIssues,
+  LESSON_ANSWER_DRAFT_MARKER,
   reviewLessonDraftDeterministic,
 } from "@/lib/lessons/lesson-review";
 import { requireTeacher } from "@/lib/session";
@@ -234,6 +241,114 @@ function repairExerciseText(lesson: JsonRecord) {
   });
 }
 
+// Lưới đỡ: chạy SAU patch LLM. Bài tập nào vẫn trống đáp án (LLM fail hoặc không
+// đụng tới) thì chèn chỗ giữ tạm có marker và ẩn với học sinh, để cảnh báo "thiếu
+// đáp án" hạ xuống gợi ý nháp tạm thay vì kẹt nguyên — giáo viên hoàn thiện sau.
+function repairMissingAnswers(lesson: JsonRecord, actions: string[]) {
+  let count = 0;
+  asArray(lesson.exercises).forEach((exercise) => {
+    const exerciseRecord = asRecord(exercise);
+    if (!exerciseRecord) return;
+    if (asString(exerciseRecord.answer)) return;
+
+    exerciseRecord.answer = `${LESSON_ANSWER_DRAFT_MARKER}\n# Giáo viên bổ sung đáp án mẫu (AI chưa tạo được).`;
+    exerciseRecord.answerVisible = false;
+    count += 1;
+  });
+
+  if (count > 0) {
+    actions.push(
+      `Đã chèn ${count} chỗ giữ tạm cho đáp án còn thiếu (ẩn với học sinh) — giáo viên cần hoàn thiện.`
+    );
+  }
+}
+
+// Deterministic structure pass: merge a split code+walkthrough into one
+// code_explain, promote mislabeled code walkthroughs, and demote layouts missing
+// their required field. Runs AFTER the LLM patch so it also cleans the patch.
+function repairCanvasStructure(lesson: JsonRecord, actions: string[]) {
+  let merged = 0;
+  let relabeled = 0;
+
+  asArray(lesson.sections).forEach((section) => {
+    const sectionRecord = asRecord(section);
+    if (!sectionRecord || !Array.isArray(sectionRecord.contentBlocks)) return;
+
+    const shaped = normalizeContentBlocks(sectionRecord.contentBlocks);
+    if (!Array.isArray(shaped)) return;
+
+    const before = shaped as LessonContentBlock[];
+    const after = normalizeGeneratedCanvasBlocks(before);
+
+    if (after.length < before.length) merged += before.length - after.length;
+    relabeled += after.filter((block, index) => {
+      const prior = before[index];
+      return (
+        block.type === "teaching_canvas" &&
+        prior?.type === "teaching_canvas" &&
+        block.layout !== prior.layout
+      );
+    }).length;
+
+    sectionRecord.contentBlocks = after;
+  });
+
+  if (merged > 0) {
+    actions.push(
+      `Đã gộp ${merged} canvas code + giải thích rời thành 'code_explain' (chú thích neo theo từng dòng code).`
+    );
+  }
+  if (relabeled > 0) {
+    actions.push(`Đã đổi ${relabeled} canvas về layout phù hợp với nội dung.`);
+  }
+}
+
+// Sàn chất lượng: bài phải mở đầu bằng hero. Chèn deterministic nếu thiếu (rẻ,
+// không cần LLM). normalizeGeneratedCanvasBlocks không đụng hero nên an toàn.
+function repairEnsureOpener(lesson: JsonRecord, actions: string[]) {
+  const sections = asArray(lesson.sections);
+  if (sections.length === 0) return;
+
+  const hasHero = sections.some((section) =>
+    asArray(asRecord(section)?.contentBlocks).some(
+      (block) => asString(asRecord(block)?.layout).toLowerCase() === "hero"
+    )
+  );
+  if (hasHero) return;
+
+  const first = asRecord(sections[0]);
+  if (!first) return;
+
+  // CHỈ chèn hero khi tab đầu ĐÃ dùng canvas blocks. Nếu tab đang ở dạng HTML
+  // thuần (contentBlocks rỗng), gán contentBlocks=[hero] sẽ khiến
+  // buildTeachingCanvases bỏ qua toàn bộ HTML → mất sạch nội dung tab. Tránh tuyệt đối.
+  const firstBlocks = asArray(first.contentBlocks);
+  const usesCanvasBlocks = firstBlocks.some(
+    (block) => asString(asRecord(block)?.type) === "teaching_canvas"
+  );
+  if (!usesCanvasBlocks) {
+    actions.push(
+      "Chưa chèn hero tự động: tab đầu đang ở dạng HTML — cần tạo lại bằng canvas hoặc thêm hero thủ công."
+    );
+    return;
+  }
+
+  const hero: JsonRecord = {
+    id: `repair-hero-${Date.now()}`,
+    type: "teaching_canvas",
+    title: asString(lesson.title) || "Bài học",
+    layout: "hero",
+    mainHtml: "<p>Bắt đầu hành trình khám phá bài học nào!</p>",
+    code: "",
+    mediaId: "",
+    notesHtml: "",
+    reveal: false,
+    steps: [],
+  };
+  first.contentBlocks = [hero, ...firstBlocks];
+  actions.push("Đã chèn slide mở đầu (hero) cho bài.");
+}
+
 function compactLessonForRepair(lesson: JsonRecord) {
   return {
     title: asString(lesson.title),
@@ -293,10 +408,41 @@ function buildRepairSystemPrompt() {
   ].join("\n");
 }
 
-function buildRepairUserPrompt(lesson: JsonRecord, issues: LessonReviewIssue[]) {
+function buildDimensionPriorityLines(dimensions: LessonReviewDimension[]): string[] {
+  if (dimensions.length === 0) return [];
+  // Sắp xếp tăng dần theo điểm: chiều yếu nhất lên đầu để Edit Agent ưu tiên.
+  const ranked = [...dimensions].sort((a, b) => a.score - b.score);
+  return [
+    "Điểm chất lượng SOẠN BÀI theo từng chiều (không phải điểm học sinh) — ưu tiên sửa các chiều điểm thấp trước:",
+    ...ranked.map(
+      (dim) =>
+        `- ${dim.label}: ${dim.score}/100 (${dim.critical} critical, ${dim.warnings} warning, ${dim.suggestions} suggestion)`
+    ),
+    "",
+  ];
+}
+
+function buildFloorRequirementLines(floor: LessonFloorReport): string[] {
+  const unmet = floor.items.filter((item) => !item.ok);
+  if (unmet.length === 0) return [];
+  return [
+    "SÀN CHẤT LƯỢNG CHƯA ĐẠT — BẮT BUỘC khắc phục các mục sau (đây là yêu cầu tối thiểu để bài đồng đều, ưu tiên cao nhất):",
+    ...unmet.map((item) => `- ${item.label}: ${item.hint}`),
+    "",
+  ];
+}
+
+function buildRepairUserPrompt(
+  lesson: JsonRecord,
+  issues: LessonReviewIssue[],
+  dimensions: LessonReviewDimension[],
+  floor: LessonFloorReport
+) {
   return [
     "Hãy tạo patch sửa các lỗi review còn lại. Ưu tiên sửa critical và warning.",
     "",
+    ...buildFloorRequirementLines(floor),
+    ...buildDimensionPriorityLines(dimensions),
     "JSON shape:",
     `{
   "summary": "1-2 câu tiếng Việt",
@@ -343,9 +489,12 @@ function buildRepairUserPrompt(lesson: JsonRecord, issues: LessonReviewIssue[]) 
 }`,
     "",
     "Rules:",
+    "- Khi cần GIẢI THÍCH CODE từng dòng: dùng MỘT canvas 'code_explain' (đặt code đầy đủ vào 'code' + mỗi dòng một step ngắn trong 'steps' theo đúng thứ tự). TUYỆT ĐỐI KHÔNG tách thành 'code' canvas riêng rồi 'timeline'/'checklist' giải thích riêng — làm vậy phần giải thích bị rời khỏi code và trông như một quy trình chung.",
+    "- Steps giải thích code: mỗi step = mục đích của ĐÚNG một dòng code, ≤1 câu ngắn. Không lặp lại cùng một ý ở nhiều step (vd đừng nhắc lại logic if/elif nhiều lần), không thêm step 'Output: …' (output để trong comment cuối code hoặc <pre> ngắn).",
     "- Nếu checklist/mindmap/timeline/flow thiếu steps, hãy trả contentBlocks replacement cho section đó, giữ các canvas khác càng nguyên càng tốt.",
     "- Nếu bài tập thiếu đáp án, hãy tạo đáp án mẫu ngắn, đúng Python, không HTML.",
     "- Nếu quiz thiếu correct, đánh dấu đúng một option correct=true nếu có thể suy luận từ câu hỏi; nếu không chắc, để suggestion trong actions thay vì đoán bừa.",
+    "- Nếu một section bị chê 'chia quá nhiều mảnh' / quá nhiều canvas nhỏ lẻ, hãy GỘP các canvas concept rời rạc thành 1-2 canvas mindmap hoặc checklist mạch lạc bằng cách trả contentBlocks replacement cho đúng section đó; gộp ý, đừng cắt bớt nội dung quan trọng.",
     "- Không xóa code mẫu. Không đổi thứ tự section/exercise.",
     "- Tất cả text cho người học phải bằng tiếng Việt.",
     "",
@@ -423,6 +572,7 @@ function normalizeProvidedIssue(value: unknown, index: number): LessonReviewIssu
 
   const severity = asString(source.severity);
   const category = asString(source.category);
+  const sourceTag = asString(source.source);
 
   return {
     id: asString(source.id) || `provided-review-${index + 1}`,
@@ -430,6 +580,7 @@ function normalizeProvidedIssue(value: unknown, index: number): LessonReviewIssu
       severity === "critical" || severity === "warning" || severity === "suggestion"
         ? severity
         : "suggestion",
+    source: sourceTag === "deterministic" ? "deterministic" : "ai",
     category:
       category === "metadata" ||
       category === "objectives" ||
@@ -458,7 +609,7 @@ export async function POST(req: Request) {
       .map(normalizeProvidedIssue)
       .filter((issue): issue is LessonReviewIssue => issue !== null);
     const initialReview = reviewLessonDraftDeterministic(normalizeLessonDraft(lesson));
-    const issues = dedupeReviewIssues([...initialReview.issues, ...providedIssues]);
+    const beforeScore = initialReview.score;
     const actions: string[] = [];
     let meta: { provider: string; model: string } | null = null;
 
@@ -471,11 +622,22 @@ export async function POST(req: Request) {
 
     repairContentBlocks(lesson, actions);
     repairExerciseText(lesson);
+    repairEnsureOpener(lesson, actions);
+
+    // Recompute SAU các sửa deterministic (đã có thể chèn hero, gỡ vài lỗi) để
+    // prompt LLM phản ánh đúng phần CÒN LẠI — tránh LLM chèn lại hero lần hai.
+    const midReview = reviewLessonDraftDeterministic(normalizeLessonDraft(lesson));
+    const midIssues = dedupeReviewIssues([...midReview.issues, ...providedIssues]);
 
     try {
       const { json, meta: aiMeta } = await generateAiJsonObject({
         systemPrompt: buildRepairSystemPrompt(),
-        userPrompt: buildRepairUserPrompt(lesson, issues),
+        userPrompt: buildRepairUserPrompt(
+          lesson,
+          midIssues,
+          midReview.dimensions,
+          midReview.floor
+        ),
         provider,
         model,
       });
@@ -486,12 +648,27 @@ export async function POST(req: Request) {
       actions.push("LLM repair chưa chạy được, chỉ áp dụng các sửa tự động an toàn.");
     }
 
+    // Lưới đỡ cuối: bài tập nào LLM vẫn để trống đáp án thì chèn chỗ giữ tạm.
+    repairMissingAnswers(lesson, actions);
+
+    // Chuẩn hóa cấu trúc canvas deterministic (gộp code_explain, đổi layout sai).
+    repairCanvasStructure(lesson, actions);
+
     const normalized = normalizeLessonDraft(lesson);
     const postRepairReview = reviewLessonDraftDeterministic(normalized);
+    const afterScore = postRepairReview.score;
+
+    const delta = afterScore - beforeScore;
+    const scoreNote =
+      delta > 0
+        ? `Điểm cấu trúc: ${beforeScore} → ${afterScore} (+${delta}).`
+        : delta < 0
+          ? `Điểm cấu trúc: ${beforeScore} → ${afterScore} (${delta}).`
+          : `Điểm cấu trúc giữ nguyên ở ${afterScore}; các lỗi còn lại cần sửa thủ công.`;
 
     return NextResponse.json({
       lesson,
-      repairSummary: Array.from(new Set(actions)).slice(0, 10),
+      repairSummary: [scoreNote, ...Array.from(new Set(actions))].slice(0, 11),
       review: postRepairReview,
       meta,
     });

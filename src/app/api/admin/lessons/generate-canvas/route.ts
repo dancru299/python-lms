@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   try {
     await requireTeacher();
 
-    const { title, content, lessonTitle, isFirst, layoutHints, provider, model } =
+    const { title, content, lessonTitle, isFirst, layoutHints, roleHint, provider, model } =
       await req.json();
 
     if (typeof content !== "string" || !content.trim()) {
@@ -31,6 +31,7 @@ export async function POST(req: Request) {
       layoutHints: Array.isArray(layoutHints)
         ? layoutHints.filter((hint): hint is string => typeof hint === "string")
         : undefined,
+      roleHint: typeof roleHint === "string" ? roleHint : undefined,
       provider,
       model,
     });

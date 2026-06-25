@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import LessonSectionEditor, {
@@ -23,6 +23,10 @@ import {
   suggestLayouts,
 } from "@/lib/lessons/slide-template";
 import toast from "react-hot-toast";
+
+// Số vòng tối đa cho vòng lặp tự động Duyệt → Sửa. Theo tiêu chuẩn: lặp tối đa 3
+// vòng, nếu vẫn còn lỗi chặn thì dừng và giao lại cho giáo viên xử lý.
+const MAX_AUTO_FIX_ROUNDS = 3;
 
 // Runs an async mapper over items with a bounded number of in-flight calls so a
 // templated paste doesn't fire one AI request per tab all at once.
@@ -396,6 +400,13 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   const [isRepairing, setIsRepairing] = useState(false);
   const [lessonReview, setLessonReview] = useState<LessonReviewResponse | null>(null);
   const [repairSummary, setRepairSummary] = useState<string[]>([]);
+  const [isAutoFixing, setIsAutoFixing] = useState(false);
+  const [autoFixProgress, setAutoFixProgress] = useState<{
+    round: number;
+    maxRounds: number;
+    note: string;
+  } | null>(null);
+  const autoFixAbortRef = useRef<AbortController | null>(null);
   const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
     initialAiConfig.defaultProvider
   );
@@ -655,27 +666,65 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     });
   };
 
+  // Gọi thuần /review, không đụng state/toast — để cả vòng lặp tự sửa và lượt
+  // duyệt thủ công cùng tái dùng (và truyền được AbortSignal để hủy).
+  const requestLessonReview = async (
+    lesson: unknown,
+    signal?: AbortSignal
+  ): Promise<LessonReviewResponse> => {
+    const res = await fetch("/api/admin/lessons/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson, provider: aiProvider, model: aiModel }),
+      signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(await readAiErrorMessage(res));
+    }
+
+    return (await res.json()) as LessonReviewResponse;
+  };
+
+  const requestLessonRepair = async (
+    lesson: unknown,
+    review: LessonReviewResponse,
+    signal?: AbortSignal
+  ): Promise<LessonRepairResponse> => {
+    const res = await fetch("/api/admin/lessons/repair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson, review, provider: aiProvider, model: aiModel }),
+      signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(await readAiErrorMessage(res));
+    }
+
+    return (await res.json()) as LessonRepairResponse;
+  };
+
+  // Áp bản nháp đã sửa vào form/sections/exercises — dùng chung cho repair thủ công
+  // và vòng lặp tự sửa.
+  const applyRepairedLesson = (repairedLesson: unknown) => {
+    const nextSections = coerceRepairedSections(repairedLesson);
+    setFormData(coerceRepairedForm(repairedLesson));
+    setSections(nextSections);
+    setExercises(coerceRepairedExercises(repairedLesson));
+    setActiveSection(nextSections[0]?.id ?? null);
+  };
+
   const runLessonReview = async (
     lesson = buildLessonPayload(),
     options?: { silent?: boolean }
   ) => {
     setIsReviewing(true);
+    // Một lượt duyệt mới phản ánh trạng thái hiện tại — bỏ tóm tắt repair cũ để
+    // tránh hiển thị mâu thuẫn (ví dụ "giữ nguyên ở 50" cạnh điểm mới 93).
+    setRepairSummary([]);
     try {
-      const res = await fetch("/api/admin/lessons/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lesson,
-          provider: aiProvider,
-          model: aiModel,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(await readAiErrorMessage(res));
-      }
-
-      const report = (await res.json()) as LessonReviewResponse;
+      const report = await requestLessonReview(lesson);
       setLessonReview(report);
       if (report.meta) setAiMeta(report.meta);
 
@@ -722,43 +771,20 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
     setIsRepairing(true);
     try {
-      const res = await fetch("/api/admin/lessons/repair", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lesson: currentLesson,
-          review: currentReview,
-          provider: aiProvider,
-          model: aiModel,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(await readAiErrorMessage(res));
-      }
-
-      const data = (await res.json()) as LessonRepairResponse;
-      const repairedLesson = data.lesson ?? currentLesson;
-      const nextForm = coerceRepairedForm(repairedLesson);
-      const nextSections = coerceRepairedSections(repairedLesson);
-      const nextExercises = coerceRepairedExercises(repairedLesson);
-
-      setFormData(nextForm);
-      setSections(nextSections);
-      setExercises(nextExercises);
-      setActiveSection(nextSections[0]?.id ?? null);
+      const data = await requestLessonRepair(currentLesson, currentReview);
+      applyRepairedLesson(data.lesson ?? currentLesson);
       setRepairSummary(Array.isArray(data.repairSummary) ? data.repairSummary : []);
       if (data.meta) setAiMeta(data.meta);
 
-      await runLessonReview(
-        buildLessonPayload({
-          form: nextForm,
-          sections: nextSections,
-          exercises: nextExercises,
-        }),
-        { silent: true }
+      // Dùng thẳng báo cáo deterministic mà repair trả về làm điểm chính thức.
+      // Không gọi lại /review để tránh re-roll LLM (gây nhiễu điểm) — gợi ý sư phạm
+      // AI được xóa sạch, người dùng bấm "Duyệt lại" khi muốn lấy gợi ý mới.
+      if (data.review) {
+        setLessonReview(data.review);
+      }
+      toast.success(
+        "AI đã sửa bản nháp. Bấm Duyệt lại nếu muốn gợi ý sư phạm mới."
       );
-      toast.success("AI đã sửa bản nháp và duyệt lại một lượt.");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Không thể sửa bản nháp lúc này."
@@ -766,6 +792,175 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       console.warn("Lesson repair request failed:", error);
     } finally {
       setIsRepairing(false);
+    }
+  };
+
+  const cancelAutoFix = () => {
+    autoFixAbortRef.current?.abort();
+  };
+
+  // Vòng lặp tự động Duyệt → Sửa. Lặp tối đa MAX_AUTO_FIX_ROUNDS vòng; dừng sớm khi
+  // hết lỗi chặn (critical) — đây là mục tiêu "đạt". Nếu repair không cải thiện thêm
+  // (kẹt), hoặc đã hết số vòng mà vẫn còn lỗi chặn, dừng và giao giáo viên xử lý.
+  // Mỗi vòng tái dùng report deterministic mà /repair trả về nên không tốn thêm lượt
+  // LLM review. Luôn áp bản có điểm cao nhất để không bao giờ để lại bản tệ hơn.
+  const runAutoFixLoop = async () => {
+    if (isAutoFixing || isRepairing || isReviewing) return;
+
+    const controller = new AbortController();
+    autoFixAbortRef.current = controller;
+    setIsAutoFixing(true);
+    setRepairSummary([]);
+    setAutoFixProgress({
+      round: 0,
+      maxRounds: MAX_AUTO_FIX_ROUNDS,
+      note: "Đang duyệt bài để lấy mốc ban đầu...",
+    });
+
+    const log: string[] = [];
+
+    try {
+      let lesson: unknown = buildLessonPayload();
+      let review = lessonReview;
+
+      // Mốc ban đầu: tái dùng report đang có, nếu chưa có thì duyệt một lượt.
+      if (!review) {
+        try {
+          review = await requestLessonReview(lesson, controller.signal);
+          setLessonReview(review);
+          if (review.meta) setAiMeta(review.meta);
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Không duyệt được bài để bắt đầu tự sửa."
+            );
+          }
+          return;
+        }
+      }
+
+      // Mục tiêu: đưa bài ĐẠT SÀN chất lượng (floor.meets), không chỉ hết critical.
+      const unmetOf = (r: LessonReviewResponse) =>
+        r.floor?.items.filter((item) => !item.ok).length ?? 0;
+      // Bản "tốt nhất" = ít mục sàn còn thiếu nhất, tie-break bằng điểm.
+      const isBetter = (
+        candidate: LessonReviewResponse,
+        current: LessonReviewResponse
+      ) => {
+        const cu = unmetOf(candidate);
+        const ru = unmetOf(current);
+        return cu < ru || (cu === ru && candidate.score > current.score);
+      };
+
+      let best: { lesson: unknown; review: LessonReviewResponse } = { lesson, review };
+      let stopReason: "pass" | "cap" | "stuck" | "error" | "cancelled" = "pass";
+      let didRepair = false;
+
+      for (let round = 1; round <= MAX_AUTO_FIX_ROUNDS; round++) {
+        if (review.floor?.meets) {
+          stopReason = "pass";
+          break;
+        }
+
+        const prevScore = review.score;
+        const prevUnmet = unmetOf(review);
+        const firstUnmet = review.floor?.items.find((item) => !item.ok);
+        setAutoFixProgress({
+          round,
+          maxRounds: MAX_AUTO_FIX_ROUNDS,
+          note: firstUnmet
+            ? `Đạt sàn: còn ${prevUnmet} mục — ưu tiên "${firstUnmet.label}"...`
+            : "Đang nâng bài lên sàn chuẩn...",
+        });
+
+        let data: LessonRepairResponse;
+        try {
+          data = await requestLessonRepair(lesson, review, controller.signal);
+        } catch (error) {
+          if (controller.signal.aborted) {
+            stopReason = "cancelled";
+            log.push(`Vòng ${round}: đã hủy giữa chừng.`);
+          } else {
+            stopReason = "error";
+            log.push(
+              `Vòng ${round}: lỗi khi sửa — ${
+                error instanceof Error ? error.message : "không rõ"
+              }.`
+            );
+          }
+          break;
+        }
+
+        lesson = data.lesson ?? lesson;
+        const nextReview = data.review;
+        if (!nextReview) {
+          stopReason = "error";
+          log.push(`Vòng ${round}: repair không trả báo cáo duyệt.`);
+          break;
+        }
+        review = nextReview;
+        didRepair = true;
+        if (isBetter(review, best.review)) {
+          best = { lesson, review };
+        }
+        if (data.meta) setAiMeta(data.meta);
+
+        log.push(
+          `Vòng ${round}: còn ${unmetOf(review)} mục sàn, điểm ${prevScore} → ${review.score}/100.`
+        );
+
+        if (review.floor?.meets) {
+          stopReason = "pass";
+          break;
+        }
+
+        const improved = unmetOf(review) < prevUnmet || review.score > prevScore;
+        if (!improved) {
+          stopReason = "stuck";
+          log.push("Repair không cải thiện thêm — dừng để giáo viên xử lý.");
+          break;
+        }
+
+        if (round === MAX_AUTO_FIX_ROUNDS) {
+          stopReason = "cap";
+        }
+      }
+
+      // Áp bản tốt nhất vào editor — bỏ qua nếu chưa sửa lần nào để không reset
+      // tab/nội dung một cách vô ích.
+      if (didRepair) {
+        applyRepairedLesson(best.lesson);
+      }
+      setLessonReview(best.review);
+
+      const remaining = unmetOf(best.review);
+      const head =
+        stopReason === "pass"
+          ? didRepair
+            ? `✅ Đạt sàn chất lượng sau ${log.length} vòng — điểm ${best.review.score}/100.`
+            : `✅ Bài đã đạt sàn chất lượng — không cần tự sửa (${best.review.score}/100).`
+          : stopReason === "cancelled"
+            ? `⏹️ Đã dừng theo yêu cầu — giữ bản tốt nhất (còn ${remaining} mục sàn).`
+            : stopReason === "cap"
+              ? `⚠️ Đã sửa tối đa ${MAX_AUTO_FIX_ROUNDS} vòng, còn ${remaining} mục sàn — cần giáo viên xử lý.`
+              : stopReason === "stuck"
+                ? `⚠️ Repair bị kẹt, còn ${remaining} mục sàn — cần giáo viên xử lý.`
+                : `⚠️ Dừng do lỗi, còn ${remaining} mục sàn — cần giáo viên xử lý.`;
+      setRepairSummary([head, ...log]);
+
+      if (stopReason === "pass") {
+        toast.success("Tự động sửa xong — bài đạt sàn chất lượng.");
+      } else if (stopReason === "cancelled") {
+        toast("Đã dừng tự sửa, giữ bản tốt nhất.", { icon: "⏹️", duration: 4000 });
+      } else {
+        toast("Còn mục sàn cần giáo viên xử lý.", { icon: "!", duration: 5000 });
+      }
+    } finally {
+      autoFixAbortRef.current = null;
+      setIsAutoFixing(false);
+      setAutoFixProgress(null);
     }
   };
 
@@ -940,6 +1135,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
                   lessonTitle: parsed.title ?? formData.title,
                   isFirst: idx === 0,
                   layoutHints: suggestLayouts(tab),
+                  roleHint: tab.roleHint,
                   provider: aiProvider,
                   model: aiModel,
                 }),
@@ -1505,9 +1701,13 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           report={lessonReview}
           isReviewing={isReviewing}
           isRepairing={isRepairing}
+          isAutoFixing={isAutoFixing}
+          autoFixProgress={autoFixProgress}
           repairSummary={repairSummary}
           onReview={() => void runLessonReview()}
           onRepair={() => void runLessonRepair()}
+          onAutoFix={() => void runAutoFixLoop()}
+          onCancelAutoFix={cancelAutoFix}
         />
 
         {/* Section 1: Basic Info */}
@@ -1926,7 +2126,21 @@ function reviewStatusMeta(status: LessonReviewReport["status"]) {
   };
 }
 
-function reviewSeverityMeta(severity: LessonReviewReport["issues"][number]["severity"]) {
+function reviewSeverityMeta(
+  severity: LessonReviewReport["issues"][number]["severity"],
+  source?: LessonReviewReport["issues"][number]["source"]
+) {
+  // AI issues are advisory — they never change the score, so don't dress them as
+  // a red "Lỗi"/amber "Cảnh báo" (that reads as a gating failure next to 100/100).
+  if (source === "ai") {
+    return {
+      label: "Gợi ý AI",
+      icon: "fa-wand-magic-sparkles",
+      badge: "bg-violet-100 text-violet-700",
+      border: "border-violet-200",
+    };
+  }
+
   if (severity === "critical") {
     return {
       label: "Lỗi",
@@ -1953,20 +2167,158 @@ function reviewSeverityMeta(severity: LessonReviewReport["issues"][number]["seve
   };
 }
 
+type AutoFixProgress = { round: number; maxRounds: number; note: string } | null;
+
+function AutoFixControls({
+  isAutoFixing,
+  autoFixProgress,
+  disabled,
+  compact,
+  onAutoFix,
+  onCancelAutoFix,
+}: {
+  isAutoFixing: boolean;
+  autoFixProgress: AutoFixProgress;
+  disabled: boolean;
+  compact?: boolean;
+  onAutoFix: () => void;
+  onCancelAutoFix: () => void;
+}) {
+  if (isAutoFixing) {
+    const label =
+      autoFixProgress && autoFixProgress.round > 0
+        ? `Vòng ${autoFixProgress.round}/${autoFixProgress.maxRounds} — ${autoFixProgress.note}`
+        : autoFixProgress?.note ?? "Đang tự sửa...";
+
+    return (
+      <div className="flex items-center gap-2 rounded-xl bg-white/85 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-black/5">
+        <i className="fa-solid fa-spinner fa-spin text-indigo-600"></i>
+        <span className="max-w-[20rem] truncate">{label}</span>
+        <button
+          type="button"
+          onClick={onCancelAutoFix}
+          className="ml-1 rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white hover:bg-slate-800"
+        >
+          Dừng
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onAutoFix}
+      disabled={disabled}
+      className={
+        compact
+          ? "rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-70"
+          : "btn btn-primary whitespace-nowrap"
+      }
+    >
+      <i className="fa-solid fa-wand-magic-sparkles mr-2"></i>
+      Tự động sửa (≤{MAX_AUTO_FIX_ROUNDS} vòng)
+    </button>
+  );
+}
+
+function LessonFloorChecklist({
+  floor,
+}: {
+  floor: LessonReviewReport["floor"];
+}) {
+  if (!floor || floor.items.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-xl bg-white/85 p-3 ring-1 ring-black/5">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${
+            floor.meets
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-rose-100 text-rose-700"
+          }`}
+        >
+          <i className="fa-solid fa-shield-halved"></i>
+          {floor.meets ? "Đạt sàn chất lượng" : "Chưa đạt sàn"}
+        </span>
+        <span className="text-[11px] font-semibold text-slate-500">
+          Mọi bài phải đạt các mục dưới đây
+        </span>
+      </div>
+      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {floor.items.map((item) => (
+          <li
+            key={item.key}
+            className="flex items-start gap-2 text-sm"
+            title={item.ok ? undefined : item.hint}
+          >
+            <i
+              className={`fa-solid mt-0.5 ${
+                item.ok ? "fa-circle-check text-emerald-500" : "fa-circle-xmark text-rose-500"
+              }`}
+            ></i>
+            <span className={item.ok ? "text-slate-600" : "font-semibold text-slate-800"}>
+              {item.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LessonReviewDimensionCard({
+  dimension,
+}: {
+  dimension: LessonReviewReport["dimensions"][number];
+}) {
+  const tone =
+    dimension.status === "good"
+      ? { bar: "bg-emerald-500", text: "text-emerald-700", ring: "ring-emerald-200" }
+      : dimension.status === "needs-work"
+        ? { bar: "bg-amber-500", text: "text-amber-700", ring: "ring-amber-200" }
+        : { bar: "bg-rose-500", text: "text-rose-700", ring: "ring-rose-200" };
+
+  return (
+    <div className={`rounded-xl bg-white/85 p-2.5 ring-1 ${tone.ring}`} title={`${dimension.critical} critical · ${dimension.warnings} cảnh báo · ${dimension.suggestions} gợi ý`}>
+      <div className="flex items-center justify-between gap-1">
+        <span className="truncate text-xs font-semibold text-slate-700">
+          {dimension.label}
+        </span>
+        <span className={`shrink-0 text-xs font-black ${tone.text}`}>
+          {dimension.score}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+        <div className={`h-full ${tone.bar}`} style={{ width: `${dimension.score}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function LessonReviewPanel({
   report,
   isReviewing,
   isRepairing,
+  isAutoFixing,
+  autoFixProgress,
   repairSummary,
   onReview,
   onRepair,
+  onAutoFix,
+  onCancelAutoFix,
 }: {
   report: LessonReviewResponse | null;
   isReviewing: boolean;
   isRepairing: boolean;
+  isAutoFixing: boolean;
+  autoFixProgress: AutoFixProgress;
   repairSummary: string[];
   onReview: () => void;
   onRepair: () => void;
+  onAutoFix: () => void;
+  onCancelAutoFix: () => void;
 }) {
   if (!report) {
     return (
@@ -1983,32 +2335,44 @@ function LessonReviewPanel({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onReview}
-            disabled={isReviewing}
-            className="btn btn-secondary whitespace-nowrap"
-          >
-            {isReviewing ? (
-              <>
-                <i className="fa-solid fa-spinner fa-spin"></i> Đang duyệt...
-              </>
-            ) : (
-              <>
-                <i className="fa-solid fa-magnifying-glass-chart"></i> Duyệt bài
-              </>
-            )}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={onReview}
+              disabled={isReviewing || isAutoFixing}
+              className="btn btn-secondary whitespace-nowrap"
+            >
+              {isReviewing ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin"></i> Đang duyệt...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-magnifying-glass-chart"></i> Duyệt bài
+                </>
+              )}
+            </button>
+            <AutoFixControls
+              isAutoFixing={isAutoFixing}
+              autoFixProgress={autoFixProgress}
+              disabled={isReviewing || isRepairing || isAutoFixing}
+              onAutoFix={onAutoFix}
+              onCancelAutoFix={onCancelAutoFix}
+            />
+          </div>
         </div>
       </div>
     );
   }
 
   const meta = reviewStatusMeta(report.status);
-  const sortedIssues = [...report.issues].sort((a, b) => {
+  const bySeverity = (a: LessonReviewResponse["issues"][number], b: LessonReviewResponse["issues"][number]) => {
     const order = { critical: 0, warning: 1, suggestion: 2 };
     return order[a.severity] - order[b.severity];
-  });
+  };
+  // Lỗi cấu trúc (deterministic) tính điểm; gợi ý AI chỉ tham khảo.
+  const gatingIssues = report.issues.filter((issue) => issue.source !== "ai").sort(bySeverity);
+  const advisoryIssues = report.issues.filter((issue) => issue.source === "ai").sort(bySeverity);
 
   return (
     <div className={`rounded-2xl border p-4 shadow-sm ${meta.card}`}>
@@ -2034,15 +2398,41 @@ function LessonReviewPanel({
             <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.exercises} bài tập</span>
             <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.critical} lỗi</span>
             <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.warnings} cảnh báo</span>
+            {report.stats.advisories > 0 && (
+              <span className="rounded-full bg-white/70 px-3 py-1">{report.stats.advisories} gợi ý AI</span>
+            )}
           </div>
+
+          <LessonFloorChecklist floor={report.floor} />
+
+          {report.dimensions && report.dimensions.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Chất lượng soạn bài theo chiều (không phải điểm học sinh)
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {report.dimensions.map((dimension) => (
+                  <LessonReviewDimensionCard key={dimension.key} dimension={dimension} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <AutoFixControls
+            isAutoFixing={isAutoFixing}
+            autoFixProgress={autoFixProgress}
+            disabled={isReviewing || isRepairing || isAutoFixing}
+            compact
+            onAutoFix={onAutoFix}
+            onCancelAutoFix={onCancelAutoFix}
+          />
           {report.issues.length > 0 && (
             <button
               type="button"
               onClick={onRepair}
-              disabled={isRepairing || isReviewing}
+              disabled={isRepairing || isReviewing || isAutoFixing}
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-70"
             >
               {isRepairing ? (
@@ -2059,7 +2449,7 @@ function LessonReviewPanel({
           <button
             type="button"
             onClick={onReview}
-            disabled={isReviewing || isRepairing}
+            disabled={isReviewing || isRepairing || isAutoFixing}
             className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow-sm ring-1 ring-black/5 hover:bg-slate-50 disabled:opacity-70"
           >
             {isReviewing ? (
@@ -2086,39 +2476,64 @@ function LessonReviewPanel({
         </div>
       )}
 
-      {sortedIssues.length > 0 ? (
-        <div className="mt-4 space-y-2">
-          {sortedIssues.map((issue) => {
-            const severity = reviewSeverityMeta(issue.severity);
-            return (
-              <div
-                key={issue.id}
-                className={`rounded-xl border bg-white/85 p-3 text-slate-800 shadow-sm ${severity.border}`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${severity.badge}`}>
-                    <i className={`fa-solid ${severity.icon}`}></i>
-                    {severity.label}
-                  </span>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
-                    {issue.target}
-                  </span>
-                  <span className="text-sm font-bold text-slate-900">{issue.title}</span>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{issue.detail}</p>
-                {issue.suggestion && (
-                  <p className="mt-1 text-sm leading-6 text-slate-700">
-                    <span className="font-bold">Gợi ý sửa:</span> {issue.suggestion}
-                  </p>
-                )}
-              </div>
-            );
-          })}
+      {gatingIssues.length > 0 ? (
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+            Lỗi cấu trúc (ảnh hưởng điểm)
+          </div>
+          <div className="space-y-2">
+            {gatingIssues.map((issue) => (
+              <LessonReviewIssueCard key={issue.id} issue={issue} />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-emerald-200 bg-white/85 p-3 text-sm font-semibold text-emerald-700">
-          Không có issue nào trong lượt duyệt này.
+          Không còn lỗi cấu trúc nào — bài đạt kiểm tra tự động.
         </div>
+      )}
+
+      {advisoryIssues.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+            Gợi ý sư phạm từ AI (không tính điểm)
+          </div>
+          <div className="space-y-2">
+            {advisoryIssues.map((issue) => (
+              <LessonReviewIssueCard key={issue.id} issue={issue} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LessonReviewIssueCard({
+  issue,
+}: {
+  issue: LessonReviewResponse["issues"][number];
+}) {
+  const severity = reviewSeverityMeta(issue.severity, issue.source);
+  return (
+    <div
+      className={`rounded-xl border bg-white/85 p-3 text-slate-800 shadow-sm ${severity.border}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${severity.badge}`}>
+          <i className={`fa-solid ${severity.icon}`}></i>
+          {severity.label}
+        </span>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+          {issue.target}
+        </span>
+        <span className="text-sm font-bold text-slate-900">{issue.title}</span>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{issue.detail}</p>
+      {issue.suggestion && (
+        <p className="mt-1 text-sm leading-6 text-slate-700">
+          <span className="font-bold">Gợi ý sửa:</span> {issue.suggestion}
+        </p>
       )}
     </div>
   );

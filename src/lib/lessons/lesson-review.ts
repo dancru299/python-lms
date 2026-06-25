@@ -5,8 +5,16 @@ import {
   type TeachingCanvas,
 } from "@/lib/lessons/teaching-canvas";
 
+// Sentinel chèn vào answer khi repair không tạo được đáp án thật (LLM fail).
+// Reviewer nhận ra marker này để hạ cảnh báo "thiếu đáp án" xuống gợi ý "đang là
+// nháp tạm" thay vì coi như đã có đáp án thật — giữ điểm trung thực.
+export const LESSON_ANSWER_DRAFT_MARKER = "[[draft-answer-cần-giáo-viên-hoàn-thiện]]";
+
 export type LessonReviewSeverity = "critical" | "warning" | "suggestion";
 export type LessonReviewStatus = "pass" | "warning" | "fail";
+// Where an issue came from. Only "deterministic" issues affect the gate score;
+// "ai" issues are advisory (pedagogical hints) and never lower the score.
+export type LessonReviewSource = "deterministic" | "ai";
 export type LessonReviewCategory =
   | "metadata"
   | "objectives"
@@ -19,10 +27,54 @@ export interface LessonReviewIssue {
   id: string;
   severity: LessonReviewSeverity;
   category: LessonReviewCategory;
+  source: LessonReviewSource;
   target: string;
   title: string;
   detail: string;
   suggestion?: string;
+}
+
+// Breakdown đa chiều cho điểm chất lượng SOẠN BÀI (không liên quan điểm học sinh).
+// Mỗi chiều 0-100, suy ra từ chính các issue deterministic đã gom theo category,
+// để Edit Agent biết ưu tiên sửa chiều yếu nhất trước.
+export type LessonReviewDimensionKey =
+  | "objectives"
+  | "structure"
+  | "presentation"
+  | "practice"
+  | "pedagogy";
+
+export interface LessonReviewDimension {
+  key: LessonReviewDimensionKey;
+  label: string;
+  score: number;
+  status: "good" | "needs-work" | "blocked";
+  critical: number;
+  warnings: number;
+  suggestions: number;
+}
+
+// Sàn chất lượng cứng (universal): mọi bài đều phải đạt — định nghĩa cụ thể của
+// "đồng đều". Trên sàn là phần giáo viên tự polish. Auto-fix nhắm tới floor.meets.
+export type LessonFloorKey =
+  | "metadata"
+  | "content"
+  | "opener"
+  | "diversity"
+  | "render"
+  | "density"
+  | "closing";
+
+export interface LessonFloorItem {
+  key: LessonFloorKey;
+  label: string;
+  ok: boolean;
+  hint: string;
+}
+
+export interface LessonFloorReport {
+  meets: boolean;
+  items: LessonFloorItem[];
 }
 
 export interface LessonReviewReport {
@@ -34,10 +86,18 @@ export interface LessonReviewReport {
     sections: number;
     canvases: number;
     exercises: number;
+    // Gating counts — deterministic issues only. These drive score & status.
     critical: number;
     warnings: number;
     suggestions: number;
+    // Advisory count — AI pedagogical hints. Does not affect score or status.
+    advisories: number;
   };
+  // Điểm theo từng chiều (chỉ tính issue deterministic). Tổng penalty các chiều =
+  // penalty của điểm tổng nên hai con số luôn nhất quán.
+  dimensions: LessonReviewDimension[];
+  // Sàn chất lượng cứng — checklist "đồng đều" mà mọi bài phải đạt.
+  floor: LessonFloorReport;
   reviewedAt: string;
 }
 
@@ -91,18 +151,99 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+const DIMENSION_ORDER: LessonReviewDimensionKey[] = [
+  "objectives",
+  "structure",
+  "presentation",
+  "practice",
+  "pedagogy",
+];
+
+const DIMENSION_LABELS: Record<LessonReviewDimensionKey, string> = {
+  objectives: "Mục tiêu học tập",
+  structure: "Cấu trúc & bố cục",
+  presentation: "Chất lượng slide",
+  practice: "Luyện tập & đánh giá",
+  pedagogy: "Sư phạm & luồng",
+};
+
+// Mapping total: mọi category phải rơi đúng vào một chiều để tổng penalty các chiều
+// khớp penalty điểm tổng. Chỉ issue deterministic mới tính điểm; issue pedagogy do
+// LLM (source "ai") không gating nên không ảnh hưởng chiều này.
+const CATEGORY_TO_DIMENSION: Record<LessonReviewCategory, LessonReviewDimensionKey> = {
+  metadata: "structure",
+  objectives: "objectives",
+  section: "structure",
+  canvas: "presentation",
+  exercise: "practice",
+  pedagogy: "pedagogy",
+};
+
+function dimensionStatus(score: number): LessonReviewDimension["status"] {
+  if (score >= 80) return "good";
+  if (score >= 50) return "needs-work";
+  return "blocked";
+}
+
+export function buildLessonReviewDimensions(
+  issues: LessonReviewIssue[]
+): LessonReviewDimension[] {
+  type Bucket = { critical: number; warnings: number; suggestions: number };
+  const buckets = new Map<LessonReviewDimensionKey, Bucket>(
+    DIMENSION_ORDER.map(
+      (key): [LessonReviewDimensionKey, Bucket] => [
+        key,
+        { critical: 0, warnings: 0, suggestions: 0 },
+      ]
+    )
+  );
+
+  for (const issue of issues) {
+    // Chỉ issue deterministic mới tính điểm chiều — khớp với gating của điểm tổng.
+    if (issue.source !== "deterministic") continue;
+    const bucket = buckets.get(CATEGORY_TO_DIMENSION[issue.category]);
+    if (!bucket) continue;
+    if (issue.severity === "critical") bucket.critical += 1;
+    else if (issue.severity === "warning") bucket.warnings += 1;
+    else bucket.suggestions += 1;
+  }
+
+  return DIMENSION_ORDER.map((key) => {
+    const bucket = buckets.get(key) ?? {
+      critical: 0,
+      warnings: 0,
+      suggestions: 0,
+    };
+    const score = clampScore(
+      100 - bucket.critical * 18 - bucket.warnings * 7 - bucket.suggestions * 3
+    );
+    return {
+      key,
+      label: DIMENSION_LABELS[key],
+      score,
+      status: dimensionStatus(score),
+      critical: bucket.critical,
+      warnings: bucket.warnings,
+      suggestions: bucket.suggestions,
+    };
+  });
+}
+
 function buildStats(
   draft: LessonDraft,
   canvasesBySection: TeachingCanvas[][],
   issues: LessonReviewIssue[]
 ): LessonReviewReport["stats"] {
+  const gating = issues.filter((issue) => issue.source === "deterministic");
+  const advisories = issues.filter((issue) => issue.source === "ai");
   return {
     sections: draft.sections.length,
     canvases: canvasesBySection.reduce((sum, canvases) => sum + canvases.length, 0),
     exercises: draft.exercises.length,
-    critical: issues.filter((issue) => issue.severity === "critical").length,
-    warnings: issues.filter((issue) => issue.severity === "warning").length,
-    suggestions: issues.filter((issue) => issue.severity === "suggestion").length,
+    critical: gating.filter((issue) => issue.severity === "critical").length,
+    warnings: gating.filter((issue) => issue.severity === "warning").length,
+    suggestions: gating.filter((issue) => issue.severity === "suggestion").length,
+    advisories: advisories.length,
   };
 }
 
@@ -139,6 +280,14 @@ export function summarizeReviewStatus(stats: LessonReviewReport["stats"]): {
     };
   }
 
+  if (stats.advisories > 0) {
+    return {
+      status: "pass",
+      score,
+      summary: `Bài đạt kiểm tra cấu trúc; có ${stats.advisories} gợi ý sư phạm từ AI để tham khảo.`,
+    };
+  }
+
   return {
     status: "pass",
     score,
@@ -150,11 +299,12 @@ function createIssueFactory() {
   let counter = 0;
   return (
     issues: LessonReviewIssue[],
-    issue: Omit<LessonReviewIssue, "id">
+    issue: Omit<LessonReviewIssue, "id" | "source">
   ) => {
     counter += 1;
     issues.push({
       id: `lesson-review-${counter}`,
+      source: "deterministic",
       ...issue,
     });
   };
@@ -166,6 +316,17 @@ function hasLiteralBreak(value: string): boolean {
 
 function hasRoleHintLeak(value: string): boolean {
   return /vai\s*tr[oò]\s*g[oợ]i\s*[yý]\s*:/i.test(value);
+}
+
+// Steps that read like a line-by-line code walkthrough ("Dòng 1: …"). When they
+// sit in a timeline/checklist (not code_explain) the notes are detached from the
+// code — a real quality problem the structural gate should not silently pass.
+function looksLikeLineWalkthrough(canvas: TeachingCanvas): boolean {
+  if (canvas.steps.length < 2) return false;
+  const annotated = canvas.steps.filter((step) =>
+    /^\s*(dòng|dong|line|câu lệnh)\s*\d+/i.test(step.text || stripHtml(step.html))
+  ).length;
+  return annotated >= 2 && annotated >= Math.ceil(canvas.steps.length / 2);
 }
 
 function canvasText(canvas: TeachingCanvas): string {
@@ -249,6 +410,17 @@ function reviewCanvas(
     });
   }
 
+  if (isThinCanvas(canvas)) {
+    addIssue(issues, {
+      severity: "warning",
+      category: "canvas",
+      target,
+      title: "Canvas gần rỗng",
+      detail: "Canvas chỉ có một câu ngắn, để trống phần lớn khung 16:9.",
+      suggestion: "Thêm 2-4 steps để khai triển, hoặc đổi sang statement nếu là câu chốt.",
+    });
+  }
+
   switch (canvas.kind) {
     case "checklist":
     case "timeline":
@@ -262,6 +434,16 @@ function reviewCanvas(
           title: `${canvas.kind} thiếu steps`,
           detail: "Layout này cần steps để render nội dung chính.",
           suggestion: "Đưa từng ý/quy tắc/nhánh vào mảng steps.",
+        });
+      }
+      if (looksLikeLineWalkthrough(canvas)) {
+        addIssue(issues, {
+          severity: "warning",
+          category: "canvas",
+          target,
+          title: "Giải thích code sai layout",
+          detail: `Các bước kiểu "Dòng N: …" là giải thích code từng dòng nhưng đang nằm ở layout ${canvas.kind}, tách rời khỏi code.`,
+          suggestion: "Gộp code và phần chú thích vào MỘT canvas 'code_explain'.",
         });
       }
       if (canvas.kind === "flow" && canvas.steps.length > 6) {
@@ -397,6 +579,21 @@ function reviewCanvas(
           suggestion: "Giữ thứ tự steps khớp các dòng code cần giải thích.",
         });
       }
+      // Phủ chưa tới: nhiều dòng/nhánh code không có bước giải thích nào (vd 5 step
+      // cho 11 dòng) → phần đuôi code bị "bỏ trống". Lý tưởng là mỗi dòng một step.
+      if (nonEmptyLines >= 4 && canvas.steps.length > 0) {
+        const minSteps = Math.ceil(nonEmptyLines / 2);
+        if (canvas.steps.length < minSteps) {
+          addIssue(issues, {
+            severity: "warning",
+            category: "canvas",
+            target,
+            title: "Giải thích code chưa phủ hết",
+            detail: `Code có ${nonEmptyLines} dòng nhưng chỉ ${canvas.steps.length} bước giải thích — nhiều dòng/nhánh chưa được nói tới.`,
+            suggestion: "Thêm bước cho các dòng còn thiếu (lý tưởng mỗi dòng một bước, phủ hết các nhánh).",
+          });
+        }
+      }
       break;
     }
 
@@ -486,8 +683,257 @@ function reviewExercises(
         title: "Thiếu đáp án mẫu",
         detail: "Không có đáp án mẫu để giáo viên đối chiếu nhanh.",
       });
+    } else if (exercise.answer.includes(LESSON_ANSWER_DRAFT_MARKER)) {
+      addIssue(issues, {
+        severity: "suggestion",
+        category: "exercise",
+        target,
+        title: "Đáp án mẫu mới là nháp tạm",
+        detail:
+          "Repair đã chèn chỗ giữ tạm (đang ẩn với học sinh) vì AI chưa tạo được đáp án.",
+        suggestion: "Giáo viên thay chỗ giữ tạm bằng đáp án Python thật trước khi dạy.",
+      });
     }
   });
+}
+
+// Canvas mang ví dụ cụ thể (code chạy được) cho khái niệm trừu tượng.
+function isExampleCanvas(canvas: TeachingCanvas): boolean {
+  if (
+    canvas.kind === "code" ||
+    canvas.kind === "code_explain" ||
+    canvas.kind === "playground"
+  ) {
+    return true;
+  }
+  return Boolean(canvas.code?.trim());
+}
+
+const SUMMARY_TITLE_RE = /tổng kết|tóm tắt|ghi nhớ|ôn lại|nhắc lại|kết bài|điều cần nhớ/i;
+
+// Canvas đóng vòng / tổng kết cuối bài.
+function isSummaryCanvas(canvas: TeachingCanvas): boolean {
+  if (canvas.kind === "checklist" || canvas.kind === "mindmap") return true;
+  return SUMMARY_TITLE_RE.test(canvas.title || "");
+}
+
+// Các gợi ý sư phạm deterministic ĐỦ TIN CẬY (chỉ kiểm tra hiện diện, không suy
+// diễn ngữ nghĩa) — trừ điểm nhẹ ở mức warning/suggestion, không bao giờ critical.
+// Bloom/transition/tiêu-đề-hành-động cố ý để LLM advisory lo vì heuristic dễ sai.
+function reviewPedagogy(
+  draft: LessonDraft,
+  canvases: TeachingCanvas[],
+  issues: LessonReviewIssue[],
+  addIssue: ReturnType<typeof createIssueFactory>
+) {
+  // Bài quá ngắn thì bỏ qua để tránh phạt oan bài intro nhỏ.
+  if (canvases.length < 4) return;
+
+  if (!canvases.some(isSummaryCanvas)) {
+    addIssue(issues, {
+      severity: "suggestion",
+      category: "pedagogy",
+      target: "lesson.flow",
+      title: "Thiếu slide tổng kết cuối bài",
+      detail: "Bài chưa có canvas chốt lại (tổng kết/ghi nhớ) để đóng vòng kiến thức.",
+      suggestion: "Thêm một canvas 'checklist' hoặc 'mindmap' tóm tắt các ý chính ở cuối bài.",
+    });
+  }
+
+  const hasExampleCanvas = canvases.some(isExampleCanvas);
+  const hasModelAnswer = draft.exercises.some(
+    (exercise) =>
+      exercise.answer.trim() &&
+      !exercise.answer.includes(LESSON_ANSWER_DRAFT_MARKER)
+  );
+  if (!hasExampleCanvas && !hasModelAnswer) {
+    addIssue(issues, {
+      severity: "warning",
+      category: "pedagogy",
+      target: "lesson.examples",
+      title: "Thiếu ví dụ code cụ thể",
+      detail: "Cả bài chưa có canvas code/ví dụ chạy được nào để minh họa khái niệm.",
+      suggestion: "Thêm ít nhất một canvas 'code' hoặc 'code_explain' minh họa bằng Python thật.",
+    });
+  }
+
+  const hasQuiz = canvases.some((canvas) => canvas.kind === "quiz");
+  const hasPractice = draft.exercises.some((exercise) => exercise.type === "practice");
+  if (canvases.length >= 6 && !hasQuiz && !hasPractice) {
+    addIssue(issues, {
+      severity: "suggestion",
+      category: "pedagogy",
+      target: "lesson.check",
+      title: "Thiếu điểm kiểm tra hiểu biết",
+      detail: "Bài khá dài nhưng chưa có quiz hay bài luyện tập để học sinh tự kiểm tra.",
+      suggestion: "Chèn một canvas 'quiz' giữa bài hoặc thêm một bài tập practice ngắn.",
+    });
+  }
+}
+
+// Check cấu trúc cấp bài (cần toàn bộ canvas của bài): slide mở đầu hero + đa dạng
+// layout. Phát thành cảnh báo deterministic để điểm phản ánh đúng sàn (100 ⟺ đạt
+// sàn), dùng CHUNG ngưỡng với evaluateLessonFloor.
+function reviewLessonStructure(
+  canvasesBySection: TeachingCanvas[][],
+  issues: LessonReviewIssue[],
+  addIssue: ReturnType<typeof createIssueFactory>
+) {
+  const canvases = canvasesBySection.flat();
+  if (canvases.length === 0) return;
+
+  const opener = canvases[0];
+  if (opener.kind !== "hero" && opener.kind !== "cover") {
+    addIssue(issues, {
+      severity: "warning",
+      category: "section",
+      target: "lesson.opener",
+      title: "Thiếu slide mở đầu (hero)",
+      detail: "Canvas đầu tiên của bài không phải slide hero/cover giới thiệu.",
+      suggestion: "Thêm một canvas hero làm slide mở đầu cho bài.",
+    });
+  }
+
+  if (canvases.length >= FLOOR_DIVERSITY_MIN_CANVASES) {
+    const distinctKinds = new Set(canvases.map((canvas) => canvas.kind)).size;
+    if (distinctKinds < FLOOR_DIVERSITY_MIN_KINDS) {
+      addIssue(issues, {
+        severity: "warning",
+        category: "canvas",
+        target: "lesson.diversity",
+        title: "Layout chưa đa dạng",
+        detail: `Cả bài chỉ dùng ${distinctKinds} kiểu canvas, dễ đơn điệu.`,
+        suggestion: "Đổi một số canvas sang layout khác (cards, timeline, compare, quiz...).",
+      });
+    }
+  }
+}
+
+// ——— Sàn chất lượng cứng ———
+
+function isBrokenCanvas(canvas: TeachingCanvas): boolean {
+  switch (canvas.kind) {
+    case "compare":
+      return (canvas.cards?.length ?? 0) !== 2;
+    case "quiz": {
+      const cards = canvas.cards ?? [];
+      const correct = cards.filter((card) => card.correct === true).length;
+      return cards.length < 2 || cards.length > 4 || correct !== 1;
+    }
+    case "checklist":
+    case "timeline":
+    case "flow":
+    case "mindmap":
+      return canvas.steps.length === 0;
+    case "code_explain":
+    case "code":
+    case "playground":
+      return !canvas.code?.trim();
+    default:
+      return false;
+  }
+}
+
+// Canvas "gần rỗng": để trống 16:9 vì chỉ một câu ngắn, không steps/code/cards.
+// Các layout vốn ngắn (hero/statement/banner) được miễn.
+function isThinCanvas(canvas: TeachingCanvas): boolean {
+  if (canvas.kind === "hero" || canvas.kind === "statement" || canvas.kind === "banner") {
+    return false;
+  }
+  if (canvas.code?.trim()) return false;
+  if (canvas.steps.length > 0) return false;
+  if ((canvas.cards?.length ?? 0) > 0) return false;
+  return textLength(canvas.html || "") < 40;
+}
+
+// Canvas "tràn": nhiều chữ nhưng không tách steps cũng không có code.
+function isOverflowCanvas(canvas: TeachingCanvas): boolean {
+  return textLength(canvas.html || "") > 520 && canvas.steps.length === 0 && !canvas.code;
+}
+
+const FLOOR_DIVERSITY_MIN_CANVASES = 4;
+const FLOOR_DIVERSITY_MIN_KINDS = 3;
+
+export function evaluateLessonFloor(
+  draft: LessonDraft,
+  canvasesBySection: TeachingCanvas[][]
+): LessonFloorReport {
+  const canvases = canvasesBySection.flat();
+
+  const metadataOk =
+    Boolean(draft.title.trim()) &&
+    Boolean(draft.objectives.knowledge.trim()) &&
+    Boolean(draft.objectives.skills.trim()) &&
+    Boolean(draft.objectives.attitude.trim());
+
+  const contentOk =
+    draft.sections.length > 0 &&
+    canvasesBySection.every((sectionCanvases) => sectionCanvases.length > 0) &&
+    canvases.every((canvas) => canvasText(canvas).trim().length > 0);
+
+  const openerOk =
+    canvases.length === 0
+      ? false
+      : canvases[0].kind === "hero" || canvases[0].kind === "cover";
+
+  const distinctKinds = new Set(canvases.map((canvas) => canvas.kind)).size;
+  const diversityOk =
+    canvases.length < FLOOR_DIVERSITY_MIN_CANVASES ||
+    distinctKinds >= FLOOR_DIVERSITY_MIN_KINDS;
+
+  const renderOk = canvases.every((canvas) => !isBrokenCanvas(canvas));
+  const densityOk = canvases.every(
+    (canvas) => !isThinCanvas(canvas) && !isOverflowCanvas(canvas)
+  );
+  const closingOk =
+    canvases.length < FLOOR_DIVERSITY_MIN_CANVASES || canvases.some(isSummaryCanvas);
+
+  const items: LessonFloorItem[] = [
+    {
+      key: "metadata",
+      label: "Đủ tiêu đề & 3 mục tiêu",
+      ok: metadataOk,
+      hint: "Điền tên bài và đủ mục tiêu kiến thức/kỹ năng/thái độ.",
+    },
+    {
+      key: "content",
+      label: "Mọi tab có canvas, không rỗng",
+      ok: contentOk,
+      hint: "Mỗi tab cần ít nhất một canvas có nội dung hiển thị.",
+    },
+    {
+      key: "opener",
+      label: "Có slide mở đầu (hero)",
+      ok: openerOk,
+      hint: "Canvas đầu tiên của bài nên là hero giới thiệu.",
+    },
+    {
+      key: "diversity",
+      label: `Đa dạng layout (≥${FLOOR_DIVERSITY_MIN_KINDS} loại)`,
+      ok: diversityOk,
+      hint: "Tránh dùng đi dùng lại một kiểu canvas cho cả bài.",
+    },
+    {
+      key: "render",
+      label: "Không vỡ layout",
+      ok: renderOk,
+      hint: "Mỗi layout cần đủ field bắt buộc (compare 2 vế, quiz 1 đáp án đúng, code có code...).",
+    },
+    {
+      key: "density",
+      label: "Không tràn / không gần rỗng",
+      ok: densityOk,
+      hint: "Canvas nhiều chữ tách thành steps; canvas một câu thêm steps hoặc đổi statement.",
+    },
+    {
+      key: "closing",
+      label: "Có slide tổng kết",
+      ok: closingOk,
+      hint: "Thêm một canvas checklist/mindmap chốt lại ý chính ở cuối.",
+    },
+  ];
+
+  return { meets: items.every((item) => item.ok), items };
 }
 
 export function reviewLessonDraftDeterministic(draft: LessonDraft): LessonReviewReport {
@@ -605,6 +1051,8 @@ export function reviewLessonDraftDeterministic(draft: LessonDraft): LessonReview
   });
 
   reviewExercises(draft, issues, addIssue);
+  reviewLessonStructure(canvasesBySection, issues, addIssue);
+  reviewPedagogy(draft, canvasesBySection.flat(), issues, addIssue);
 
   const stats = buildStats(draft, canvasesBySection, issues);
   const status = summarizeReviewStatus(stats);
@@ -613,6 +1061,8 @@ export function reviewLessonDraftDeterministic(draft: LessonDraft): LessonReview
     ...status,
     issues,
     stats,
+    dimensions: buildLessonReviewDimensions(issues),
+    floor: evaluateLessonFloor(draft, canvasesBySection),
     reviewedAt: new Date().toISOString(),
   };
 }
@@ -641,6 +1091,8 @@ export function rebuildLessonReviewReport(
     ...summarizeReviewStatus(stats),
     issues,
     stats,
+    dimensions: buildLessonReviewDimensions(issues),
+    floor: evaluateLessonFloor(draft, canvasesBySection),
     reviewedAt: new Date().toISOString(),
   };
 }

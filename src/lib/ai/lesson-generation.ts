@@ -13,6 +13,11 @@ import {
   type LessonObjectivesDraft,
   type LessonDraft,
 } from "@/lib/lessons/lesson-draft";
+import {
+  coerceCanvasToRoleHint,
+  normalizeGeneratedCanvasBlocks,
+} from "@/lib/lessons/canvas-structure";
+import type { LessonContentBlock } from "@/lib/lessons/lesson-media";
 
 interface LessonGenerationSelection {
   provider: LessonAiProvider;
@@ -454,9 +459,12 @@ function buildUserPrompt(content: string): string {
     "- 'text': Pure prose explanation, no code or image needed.",
     "",
     "Additional rules:",
+    "- LAYOUT REQUIRES ITS FIELD — invalid without it: 'checklist'/'timeline'/'flow'/'mindmap' MUST fill the 'steps' array (not <li> in mainHtml); 'code'/'code_explain' MUST have non-empty 'code'; 'compare' needs exactly 2 cards. If the content for that field is missing, use 'text' or 'highlight' instead.",
+    "- Every exercise MUST include a correct, runnable Python 'answer' (the model answer). Never leave 'answer' empty.",
     "- objectives.knowledge / objectives.skills / objectives.attitude are REQUIRED. If the source has no explicit objectives, infer them from the lesson title, concepts, code examples, and exercises. Never leave them blank.",
     "- Create 2–5 sections. Section titles must be short tab labels.",
     "- Each section: 2–5 teaching_canvas blocks. Each canvas teaches exactly one idea.",
+    "- NEVER ship a near-empty slide: a 'text' or 'highlight' canvas must carry a short paragraph PLUS 2–4 reveal steps, not a single lone sentence (that leaves the 16:9 frame mostly blank). For one standalone golden-rule sentence use a 'highlight' with elaboration steps instead.",
     "- reveal steps: 2–5 short Vietnamese sentences. Use steps to reveal key points progressively.",
     "- code field: PLAIN Python only — no <code>, no <div>, no HTML at all. Empty string when not needed.",
     "- mainHtml: valid HTML using h2, h3, p, ul, ol, li, strong, em, code, table, div. Keep it concise.",
@@ -991,6 +999,22 @@ export async function generateLessonDraft(options: {
     const parsed = parseJsonObject(rawResult.text);
     let draft = normalizeLessonDraft(parsed);
 
+    // Deterministic structure pass per tab: recover missing steps / demote
+    // mismatched layouts so the new lesson clears the reviewer's critical gate.
+    draft = {
+      ...draft,
+      sections: draft.sections.map((section) =>
+        Array.isArray(section.contentBlocks)
+          ? {
+              ...section,
+              contentBlocks: normalizeGeneratedCanvasBlocks(
+                section.contentBlocks as LessonContentBlock[]
+              ),
+            }
+          : section
+      ),
+    };
+
     if (hasMissingObjectives(draft.objectives)) {
       const objectiveResult = await requestLessonObjectives(selection, {
         title: draft.title,
@@ -1100,7 +1124,7 @@ function buildSectionCanvasUserPrompt(options: {
     "- 'checklist': a summary / takeaways slide. Put each takeaway as ONE entry in 'steps'; optional one-line intro in mainHtml. Use for 'tổng kết', 'ghi nhớ', 'tóm tắt'.",
     "- 'chat': a dialogue between two speakers (e.g. máy tính ↔ học sinh, hỏi ↔ đáp). Use 'cards' where each card = one line: title = speaker name, description = what they say (icon optional). Leave mainHtml empty. Great for input/output examples.",
     "- 'flow': a SHORT horizontal pipeline of 2–4 nodes with arrows (e.g. \"12\" → int() → 12, or Input → Process → Output). Put each node as ONE SHORT entry in 'steps'. Leave mainHtml empty. Ideal for data transformation / ép kiểu.",
-    "- 'code_explain': read a code example with per-line notes. Put the Python in 'code', and ONE explanation per code line (in order) as 'steps'. Use when the goal is to UNDERSTAND existing code line by line.",
+    "- 'code_explain': read a code example with per-line notes. Put the Python in 'code', and ONE explanation per code line (in order) as 'steps'. Use when the goal is to UNDERSTAND existing code line by line. A line-by-line walkthrough MUST use 'code_explain' (code + steps in the SAME canvas) — do NOT explain code as a separate 'timeline'/'checklist', and do NOT split the code into one canvas and its line notes into another; that detaches the notes from the code.",
     "- 'mindmap': a one-level summary tree. title = central topic, each branch = ONE entry in 'steps'. Good as an alternative summary slide.",
     "- 'quiz': a quick multiple-choice check (NOT graded). mainHtml = the question. 'cards' = 2–4 options where each option's title = the option text and EXACTLY ONE option has \"correct\": true. notesHtml = a short explanation shown after answering. Use AT MOST ONE quiz per tab, only when it reinforces the key idea.",
     "- 'playground': let the student edit & run Python in the slide. Put a SHORT runnable starter program in 'code'. No steps. Use AT MOST ONE per tab when hands-on practice helps.",
@@ -1122,13 +1146,16 @@ function buildSectionCanvasUserPrompt(options: {
     "",
     "Quality rules (the slides must look polished and fit on screen):",
     '- EVERY object in contentBlocks MUST include "type": "teaching_canvas". Never emit other block types.',
+    "- LAYOUT REQUIRES ITS FIELD — a layout is INVALID (and will be rejected) without it: 'checklist'/'timeline'/'flow'/'mindmap' MUST fill the 'steps' array (put each point in steps, NOT as <li> inside mainHtml); 'code'/'playground' MUST have non-empty 'code'; 'code_explain' MUST have BOTH 'code' and one 'steps' entry per line; 'compare' MUST have EXACTLY 2 cards; 'quiz' MUST have 2–4 cards with EXACTLY one \"correct\": true. If you don't have that field's content, pick 'text'/'highlight' instead.",
     "- Produce 2–4 canvases for this tab. Each canvas teaches exactly ONE idea — split a long tab into several canvases instead of one crowded slide.",
     "- Canvas titles must be SHORT (max 6 words). Never reuse the full tab title as a canvas title.",
     "- Keep mainHtml SHORT: at most ~45 words / 2 short paragraphs per canvas so it never overflows. Move detail into 2–4 reveal steps.",
+    "- NEVER ship a near-empty slide: a 'text' (or 'highlight') canvas must NOT be just ONE short sentence with no steps — that leaves the 16:9 frame mostly blank. Either (a) add 2–4 reveal steps, or (b) use 'statement' (one big centered takeaway) for a single golden-rule sentence, or 'banner' for a section divider. Each 'text'/'highlight' canvas should carry a short paragraph PLUS 2–4 steps to fill the slide.",
     "- Keep existing Python code and program output VERBATIM. Put program output inside a <pre> in mainHtml, never in the code field.",
     "- reveal steps: 2–4 short Vietnamese sentences.",
     "- code field: PLAIN Python only — no <code>, no <div>, no HTML. Empty string when not needed.",
     "- For a 'code' canvas keep the LEFT side light: at most one short sentence + one short <pre> output (≤1 line) + up to 3 steps. Do NOT stack a heading, a paragraph, an output block AND many steps on the same canvas — split instead.",
+    "- code_explain steps: ONE short step per REAL code line, in order. Each step = that line's purpose in ≤1 short sentence. Do NOT repeat the same idea across steps (e.g. don't restate the if/elif branching logic in several steps), and do NOT add a separate 'Output: …' step — expected output belongs in the code's trailing comment or a short <pre>, not as a step.",
     "- Keep code lines short and readable. Put explanatory comments on their OWN line above the code, not as long trailing inline comments.",
     "- mainHtml: valid concise HTML using h3, p, ul, ol, li, strong, em, code.",
     "",
@@ -1172,6 +1199,7 @@ export async function generateSectionCanvas(options: {
   lessonTitle?: string;
   isFirst?: boolean;
   layoutHints?: string[];
+  roleHint?: string;
   provider?: string;
   model?: string;
 }): Promise<{
@@ -1224,8 +1252,23 @@ export async function generateSectionCanvas(options: {
       finalBlocks = blocks.filter((block) => block.layout !== "hero");
     }
 
+    // Deterministic structure pass: recover missing steps / demote mismatched
+    // layouts so the tab clears the reviewer's critical gate up front.
+    let structured = normalizeGeneratedCanvasBlocks(
+      finalBlocks as unknown as LessonContentBlock[]
+    );
+
+    // "Vai trò gợi ý" là LỆNH: ép canvas chính về đúng layout rồi normalize lại để
+    // dọn (nếu không hợp, normalize tự hạ cấp — không tạo canvas vỡ).
+    const roleHint = options.roleHint?.trim().toLowerCase();
+    if (roleHint) {
+      structured = normalizeGeneratedCanvasBlocks(
+        coerceCanvasToRoleHint(structured, roleHint)
+      );
+    }
+
     return {
-      contentBlocks: finalBlocks,
+      contentBlocks: structured,
       meta: {
         provider: selection.provider,
         model: rawResult.model,

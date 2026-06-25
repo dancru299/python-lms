@@ -345,6 +345,97 @@ export default function TeachingCanvasRenderer({
           line-height: 1.65;
         }
 
+        .teaching-canvas .lesson-content p {
+          margin: 0 0 1rem 0;
+          font-size: 1.15rem;
+          line-height: 1.75;
+          color: #334155;
+        }
+
+        .teaching-canvas .lesson-content p:last-child {
+          margin-bottom: 0;
+        }
+
+        .teaching-canvas .lesson-content ul {
+          list-style-type: disc;
+          padding-left: 1.75rem;
+          margin: 0.65rem 0 1.25rem 0;
+        }
+
+        .teaching-canvas .lesson-content ol {
+          list-style-type: decimal;
+          padding-left: 1.75rem;
+          margin: 0.65rem 0 1.25rem 0;
+        }
+
+        .teaching-canvas .lesson-content li {
+          margin-bottom: 0.5rem;
+          font-size: 1.125rem;
+          line-height: 1.65;
+          color: #334155;
+        }
+
+        .teaching-canvas .lesson-content li:last-child {
+          margin-bottom: 0;
+        }
+
+        .teaching-canvas .lesson-content code {
+          background: #eef2ff;
+          border: 1px solid #e0e7ff;
+          border-radius: 0.35rem;
+          padding: 0.12rem 0.35rem;
+          color: #4f46e5;
+          font-size: 0.9em;
+          font-weight: 600;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        .teaching-canvas .lesson-content strong {
+          font-weight: 700;
+          color: #0f172a;
+        }
+
+        .teaching-canvas .lesson-content h1,
+        .teaching-canvas .lesson-content h2,
+        .teaching-canvas .lesson-content h3,
+        .teaching-canvas .lesson-content h4 {
+          color: #0f172a;
+          font-weight: 800;
+          margin-top: 1.5rem;
+          margin-bottom: 0.75rem;
+          line-height: 1.25;
+        }
+
+        .teaching-canvas .lesson-content h1 { font-size: 1.8rem; }
+        .teaching-canvas .lesson-content h2 { font-size: 1.5rem; }
+        .teaching-canvas .lesson-content h3 { font-size: 1.3rem; }
+        .teaching-canvas .lesson-content h4 { font-size: 1.15rem; }
+
+        /* ── Density tiers: enlarge short text slides so they fill the frame
+              (stays top-aligned — no vertical centering). AutoFit still scales
+              down if a bump ever overflows, so this can never clip. ── */
+        .teaching-canvas-concept.is-roomy .canvas-title,
+        .teaching-canvas-highlight.is-roomy .canvas-highlight-label { letter-spacing: 0.01em; }
+        .teaching-canvas-concept.is-roomy .canvas-title { font-size: 2.35rem; margin-bottom: 1.1rem; }
+        .teaching-canvas-concept.is-roomy .lesson-content p { font-size: 1.4rem; line-height: 1.7; }
+        .teaching-canvas-concept.is-roomy .lesson-content li { font-size: 1.35rem; line-height: 1.7; }
+
+        .teaching-canvas-concept.is-lead .canvas-kicker { font-size: 0.8rem; padding: 0.32rem 0.8rem; margin-bottom: 1rem; }
+        .teaching-canvas-concept.is-lead .canvas-title { font-size: 2.85rem; line-height: 1.12; margin-bottom: 1.4rem; }
+        .teaching-canvas-concept.is-lead .lesson-content p { font-size: 1.72rem; line-height: 1.65; }
+        .teaching-canvas-concept.is-lead .lesson-content li { font-size: 1.6rem; line-height: 1.6; }
+
+        /* Short callout/note slides: grow the box so it anchors the frame. */
+        .teaching-canvas-concept.is-lead .lesson-callout,
+        .teaching-canvas-concept.is-roomy .lesson-callout { padding: 1.9rem 2.1rem; }
+        .teaching-canvas-concept.is-lead .lesson-callout p { font-size: 1.55rem; line-height: 1.6; }
+        .teaching-canvas-concept.is-roomy .lesson-callout p { font-size: 1.32rem; line-height: 1.65; }
+
+        /* Short highlight slides: bump the highlighted statement. */
+        .teaching-canvas-highlight.is-lead .canvas-highlight-box { padding: 2.2rem 2.4rem; }
+        .teaching-canvas-highlight.is-lead .canvas-highlight-box .lesson-content { font-size: 1.7rem; line-height: 1.45; }
+        .teaching-canvas-highlight.is-roomy .canvas-highlight-box .lesson-content { font-size: 1.5rem; }
+
         /* ── Hero ── */
         .teaching-canvas-hero {
           background: linear-gradient(135deg, #0c2340 0%, #1a3a6b 60%, #0c2340 100%);
@@ -1932,6 +2023,18 @@ function textLengthForLayout(value: string): number {
     .trim().length;
 }
 
+type ContentDensity = "lead" | "roomy" | "normal";
+
+/* How "full" a text slide is, so short content can be enlarged to fill the
+   16:9 frame instead of clinging to the top with empty space below. Counts the
+   prose length plus a rough budget per reveal step. */
+function contentDensity(textHtml: string, stepCount: number): ContentDensity {
+  const len = textLengthForLayout(textHtml) + stepCount * 110;
+  if (stepCount === 0 && len <= 150) return "lead";
+  if (stepCount <= 1 && len <= 380) return "roomy";
+  return "normal";
+}
+
 function CanvasSlide(props: SlideProps) {
   switch (props.canvas.kind) {
     case "hero":      return <HeroSlide       {...props} />;
@@ -2004,8 +2107,9 @@ function CardsSlide({ canvas, visibleSteps }: SlideProps) {
 /* ─── Highlight ─── */
 function HighlightSlide({ canvas, media, visibleSteps, hasSteps }: SlideProps) {
   const kindLabel = "Điểm nhấn";
+  const density = contentDensity(canvas.html, canvas.steps.length);
   return (
-    <article className="teaching-canvas teaching-canvas-highlight">
+    <article className={`teaching-canvas teaching-canvas-highlight is-${density}`}>
       <AutoFit>
         <div className="canvas-highlight-box">
           <div className="canvas-highlight-label">
@@ -2298,13 +2402,16 @@ function CodeExplainSlide({ canvas, visibleSteps }: SlideProps) {
   const lines = code.split("\n");
   const notes = canvas.steps ?? [];
   const activeNoteIndex = Math.max(0, Math.min(Math.max(1, visibleSteps) - 1, Math.max(notes.length - 1, 0)));
-  const explainableLineIndexes = lines
-    .map((line, index) => (line.trim() ? index : -1))
-    .filter((index) => index !== -1);
+  // Anchor each note to the real code line it quotes (steps often skip lines or
+  // include a summary step, so a plain index→line mapping mislabels them).
+  const noteLineIndexes = useMemo(
+    () => resolveCodeExplainLineIndexes(notes, lines),
+    [notes, code]
+  );
   const activeLineIndex = Math.max(
     0,
     Math.min(
-      explainableLineIndexes[activeNoteIndex] ?? activeNoteIndex,
+      noteLineIndexes[activeNoteIndex] ?? activeNoteIndex,
       Math.max(lines.length - 1, 0)
     )
   );
@@ -2647,6 +2754,70 @@ function stripTags(html: string) {
     .trim();
 }
 
+function normalizeForMatch(value: string) {
+  return value.toLowerCase().replace(/["'`]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/* How strongly a code line is referenced by a step's text. A step usually quotes
+   the line it explains ("…print(\"Kết thúc kỳ học.\") → …"), so a direct quote is
+   the most reliable signal; otherwise fall back to token overlap. */
+function codeLineMatchScore(codeLine: string, stepText: string): number {
+  const chunk = normalizeForMatch(codeLine).replace(/:$/, "").trim();
+  if (chunk.length < 3) return 0;
+  const step = normalizeForMatch(stepText);
+  if (chunk.length >= 5 && step.includes(chunk)) return chunk.length;
+  const tokens = chunk.split(/[^a-z0-9_]+/).filter((token) => token.length >= 3);
+  if (tokens.length < 2) return 0;
+  const matched = tokens.filter((token) => step.includes(token)).length;
+  return matched >= 2 && matched / tokens.length >= 0.6 ? matched : 0;
+}
+
+/* Maps each code_explain step to the index of the code line it describes:
+   1) the line it quotes (content match), 2) an explicit "Dòng N" number, else
+   3) the next not-yet-used line (sequential). Keeps the popover label and the
+   highlighted line consistent with the step's actual content. */
+function resolveCodeExplainLineIndexes(
+  notes: TeachingCanvas["steps"],
+  lines: string[]
+): number[] {
+  const explainable = lines
+    .map((line, index) => ({ line, index }))
+    .filter((entry) => entry.line.trim().length > 0);
+  if (explainable.length === 0) return notes.map(() => 0);
+
+  let cursor = 0;
+  return notes.map((note) => {
+    const text = note.text || stripTags(note.html || "");
+
+    let target: number;
+    // 1) Marker "Dòng N" = ý tác giả chỉ rõ → ưu tiên TRƯỚC so-trùng-token. Token
+    //    mờ dễ neo nhầm khi nhiều dòng dùng chung từ khoá (elif/diem/print) hoặc khi
+    //    chữ Việt bị tách vụn, gây nhảy ngược/đánh dấu sai dòng.
+    const explicit = text.match(/(?:dòng|dong|line|câu lệnh)\s*(\d+)/i);
+    if (explicit) {
+      target = Math.max(0, Math.min(parseInt(explicit[1], 10) - 1, lines.length - 1));
+    } else {
+      // 2) Không có marker → so trùng nội dung (trích dẫn/token) với dòng code.
+      let best = -1;
+      let bestScore = 0;
+      for (const { line, index } of explainable) {
+        const score = codeLineMatchScore(line, text);
+        if (score > bestScore) {
+          bestScore = score;
+          best = index;
+        }
+      }
+      // 3) Vẫn không khớp → dòng kế tiếp chưa dùng (tuần tự).
+      target =
+        best >= 0 ? best : explainable[Math.min(cursor, explainable.length - 1)].index;
+    }
+
+    const position = explainable.findIndex((entry) => entry.index === target);
+    cursor = position >= 0 ? position + 1 : cursor + 1;
+    return target;
+  });
+}
+
 function kickerLabel(kind: TeachingCanvas["kind"]): string {
   if (kind === "code") return "Code";
   if (kind === "media") return "Hình ảnh";
@@ -2868,8 +3039,14 @@ function AutoLayoutSlide({ canvas, media, visibleSteps, hasSteps }: SlideProps) 
     );
   }
 
-  // 4) text only → comfortable full-width slide
-  return <article className="teaching-canvas teaching-canvas-concept">{textZone}</article>;
+  // 4) text only → comfortable full-width slide. Short content is enlarged
+  //    (density tier) so it fills the frame instead of leaving empty space.
+  const density = contentDensity(textHtml, canvas.steps.length);
+  return (
+    <article className={`teaching-canvas teaching-canvas-concept is-${density}`}>
+      {textZone}
+    </article>
+  );
 }
 
 /* ─── Shared reveal list ─── */

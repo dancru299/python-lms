@@ -85,6 +85,14 @@ export function buildTeachingCanvases(
     }
   }
 
+  if (!Array.isArray(section.contentBlocks) || section.contentBlocks.length === 0) {
+    const rawHtml = section.renderedContent || section.content || "";
+    const parsedMindmap = tryParseMindmapFromHtml(section.id, section.title, rawHtml);
+    if (parsedMindmap) {
+      return parsedMindmap;
+    }
+  }
+
   const canvases =
     Array.isArray(section.contentBlocks) && section.contentBlocks.length > 0
       ? buildFromBlocks(section)
@@ -510,8 +518,7 @@ function createDraft(sectionId: string, sectionTitle: string, index: number): Dr
 }
 
 function normalizeDrafts(drafts: DraftCanvas[], sectionTitle: string): TeachingCanvas[] {
-  return drafts
-    .filter((draft) => !isDraftEmpty(draft))
+  return mergeTinyDrafts(drafts.filter((draft) => !isDraftEmpty(draft)))
     .map((draft, index) => ({
       id: draft.id,
       kind: draft.kind,
@@ -521,6 +528,42 @@ function normalizeDrafts(drafts: DraftCanvas[], sectionTitle: string): TeachingC
       steps: draft.steps,
       sourceBlockIds: Array.from(new Set(draft.sourceBlockIds)),
     }));
+}
+
+// A near-empty text fragment (a lone short paragraph or stray heading) becomes
+// an ugly half-blank canvas on its own. Fold it back into the previous canvas
+// when there's room, so we don't ship "trống" tabs from raw HTML/blocks.
+const TINY_DRAFT_TEXT_LENGTH = 60;
+
+function mergeTinyDrafts(drafts: DraftCanvas[]): DraftCanvas[] {
+  const result: DraftCanvas[] = [];
+
+  for (const draft of drafts) {
+    const prev = result[result.length - 1];
+    if (prev && isTinyTextDraft(draft) && canAbsorbDraft(prev, draft)) {
+      prev.htmlParts.push(...draft.htmlParts);
+      prev.noteParts.push(...draft.noteParts);
+      prev.sourceBlockIds.push(...draft.sourceBlockIds);
+      continue;
+    }
+    result.push(draft);
+  }
+
+  return result;
+}
+
+function isTinyTextDraft(draft: DraftCanvas) {
+  if (draft.steps.length > 0) return false;
+  if (draft.kind === "code" || draft.kind === "media") return false;
+  const text = stripHtml([...draft.htmlParts, ...draft.noteParts].join(" "));
+  return text.length < TINY_DRAFT_TEXT_LENGTH;
+}
+
+function canAbsorbDraft(prev: DraftCanvas, draft: DraftCanvas) {
+  if (prev.kind === "code" || prev.kind === "media") return false;
+  if (prev.htmlParts.length + draft.htmlParts.length > MAX_CANVAS_PARTS) return false;
+  const combined = stripHtml([...prev.htmlParts, ...draft.htmlParts].join(" "));
+  return combined.length <= MAX_CANVAS_TEXT_LENGTH;
 }
 
 function isDraftEmpty(draft: DraftCanvas) {
@@ -732,4 +775,168 @@ function escapeHtml(value: string) {
 
 function escapeAttribute(value: string) {
   return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+function tryParseMindmapFromHtml(
+  sectionId: string,
+  sectionTitle: string,
+  html: string
+): TeachingCanvas[] | null {
+  const cleanHtml = html.trim();
+  // Check if it has the "Chủ đề trung tâm" heading
+  const hasCenter = /<h[2-4]\b[^>]*>\s*Chủ đề trung tâm\s*<\/h[2-4]>/i.test(cleanHtml);
+  if (!hasCenter) {
+    return null;
+  }
+
+  const fragments = splitHtmlIntoFragments(cleanHtml);
+  const canvases: TeachingCanvas[] = [];
+
+  let centerTitle = "";
+  let nextIsCenterTitle = false;
+  
+  interface TempBranch {
+    title: string;
+    items: string[];
+  }
+  const branches: TempBranch[] = [];
+  let currentBranch: TempBranch | null = null;
+  
+  // For non-mindmap content that appears after or outside the mindmap (like "Lỗi phổ biến cần nhớ")
+  const extraDrafts: DraftCanvas[] = [];
+  let currentConcept: DraftCanvas | null = null;
+  let isBuildingMindmap = true;
+
+  const flushConcept = () => {
+    if (currentConcept && !isDraftEmpty(currentConcept)) {
+      extraDrafts.push(currentConcept);
+    }
+    currentConcept = null;
+  };
+
+  for (const fragment of fragments) {
+    const text = stripHtml(fragment).trim();
+    if (!fragment.trim()) continue;
+
+    // 1. Detect "Chủ đề trung tâm" heading
+    if (/<h[2-4]\b[^>]*>\s*Chủ đề trung tâm\s*<\/h[2-4]>/i.test(fragment)) {
+      nextIsCenterTitle = true;
+      isBuildingMindmap = true;
+      continue;
+    }
+
+    if (nextIsCenterTitle) {
+      centerTitle = text;
+      nextIsCenterTitle = false;
+      continue;
+    }
+
+    if (isBuildingMindmap) {
+      const startsWithBranch = /^\s*Nhánh\s*\d*\s*:/i.test(text);
+
+      if (startsWithBranch) {
+        currentBranch = {
+          title: text,
+          items: [],
+        };
+        branches.push(currentBranch);
+        continue;
+      }
+
+      // Check if we should end the mindmap at this heading
+      if (isHeadingHtml(fragment)) {
+        // Look ahead to see if there is any remaining fragment starting with "Nhánh"
+        const remainingFragments = fragments.slice(fragments.indexOf(fragment) + 1);
+        const hasMoreBranches = remainingFragments.some(f => 
+          /^\s*Nhánh\s*\d*\s*:/i.test(stripHtml(f).trim())
+        );
+
+        if (!hasMoreBranches) {
+          isBuildingMindmap = false;
+          // fall through to non-mindmap processing!
+        }
+      }
+
+      if (isBuildingMindmap) {
+        if (currentBranch) {
+          currentBranch.items.push(text);
+        }
+        continue;
+      }
+    }
+
+    // 2. Non-mindmap processing (starts here if isBuildingMindmap was set to false or was never true)
+    if (!currentConcept) {
+      currentConcept = createDraft(sectionId, sectionTitle, canvases.length + extraDrafts.length + 1);
+    }
+
+    if (isHeadingHtml(fragment)) {
+      flushConcept();
+      currentConcept = createDraft(sectionId, sectionTitle, canvases.length + extraDrafts.length + 1);
+      currentConcept.title = text;
+      currentConcept.sourceBlockIds.push(`${sectionId}-html`);
+    } else if (isCodeHtml(fragment) || isMediaHtml(fragment)) {
+      flushConcept();
+      currentConcept = createDraft(sectionId, sectionTitle, canvases.length + extraDrafts.length + 1);
+      currentConcept.kind = isMediaHtml(fragment) ? "media" : "code";
+      currentConcept.htmlParts.push(fragment);
+      currentConcept.sourceBlockIds.push(`${sectionId}-html`);
+      flushConcept();
+    } else {
+      currentConcept.htmlParts.push(fragment);
+      currentConcept.sourceBlockIds.push(`${sectionId}-html`);
+      if (isCalloutHtml(fragment)) {
+        currentConcept.kind = "note";
+      }
+      if (shouldFlush(currentConcept)) {
+        flushConcept();
+      }
+    }
+  }
+
+  // Flush mindmap canvas
+  if (branches.length > 0) {
+    const steps: TeachingCanvasStep[] = branches.map((b, bIdx) => {
+      // Group items with bullet points
+      const titleHtml = `<strong>${escapeHtml(b.title)}</strong>`;
+      const itemsHtml = b.items
+        .map(item => `• ${escapeHtml(item)}`)
+        .join("<br />");
+      const combinedHtml = itemsHtml ? `${titleHtml}<br />${itemsHtml}` : titleHtml;
+
+      return {
+        id: `${sectionId}-mindmap-branch-${bIdx + 1}`,
+        html: combinedHtml,
+        text: stripHtml(combinedHtml),
+      };
+    });
+
+    canvases.push({
+      id: `${sectionId}-canvas-1`,
+      kind: "mindmap",
+      title: centerTitle || sectionTitle,
+      html: "",
+      notesHtml: "",
+      steps,
+      sourceBlockIds: [`${sectionId}-html`],
+    });
+  }
+
+  // Flush remaining concept canvas
+  flushConcept();
+
+  // Add extraDrafts to canvases
+  for (const draft of extraDrafts) {
+    canvases.push({
+      id: draft.id,
+      kind: draft.kind,
+      title: draft.title || `${sectionTitle} ${canvases.length + 1}`,
+      html: draft.htmlParts.join("\n\n"),
+      notesHtml: draft.noteParts.join("\n\n"),
+      steps: draft.steps,
+      sourceBlockIds: Array.from(new Set(draft.sourceBlockIds)),
+    });
+  }
+
+  return canvases.length > 0 ? canvases : null;
 }
