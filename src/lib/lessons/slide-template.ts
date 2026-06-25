@@ -72,6 +72,51 @@ export function hasSlideTemplateMarkers(text: string): boolean {
   return TEMPLATE_HINT.test(text);
 }
 
+// Khoảng cách Levenshtein nhỏ gọn — chỉ dùng để đo "gần giống SLIDE" cho cảnh báo.
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i += 1) {
+    const curr = [i];
+    for (let j = 1; j <= n; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+
+// Tìm các dòng TRÔNG NHƯ marker "[SLIDE ...]" nhưng từ khoá viết sai (vd "[Silde: …]",
+// "[SLIE 1]") nên KHÔNG được nhận diện → nội dung sẽ bị gộp nhầm vào slide trước mà
+// không có cảnh báo. Trả về danh sách dòng nghi ngờ để báo cho giáo viên sửa trước.
+export function findSuspectSlideMarkers(text: string): string[] {
+  const suspects: string[] = [];
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    // Dòng mở đầu bằng "[<chữ>" — ứng viên cho một marker trong ngoặc.
+    const match = line.match(/^\[\s*([A-Za-zÀ-ỹ]+)/);
+    if (!match) continue;
+
+    // Đã là marker [SLIDE...] hợp lệ thì bỏ qua.
+    if (MARKER_LINE.test(line)) continue;
+
+    const word = normalizeVi(match[1]);
+    if (word.length < 3 || word.length > 7) continue;
+    const distance = levenshtein(word, "SLIDE");
+    // Gần giống "SLIDE" (sai 1-2 ký tự) nhưng không trùng → nghi viết sai.
+    if (distance >= 1 && distance <= 2) {
+      suspects.push(line.length > 60 ? `${line.slice(0, 60)}…` : line);
+    }
+  }
+
+  return suspects;
+}
+
 function normalizeVi(value: string): string {
   return value
     .normalize("NFD")

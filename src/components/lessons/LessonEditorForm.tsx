@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import LessonSectionEditor, {
@@ -15,9 +15,12 @@ import type { LessonReviewReport } from "@/lib/lessons/lesson-review";
 import type {
   LessonAiClientConfig,
   LessonAiProvider,
+  LessonAudience,
+  LessonTeachingStyle,
 } from "@/lib/ai/provider-types";
 import type { LessonDraft } from "@/lib/lessons/lesson-draft";
 import {
+  findSuspectSlideMarkers,
   hasSlideTemplateMarkers,
   parseSlideTemplate,
   suggestLayouts,
@@ -27,6 +30,17 @@ import toast from "react-hot-toast";
 // Số vòng tối đa cho vòng lặp tự động Duyệt → Sửa. Theo tiêu chuẩn: lặp tối đa 3
 // vòng, nếu vẫn còn lỗi chặn thì dừng và giao lại cho giáo viên xử lý.
 const MAX_AUTO_FIX_ROUNDS = 3;
+
+// Các route AI cấu hình maxDuration = 60s trên Vercel và tự cắt upstream ở ~57s để
+// trả lỗi sạch. Client chờ nhỉnh hơn cap đó (65s) để kịp nhận lỗi sạch từ server
+// trước khi bỏ cuộc — đặt 90s là vô nghĩa vì kết nối đã đứt ở giây 60.
+const AI_CLIENT_TIMEOUT_MS = 65_000;
+
+// HTML clipboard có cấu trúc đáng giữ (bảng/list/heading/đậm/code) → chuyển sang
+// Markdown khi dán. HTML "trơn" (vd code IDE chỉ gồm <span style>) thì để dán text
+// thuần như cũ, bảo toàn code nguyên vẹn.
+const RICH_PASTE_HTML =
+  /<(table|thead|tbody|tr|th|td|ul|ol|li|h[1-6]|strong|em|b|i|blockquote|pre|code)\b/i;
 
 // Runs an async mapper over items with a bounded number of in-flight calls so a
 // templated paste doesn't fire one AI request per tab all at once.
@@ -52,6 +66,28 @@ async function mapWithConcurrency<T, R>(
   );
   await Promise.all(workers);
   return results;
+}
+
+// Gộp một AbortSignal cha (cấp component) với timeout riêng cho từng request: request
+// bị huỷ khi HOẶC component abort (unmount / sinh lại) HOẶC quá hạn timeout. Nhờ vậy
+// các request song song cũ không còn chạy ngầm rồi ghi đè state sau khi giáo viên rời đi.
+function linkedTimeoutSignal(parent: AbortSignal, timeoutMs: number) {
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+
+  if (parent.aborted) {
+    controller.abort();
+  } else {
+    parent.addEventListener("abort", onParentAbort, { once: true });
+  }
+
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const cleanup = () => {
+    clearTimeout(timeoutId);
+    parent.removeEventListener("abort", onParentAbort);
+  };
+
+  return { signal: controller.signal, cleanup };
 }
 
 interface Section extends EditableLessonSection {
@@ -392,6 +428,10 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
 
   const [creationMode, setCreationMode] = useState<"manual" | "ai">("manual");
   const [aiContent, setAiContent] = useState("");
+  // Ngữ cảnh sư phạm tuỳ chọn cho AI (đối tượng học sinh + phong cách). undefined =
+  // để AI tự quyết (giọng trung lập).
+  const [aiAudience, setAiAudience] = useState<LessonAudience | undefined>(undefined);
+  const [aiStyle, setAiStyle] = useState<LessonTeachingStyle | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiProgress, setAiProgress] = useState<{ done: number; total: number } | null>(null);
   const [aiDraftReady, setAiDraftReady] = useState(false);
@@ -407,6 +447,9 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
     note: string;
   } | null>(null);
   const autoFixAbortRef = useRef<AbortController | null>(null);
+  // AbortController cấp component cho luồng sinh bài (full-AI + hybrid template). Cho
+  // phép huỷ mọi request đang chạy khi unmount hoặc khi bấm sinh lại.
+  const generationAbortRef = useRef<AbortController | null>(null);
   const [aiProvider, setAiProvider] = useState<LessonAiProvider>(
     initialAiConfig.defaultProvider
   );
@@ -472,6 +515,55 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         }))
       : []
   );
+
+  // Bản chụp trạng thái TRƯỚC khi AI ghi đè (sinh/sửa/tự sửa) để giáo viên hoàn tác.
+  const [lessonBackup, setLessonBackup] = useState<{
+    formData: typeof formData;
+    sections: Section[];
+    exercises: LessonEditorExercise[];
+    activeSection: string | null;
+  } | null>(null);
+
+  // Khoá vùng soạn thảo khi AI đang sửa/tự sửa: chặn giáo viên gõ tay rồi bị
+  // applyRepairedLesson ghi đè mất công.
+  const editingLocked = isRepairing || isAutoFixing;
+
+  const snapshotLesson = () => {
+    setLessonBackup({
+      formData: JSON.parse(JSON.stringify(formData)),
+      sections: JSON.parse(JSON.stringify(sections)),
+      exercises: JSON.parse(JSON.stringify(exercises)),
+      activeSection,
+    });
+  };
+
+  const restoreLessonBackup = () => {
+    if (!lessonBackup) return;
+    setFormData(lessonBackup.formData);
+    setSections(lessonBackup.sections);
+    setExercises(lessonBackup.exercises);
+    setActiveSection(lessonBackup.activeSection);
+    setLessonBackup(null);
+    toast.success("Đã khôi phục bản trước khi AI chỉnh sửa.");
+  };
+
+  // Bắt đầu một lượt sinh bài mới: huỷ lượt cũ (nếu còn) rồi cấp controller mới.
+  const beginGeneration = () => {
+    generationAbortRef.current?.abort();
+    const controller = new AbortController();
+    generationAbortRef.current = controller;
+    return controller;
+  };
+
+  // Huỷ mọi request AI còn treo khi component bị gỡ (đóng modal / rời trang) để không
+  // còn callback nào gọi setState trên component đã unmount.
+  useEffect(() => {
+    return () => {
+      generationAbortRef.current?.abort();
+      autoFixAbortRef.current?.abort();
+    };
+  }, []);
+
   const selectedAiProvider =
     initialAiConfig.providers.find((provider) => provider.value === aiProvider) ||
     initialAiConfig.providers[0];
@@ -769,6 +861,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       return;
     }
 
+    snapshotLesson();
     setIsRepairing(true);
     try {
       const data = await requestLessonRepair(currentLesson, currentReview);
@@ -807,6 +900,7 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   const runAutoFixLoop = async () => {
     if (isAutoFixing || isRepairing || isReviewing) return;
 
+    snapshotLesson();
     const controller = new AbortController();
     autoFixAbortRef.current = controller;
     setIsAutoFixing(true);
@@ -1075,7 +1169,9 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
   // can't handle keeps its parsed HTML, so the tab structure is never lost.
   // Returns true when it handled the paste, false when the markers yielded
   // nothing usable so the caller should fall back to the whole-document AI path.
-  const generateFromTemplate = async (): Promise<boolean> => {
+  const generateFromTemplate = async (
+    parentSignal: AbortSignal
+  ): Promise<boolean> => {
     const parsed = parseSlideTemplate(aiContent);
 
     if (parsed.sections.length === 0 && parsed.exercises.length === 0) {
@@ -1122,8 +1218,10 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
         async (tab, idx): Promise<Section> => {
           const id = `${initialLesson ? "tpl-sec" : "sec-tpl"}-${generatedAt}-${idx}`;
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60_000);
+            const { signal, cleanup } = linkedTimeoutSignal(
+              parentSignal,
+              AI_CLIENT_TIMEOUT_MS
+            );
             let res: Response;
             try {
               res = await fetch("/api/admin/lessons/generate-canvas", {
@@ -1138,11 +1236,12 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
                   roleHint: tab.roleHint,
                   provider: aiProvider,
                   model: aiModel,
+                  context: { audience: aiAudience, style: aiStyle },
                 }),
-                signal: controller.signal,
+                signal,
               });
             } finally {
-              clearTimeout(timeoutId);
+              cleanup();
             }
 
             if (!res.ok) {
@@ -1187,6 +1286,12 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           }
         }
       );
+
+      // Đã bị huỷ giữa chừng (đóng modal / bấm sinh lại) → KHÔNG ghi đè state với kết
+      // quả cũ, tránh nội dung cũ và mới chồng lên nhau.
+      if (parentSignal.aborted) {
+        return true;
+      }
 
       if (builtSections.length > 0) {
         setSections(builtSections);
@@ -1248,15 +1353,67 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       // We already took the template path; don't also run the whole-doc AI path.
       return true;
     } finally {
-      setIsGenerating(false);
-      setAiProgress(null);
+      // Bỏ qua nếu lượt này đã bị thay/huỷ, để không tắt spinner của lượt mới.
+      if (!parentSignal.aborted) {
+        setIsGenerating(false);
+        setAiProgress(null);
+      }
     }
+  };
+
+  // Dán nội dung có định dạng → chuyển HTML clipboard sang Markdown, giữ bảng/list/
+  // heading/đậm và code (trong khối ```), thay vì để textarea san phẳng thành chữ thô.
+  const handleAiContentPaste = (
+    event: React.ClipboardEvent<HTMLTextAreaElement>
+  ) => {
+    const html = event.clipboardData.getData("text/html");
+    if (!html || !RICH_PASTE_HTML.test(html)) {
+      return; // không có cấu trúc → để trình duyệt dán text thuần như bình thường
+    }
+
+    event.preventDefault();
+    const textarea = event.currentTarget;
+    const plain = event.clipboardData.getData("text/plain");
+    const start = textarea.selectionStart ?? aiContent.length;
+    const end = textarea.selectionEnd ?? aiContent.length;
+
+    const insert = (text: string) => {
+      if (!text) return;
+      const next = aiContent.slice(0, start) + text + aiContent.slice(end);
+      setAiContent(next);
+      const caret = start + text.length;
+      // Đặt lại con trỏ sau đoạn vừa chèn (sau khi React cập nhật value).
+      window.setTimeout(() => {
+        try {
+          textarea.setSelectionRange(caret, caret);
+        } catch {
+          /* textarea có thể đã unmount */
+        }
+      }, 0);
+    };
+
+    // Lazy-load turndown chỉ khi thực sự cần (lần dán có định dạng đầu tiên).
+    void import("@/lib/lessons/paste-to-markdown")
+      .then(({ htmlToMarkdown }) => insert(htmlToMarkdown(html) || plain))
+      .catch(() => insert(plain));
   };
 
   const handleAiGenerate = async () => {
     if (!aiContent.trim()) {
       toast.error("Vui lòng nhập nội dung để AI phân tích!");
       return;
+    }
+
+    // Cảnh báo các marker [SLIDE...] viết sai (vd "[Silde: ...]") sẽ bị gộp nhầm vào
+    // slide trước. Cho giáo viên cơ hội quay lại sửa trước khi tốn lượt gọi AI.
+    const suspectMarkers = findSuspectSlideMarkers(aiContent);
+    if (suspectMarkers.length > 0) {
+      const proceed = window.confirm(
+        `Phát hiện ${suspectMarkers.length} dòng có thể là marker [SLIDE...] viết sai và sẽ KHÔNG được tách đúng (nội dung bị gộp vào slide trước):\n\n${suspectMarkers.join(
+          "\n"
+        )}\n\nBấm Hủy để quay lại sửa, hoặc OK để vẫn tiếp tục.`
+      );
+      if (!proceed) return;
     }
 
     const defaultSectionTitles = ["Khái niệm", "Ví dụ minh họa", "Thực hành"];
@@ -1276,16 +1433,24 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       if (!confirmed) return;
     }
 
+    // Chụp lại bản hiện tại để giáo viên hoàn tác nếu kết quả AI không ưng ý.
+    snapshotLesson();
+
+    // Controller cấp component: bấm sinh lại sẽ huỷ lượt cũ; unmount cũng huỷ.
+    const controller = beginGeneration();
+
     // Auto-detect the [SLIDE...] template and take the lossless hybrid path.
     // If the markers yield nothing usable, fall through to the whole-doc AI path.
     if (hasSlideTemplateMarkers(aiContent)) {
-      const handled = await generateFromTemplate();
+      const handled = await generateFromTemplate(controller.signal);
       if (handled) return;
     }
 
     setIsGenerating(true);
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 90_000);
+    const { signal, cleanup } = linkedTimeoutSignal(
+      controller.signal,
+      AI_CLIENT_TIMEOUT_MS
+    );
     try {
       const res = await fetch("/api/admin/lessons/generate", {
         method: "POST",
@@ -1294,10 +1459,16 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           content: aiContent,
           provider: aiProvider,
           model: aiModel,
+          context: { audience: aiAudience, style: aiStyle },
         }),
-        signal: abortController.signal,
+        signal,
       });
-      clearTimeout(timeoutId);
+      cleanup();
+
+      // Lượt này đã bị thay bởi lượt mới / unmount → bỏ qua, không ghi đè state.
+      if (controller.signal.aborted) {
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(await readAiErrorMessage(res));
@@ -1396,19 +1567,27 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
       }
 
     } catch (error) {
-      clearTimeout(timeoutId);
+      cleanup();
+      // Parent controller abort = giáo viên bấm sinh lại hoặc rời trang → im lặng.
+      if (controller.signal.aborted) {
+        return;
+      }
       const isTimeout =
         error instanceof Error &&
         (error.name === "AbortError" || error.message.includes("abort"));
       toast.error(
         isTimeout
-          ? "AI phản hồi quá lâu (90 giây). Hãy rút ngắn nội dung hoặc chọn provider nhanh hơn."
+          ? "AI phản hồi quá lâu (quá 60 giây cho phép). Hãy rút ngắn nội dung hoặc chọn provider nhanh hơn."
           : (error instanceof Error ? error.message : "Đã xảy ra lỗi khi tạo bằng AI."),
         { duration: 6000 }
       );
       console.warn("AI generation request failed:", error);
     } finally {
-      setIsGenerating(false);
+      // Chỉ tắt cờ nếu lượt này vẫn là lượt hiện hành — tránh ghi đè trạng thái của
+      // một lượt sinh mới đã thay thế controller.
+      if (generationAbortRef.current === controller) {
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -1606,12 +1785,69 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
               </div>
             </div>
 
+            <div className="mb-4 rounded-lg border border-purple-100 bg-purple-50/40 p-3">
+              <p className="mb-2 text-xs font-semibold text-purple-700">
+                <i className="fa-solid fa-sliders mr-1.5"></i>
+                Ngữ cảnh cho AI (tuỳ chọn — để trống nếu muốn AI tự quyết)
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-20 text-xs font-medium text-gray-500">Đối tượng:</span>
+                {(
+                  [
+                    ["grade6_7", "Lớp 6-7 (dễ hiểu, ẩn dụ)"],
+                    ["grade8_9", "Lớp 8-9 (thực tế, học thuật)"],
+                  ] as [LessonAudience, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() =>
+                      setAiAudience((current) => (current === value ? undefined : value))
+                    }
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                      aiAudience === value
+                        ? "bg-purple-600 text-white"
+                        : "border border-gray-200 bg-white text-gray-600 hover:border-purple-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="w-20 text-xs font-medium text-gray-500">Phong cách:</span>
+                {(
+                  [
+                    ["gamified", "Game hóa"],
+                    ["project", "Học qua dự án"],
+                    ["concise", "Cơ bản, ngắn gọn"],
+                  ] as [LessonTeachingStyle, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() =>
+                      setAiStyle((current) => (current === value ? undefined : value))
+                    }
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                      aiStyle === value
+                        ? "bg-purple-600 text-white"
+                        : "border border-gray-200 bg-white text-gray-600 hover:border-purple-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="mb-6 overflow-hidden rounded-lg border border-gray-300 bg-white">
               <textarea
                 value={aiContent}
                 onChange={(event) => setAiContent(event.target.value)}
+                onPaste={handleAiContentPaste}
                 className="min-h-[420px] w-full resize-y border-0 p-4 text-sm leading-6 text-slate-800 outline-none focus:ring-2 focus:ring-purple-300"
-                placeholder="Dán nội dung sách, giáo án, ghi chú, HTML hoặc code mẫu vào đây. AI sẽ chuyển thành các tab và teaching canvas để bạn kiểm tra trước khi lưu."
+                placeholder="Dán nội dung sách, giáo án, ghi chú, HTML hoặc code mẫu vào đây. Bảng/danh sách/tiêu đề khi dán sẽ tự chuyển thành Markdown để giữ cấu trúc (dùng Ctrl+Shift+V nếu muốn dán text thô). AI sẽ chuyển thành các tab và teaching canvas để bạn kiểm tra trước khi lưu."
               />
               <div className={`flex items-center justify-end gap-2 border-t px-3 py-1.5 text-xs ${
                 aiContent.length > 50_000
@@ -1709,6 +1945,44 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
           onAutoFix={() => void runAutoFixLoop()}
           onCancelAutoFix={cancelAutoFix}
         />
+
+        {/* Banner hoàn tác: hiện khi đã có bản chụp trước lần AI chỉnh sửa gần nhất */}
+        {lessonBackup && !editingLocked && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
+                <i className="fa-solid fa-clock-rotate-left"></i>
+              </span>
+              <p className="leading-6">
+                Có một bản trước lần AI chỉnh sửa gần nhất. Nếu kết quả không ưng ý,
+                bạn có thể khôi phục lại công sức đã soạn.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={restoreLessonBackup}
+              className="shrink-0 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600"
+            >
+              <i className="fa-solid fa-rotate-left mr-1.5"></i> Khôi phục bản trước
+            </button>
+          </div>
+        )}
+
+        {/* Vùng soạn thảo — khoá bằng overlay khi AI đang sửa/tự sửa để không bị ghi đè */}
+        <div className="relative">
+          {editingLocked && (
+            <div
+              className="absolute inset-0 z-20 flex items-start justify-center rounded-2xl bg-white/60 backdrop-blur-[1px] cursor-not-allowed"
+              aria-hidden="true"
+            >
+              <div className="mt-6 flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+                <i className="fa-solid fa-lock"></i>
+                {isAutoFixing
+                  ? "AI đang tự sửa — vùng soạn thảo tạm khoá để tránh mất nội dung."
+                  : "AI đang sửa bản nháp — vui lòng đợi trong giây lát."}
+              </div>
+            </div>
+          )}
 
         {/* Section 1: Basic Info */}
         <div className="card p-6">
@@ -2025,6 +2299,8 @@ export default function LessonEditorForm(props: LessonEditorFormProps) {
             </div>
           )}
         </div>
+        </div>
+        {/* End vùng soạn thảo có thể khoá */}
 
         {/* Actions */}
         <div className="flex items-center justify-between py-4">

@@ -4,6 +4,7 @@ import {
   buildTeachingCanvases,
   type TeachingCanvas,
 } from "@/lib/lessons/teaching-canvas";
+import { findPythonSyntaxIssues, looksLikePython } from "@/lib/python/python-syntax";
 
 // Sentinel chèn vào answer khi repair không tạo được đáp án thật (LLM fail).
 // Reviewer nhận ra marker này để hạ cảnh báo "thiếu đáp án" xuống gợi ý "đang là
@@ -377,6 +378,20 @@ function reviewCanvas(
     });
   }
 
+  if (canvas.code?.trim()) {
+    const syntaxIssues = findPythonSyntaxIssues(canvas.code);
+    if (syntaxIssues.length > 0) {
+      addIssue(issues, {
+        severity: "warning",
+        category: "canvas",
+        target,
+        title: "Code mẫu có thể sai cú pháp",
+        detail: `Học sinh chạy thử sẽ lỗi: ${syntaxIssues.join(" ")}`,
+        suggestion: "Sửa lại code minh họa cho đúng cú pháp Python.",
+      });
+    }
+  }
+
   if (hasRoleHintLeak(totalText)) {
     addIssue(issues, {
       severity: "warning",
@@ -693,6 +708,21 @@ function reviewExercises(
           "Repair đã chèn chỗ giữ tạm (đang ẩn với học sinh) vì AI chưa tạo được đáp án.",
         suggestion: "Giáo viên thay chỗ giữ tạm bằng đáp án Python thật trước khi dạy.",
       });
+    } else if (
+      !exercise.answer.includes(LESSON_ANSWER_DRAFT_MARKER) &&
+      looksLikePython(exercise.answer)
+    ) {
+      const syntaxIssues = findPythonSyntaxIssues(exercise.answer);
+      if (syntaxIssues.length > 0) {
+        addIssue(issues, {
+          severity: "warning",
+          category: "exercise",
+          target,
+          title: "Đáp án Python có thể sai cú pháp",
+          detail: `Học sinh sẽ gặp lỗi khi chạy: ${syntaxIssues.join(" ")}`,
+          suggestion: "Kiểm tra lại đáp án mẫu (chạy thử) trước khi dạy.",
+        });
+      }
     }
   });
 }

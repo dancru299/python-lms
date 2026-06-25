@@ -3,7 +3,11 @@ import { cookies } from "next/headers";
 import { verifySession } from "@/lib/session-token";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
-import { extractReferencedMediaIds } from "@/lib/lessons/lesson-media";
+import {
+  collectMediaIdsFromBlocks,
+  extractReferencedMediaIds,
+} from "@/lib/lessons/lesson-media";
+import { sanitizeLessonMutationHtml } from "@/lib/sanitize-html";
 
 async function verifyTeacher() {
   const cookieStore = await cookies();
@@ -56,7 +60,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const payload = normalizeLessonMutationPayload(await request.json());
+    const payload = sanitizeLessonMutationHtml(
+      normalizeLessonMutationPayload(await request.json())
+    );
 
     if (!payload.chapterId || !payload.title) {
       return NextResponse.json(
@@ -65,17 +71,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const lastLesson = await prisma.lesson.findFirst({
-      where: { chapterId: payload.chapterId },
-      orderBy: { sortOrder: "desc" },
-    });
-    const nextOrder = (lastLesson?.sortOrder ?? -1) + 1;
-
-    const referencedMediaIds = extractReferencedMediaIds(
-      payload.sections.map((section) => section.content)
+    const blockMediaIds = new Set<string>();
+    for (const section of payload.sections) {
+      collectMediaIdsFromBlocks(section.contentBlocks, blockMediaIds);
+    }
+    const referencedMediaIds = Array.from(
+      new Set([
+        ...extractReferencedMediaIds(payload.sections.map((section) => section.content)),
+        ...blockMediaIds,
+      ])
     );
 
     const lesson = await prisma.$transaction(async (tx) => {
+      // Khóa tư vấn (advisory lock) theo chương: hai giáo viên cùng bấm "Tạo bài giảng"
+      // cho cùng chương sẽ KHÔNG còn cùng đọc max sortOrder rồi ghi trùng. Lock giữ tới
+      // hết transaction nên tiến trình sau phải đợi tiến trình trước commit. Tính
+      // sortOrder NẰM TRONG transaction để đảm bảo đúng thứ tự.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payload.chapterId}))`;
+
+      const lastLesson = await tx.lesson.findFirst({
+        where: { chapterId: payload.chapterId },
+        orderBy: { sortOrder: "desc" },
+      });
+      const nextOrder = (lastLesson?.sortOrder ?? -1) + 1;
+
       const createdLesson = await tx.lesson.create({
         data: {
           chapterId: payload.chapterId,

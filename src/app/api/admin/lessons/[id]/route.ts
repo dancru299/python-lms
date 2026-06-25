@@ -3,7 +3,11 @@ import { cookies } from "next/headers";
 import { verifySession } from "@/lib/session-token";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
-import { extractReferencedMediaIds } from "@/lib/lessons/lesson-media";
+import {
+  collectMediaIdsFromBlocks,
+  extractReferencedMediaIds,
+} from "@/lib/lessons/lesson-media";
+import { sanitizeLessonMutationHtml } from "@/lib/sanitize-html";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -64,9 +68,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const payload = normalizeLessonMutationPayload(await request.json());
-    const referencedMediaIds = extractReferencedMediaIds(
-      payload.sections.map((section) => section.content)
+    const payload = sanitizeLessonMutationHtml(
+      normalizeLessonMutationPayload(await request.json())
+    );
+    const blockMediaIds = new Set<string>();
+    for (const section of payload.sections) {
+      collectMediaIdsFromBlocks(section.contentBlocks, blockMediaIds);
+    }
+    const referencedMediaIds = Array.from(
+      new Set([
+        ...extractReferencedMediaIds(payload.sections.map((section) => section.content)),
+        ...blockMediaIds,
+      ])
     );
 
     if (!payload.chapterId || !payload.title) {

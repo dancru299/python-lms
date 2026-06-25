@@ -28,11 +28,18 @@ self.onmessage = async (event) => {
     // Redirect stdout/stderr into a buffer we can read back after execution.
     pyodide.runPython("import sys, io\nsys.stdout = io.StringIO()\nsys.stderr = sys.stdout\n");
 
+    // Chạy code học sinh trong MỘT namespace mới tinh mỗi lần. Worker là singleton
+    // (giữ WASM nặng ~10MB), nhưng nếu dùng chung global namespace thì biến của slide
+    // trước (vd x = 10) còn sót lại, khiến code thiếu khai báo vẫn "chạy đúng ảo" ở
+    // slide sau. Globals riêng cho mỗi lần chạy chặn đứng việc nhiễm độc đó.
+    const globals = pyodide.runPython("dict()");
     let error = null;
     try {
-      await pyodide.runPythonAsync(code ?? "");
+      await pyodide.runPythonAsync(code ?? "", { globals });
     } catch (e) {
       error = e && e.message ? e.message : String(e);
+    } finally {
+      globals.destroy();
     }
 
     const output = pyodide.runPython("sys.stdout.getvalue()");

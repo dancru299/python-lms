@@ -660,7 +660,12 @@ export default function LessonClientPage({
                         <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
                           <i className="fa-solid fa-brain text-blue-500"></i> Kiến thức
                         </h3>
-                        <p className="text-gray-700 ml-7">{lesson.objectiveKnowledge}</p>
+                        <p
+                          className="text-gray-700 ml-7"
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeLessonHtml(lesson.objectiveKnowledge),
+                          }}
+                        />
                       </div>
                     )}
                     {lesson.objectiveSkills && (
@@ -668,7 +673,12 @@ export default function LessonClientPage({
                         <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
                           <i className="fa-solid fa-hands text-green-500"></i> Kỹ năng
                         </h3>
-                        <p className="text-gray-700 ml-7">{lesson.objectiveSkills}</p>
+                        <p
+                          className="text-gray-700 ml-7"
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeLessonHtml(lesson.objectiveSkills),
+                          }}
+                        />
                       </div>
                     )}
                     {lesson.objectiveAttitude && (
@@ -676,7 +686,12 @@ export default function LessonClientPage({
                         <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
                           <i className="fa-solid fa-heart text-red-500"></i> Thái độ
                         </h3>
-                        <p className="text-gray-700 ml-7">{lesson.objectiveAttitude}</p>
+                        <p
+                          className="text-gray-700 ml-7"
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeLessonHtml(lesson.objectiveAttitude),
+                          }}
+                        />
                       </div>
                     )}
                     {!lesson.objectiveKnowledge && !lesson.objectiveSkills && !lesson.objectiveAttitude && (

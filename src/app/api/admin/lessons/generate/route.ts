@@ -3,6 +3,7 @@ import { generateLessonDraft } from "@/lib/ai/lesson-generation";
 import {
   type LessonAiProvider,
   isLessonAiProvider,
+  normalizeLessonGenerationContext,
 } from "@/lib/ai/provider-types";
 import { requireTeacher } from "@/lib/session";
 
@@ -91,7 +92,7 @@ export async function POST(req: Request) {
   try {
     await requireTeacher();
 
-    const { content, provider, model } = await req.json();
+    const { content, provider, model, context } = await req.json();
 
     if (typeof content !== "string" || !content.trim()) {
       return NextResponse.json(
@@ -104,6 +105,7 @@ export async function POST(req: Request) {
       content,
       provider,
       model,
+      context: normalizeLessonGenerationContext(context),
     });
 
     return NextResponse.json({

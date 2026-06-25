@@ -297,6 +297,30 @@ export function extractReferencedMediaIds(htmlValues: string[]): string[] {
   return Array.from(mediaIds);
 }
 
+// Quét trực tiếp JSON contentBlocks để gom mọi `mediaId` (kể cả ảnh trong step_guide
+// hay block ảnh chưa kịp render ra data-media-id). Dùng làm lưới đỡ ở server thay vì
+// chỉ tin vào HTML do client derive — tránh ảnh canvas bị "mồ côi" (lessonId = null).
+export function collectMediaIdsFromBlocks(
+  value: unknown,
+  found: Set<string> = new Set<string>()
+): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMediaIdsFromBlocks(item, found);
+    }
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (key === "mediaId" && typeof child === "string" && child.trim()) {
+        found.add(child.trim());
+      } else {
+        collectMediaIdsFromBlocks(child, found);
+      }
+    }
+  }
+
+  return found;
+}
+
 function clampPercent(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {

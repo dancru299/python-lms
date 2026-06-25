@@ -1,0 +1,10 @@
+Bạn có nghĩ, phần input nên thay text area bằng edit nhỏ không? vì nội dung tôi paste vào nó có format nhưng mà qua area nó bị vỡ, bạn có nghĩ cách đó khi render ra bài giảng sẽ hiệu quả hơn?
+Khi dùng Textarea: Trình duyệt buộc phải vứt bỏ toàn bộ định dạng HTML và chỉ lấy phần chữ thô (Plain Text). Kết quả là:
+Các bảng biểu (tables) bị san phẳng thành các hàng chữ méo mó, mất cột, mất dòng.
+Các danh sách thụt đầu dòng (bullet points) bị biến thành các ký tự cách khoảng trắng hỗn độn.
+Các phần chữ in đậm, in nghiêng dùng để nhấn mạnh khái niệm bị biến mất.
+Khi dùng Rich Text Editor: Editor sẽ bảo toàn nguyên vẹn cấu trúc HTML từ clipboard. Khi bạn paste vào:
+Bảng biểu vẫn giữ nguyên cấu trúc <table>, <tr>, <td>.
+Danh sách vẫn là các thẻ <ul>, <li> chuẩn chỉnh.
+Các tiêu đề vẫn giữ nguyên thẻ <h2>, <h3> để phân định cấp bậc nội dung.
+Có thể dùng tiptap hoặc Quill Editor

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateSectionCanvas } from "@/lib/ai/lesson-generation";
 import { buildAiErrorResponse } from "@/lib/ai/ai-error";
+import { normalizeLessonGenerationContext } from "@/lib/ai/provider-types";
 import { requireTeacher } from "@/lib/session";
 
 // One tab → canvas is a small, bounded call; stay within the Vercel Hobby cap.
@@ -13,8 +14,17 @@ export async function POST(req: Request) {
   try {
     await requireTeacher();
 
-    const { title, content, lessonTitle, isFirst, layoutHints, roleHint, provider, model } =
-      await req.json();
+    const {
+      title,
+      content,
+      lessonTitle,
+      isFirst,
+      layoutHints,
+      roleHint,
+      provider,
+      model,
+      context,
+    } = await req.json();
 
     if (typeof content !== "string" || !content.trim()) {
       return NextResponse.json(
@@ -34,6 +44,7 @@ export async function POST(req: Request) {
       roleHint: typeof roleHint === "string" ? roleHint : undefined,
       provider,
       model,
+      context: normalizeLessonGenerationContext(context),
     });
 
     return NextResponse.json({ contentBlocks, meta });

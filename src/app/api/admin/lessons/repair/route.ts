@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parse as parseHtml, type HTMLElement } from "node-html-parser";
 import {
   generateAiJsonObject,
   generateLessonObjectives,
@@ -48,17 +49,27 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+// Bóc text bằng HTML parser thật, không dùng regex /<[^>]+>/. Một tokenizer HTML
+// đúng chuẩn coi "a < b" là text (vì "< " không mở thẻ), nên không nuốt mất các phép
+// so sánh toán học < > trong code Python — điều regex cũ làm sai.
 function stripHtml(value: string): string {
-  return value
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+  if (!value) return "";
+  const root = parseHtml(value);
+  root.querySelectorAll("script, style").forEach((node) => node.remove());
+  return root.text
+    .replace(/ /g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// true nếu node có tổ tiên là <li> — để bỏ qua các <li> lồng nhau khi tách bước.
+function hasAncestorLi(node: HTMLElement): boolean {
+  let parent = node.parentNode as HTMLElement | null;
+  while (parent) {
+    if (parent.rawTagName?.toLowerCase() === "li") return true;
+    parent = parent.parentNode as HTMLElement | null;
+  }
+  return false;
 }
 
 function escapeHtml(value: string): string {
@@ -75,14 +86,16 @@ function compact(value: string, max = 1200): string {
   return text.length > max ? `${text.slice(0, max).trim()}...` : text;
 }
 
+// Tách từng <li> thành một bước bằng DOM thật. Bỏ qua <li> lồng nhau (nội dung của
+// chúng đã nằm trong <li> cha) nên không đếm trùng/thiếu như regex non-greedy cũ.
 function extractListSteps(html: string) {
   const steps: { id: string; text: string; html: string }[] = [];
-  const pattern = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
-  let match: RegExpExecArray | null;
+  const root = parseHtml(html);
   let index = 0;
 
-  while ((match = pattern.exec(html))) {
-    const itemHtml = match[1].trim();
+  for (const li of root.querySelectorAll("li")) {
+    if (hasAncestorLi(li)) continue;
+    const itemHtml = li.innerHTML.trim();
     const text = stripHtml(itemHtml);
     if (!text) continue;
     index += 1;
@@ -96,14 +109,19 @@ function extractListSteps(html: string) {
   return steps;
 }
 
+// Gỡ toàn bộ khối danh sách bằng parser (xử lý đúng list lồng nhau, khác regex cũ).
 function removeListHtml(html: string) {
-  return html.replace(/<(ul|ol)\b[\s\S]*?<\/\1>/gi, "").trim();
+  const root = parseHtml(html);
+  root.querySelectorAll("ul, ol").forEach((node) => node.remove());
+  return root.toString().trim();
 }
 
 function sentenceStepsFromHtml(html: string) {
   const text = stripHtml(html);
   return text
-    .split(/(?<=[.!?。])\s+|\n+|(?:\s+-\s+)/)
+    // Chỉ coi "." là hết câu khi sau khoảng trắng là chữ HOA/số/dấu mở ngoặc — nhờ
+    // vậy "os.path giúp...", "hs. làm bài" (tiếp tục bằng chữ thường) không bị chặt đôi.
+    .split(/(?<=[.!?。])\s+(?=[\p{Lu}0-9"'(])|\n+|(?:\s+-\s+)/u)
     .map((item) => item.trim())
     .filter((item) => item.length >= 18)
     .slice(0, 4)

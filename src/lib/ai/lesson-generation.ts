@@ -5,6 +5,7 @@ import {
   type LessonAiClientConfig,
   type LessonAiProvider,
   type LessonAiProviderOption,
+  type LessonGenerationContext,
   isLessonAiProvider,
 } from "@/lib/ai/provider-types";
 import {
@@ -389,6 +390,57 @@ function resolveLessonGenerationSelection(
   };
 }
 
+// Bảng thuật ngữ chuẩn ép AI dịch nhất quán, tránh kiểu "Hiểu danh sách" cho List
+// Comprehension. Dùng chung cho cả luồng full-AI và canvas.
+const PYTHON_GLOSSARY: ReadonlyArray<readonly [string, string]> = [
+  ["List Comprehension", 'giữ nguyên "List Comprehension" (chú thích: cú pháp tạo list nhanh)'],
+  ["Tuple", 'giữ nguyên "tuple"'],
+  ["Dictionary", 'giữ "dictionary" (hoặc "từ điển")'],
+  ["Boolean", 'giữ "boolean"'],
+  ["String", '"chuỗi"'],
+  ["Integer", '"số nguyên"'],
+  ["Loop", '"vòng lặp"'],
+  ["Indentation", '"thụt lề"'],
+  ["Variable", '"biến"'],
+  ["Function", '"hàm"'],
+];
+
+// Ràng buộc soạn bài dùng chung: quy chuẩn code (PEP8 snake_case, không tên biến
+// tiếng Việt), glossary thuật ngữ, và ngữ cảnh đối tượng/phong cách (nếu có).
+function buildAuthoringConstraints(context?: LessonGenerationContext): string[] {
+  const lines: string[] = [
+    "Quy chuẩn code & thuật ngữ (BẮT BUỘC):",
+    "- Tên biến/hàm trong code: snake_case TIẾNG ANH (PEP8). TUYỆT ĐỐI KHÔNG đặt tên biến bằng tiếng Việt có dấu hoặc có dấu cách (KHÔNG dùng 'tên_học_sinh' hay 'ten hoc sinh' — dùng 'student_name').",
+    "- KHÔNG dịch máy móc thuật ngữ lập trình thành tiếng Việt tối nghĩa. Bảng thuật ngữ chuẩn:",
+    ...PYTHON_GLOSSARY.map(([en, vi]) => `  • ${en} → ${vi}`),
+    "- Thuật ngữ chưa có trong bảng: giữ nguyên tiếng Anh, chú thích ngắn tiếng Việt trong ngoặc ở lần đầu xuất hiện.",
+  ];
+
+  if (context?.audience === "grade6_7") {
+    lines.push(
+      "- Đối tượng: học sinh lớp 6-7. Câu ngắn, ví dụ đời thường, ẩn dụ dễ hình dung, giọng gần gũi."
+    );
+  } else if (context?.audience === "grade8_9") {
+    lines.push(
+      "- Đối tượng: học sinh lớp 8-9. Trình bày thực tế, học thuật vừa phải, ví dụ sát ứng dụng."
+    );
+  }
+
+  if (context?.style === "gamified") {
+    lines.push(
+      "- Phong cách: game hóa — khung truyện/nhiệm vụ, thử thách nhỏ, tạo hứng thú khám phá."
+    );
+  } else if (context?.style === "project") {
+    lines.push(
+      "- Phong cách: học qua dự án — gắn các khái niệm vào một sản phẩm nhỏ xuyên suốt bài."
+    );
+  } else if (context?.style === "concise") {
+    lines.push("- Phong cách: cơ bản, ngắn gọn — đi thẳng trọng tâm, ít rườm rà.");
+  }
+
+  return lines;
+}
+
 function buildSystemPrompt(): string {
   return [
     "You are a senior instructional designer and Python teacher.",
@@ -399,8 +451,10 @@ function buildSystemPrompt(): string {
   ].join("\n");
 }
 
-function buildUserPrompt(content: string): string {
+function buildUserPrompt(content: string, context?: LessonGenerationContext): string {
   return [
+    ...buildAuthoringConstraints(context),
+    "",
     "Return JSON with exactly this shape:",
     `{
   "title": "string — Vietnamese lesson title",
@@ -680,10 +734,58 @@ function shouldRetryWithGeminiFallback(
   );
 }
 
+// Per-call timeout mặc định khi không có deadline chung (vd luồng repair gọi
+// objectives riêng lẻ). Nâng AI_REQUEST_TIMEOUT_MS trên gói có maxDuration cao hơn.
+const DEFAULT_AI_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 55_000;
+
+// Tổng ngân sách cho MỘT lần gọi serverless. maxDuration=60s trên Vercel Hobby; chừa
+// ~3s để serialize/response nên đặt 57s. Hai pass (draft + objectives) phải nằm gọn
+// trong ngân sách này thay vì mỗi pass tự lấy full 55s rồi cộng dồn vượt 60s → 504.
+const LESSON_REQUEST_BUDGET_MS = Number(process.env.AI_REQUEST_BUDGET_MS) || 57_000;
+
+// Timeout còn lại cho một call dựa trên deadline chung. Có sàn 5s để không hủy ngay
+// lập tức khi ngân sách đã cạn (call sẽ tự fail nhanh và sạch).
+function resolveCallTimeoutMs(deadline?: number): number {
+  if (!deadline) return DEFAULT_AI_TIMEOUT_MS;
+  const remaining = deadline - Date.now();
+  return Math.max(5_000, Math.min(DEFAULT_AI_TIMEOUT_MS, remaining));
+}
+
+// Bọc một promise không hỗ trợ AbortSignal (vd Gemini SDK) bằng deadline để trả lỗi
+// sạch trước khi Vercel cắt hàm. Promise.race không hủy được request ngầm nhưng đủ
+// để ta thoát đúng hạn thay vì nhận 504 mờ mịt.
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  provider: LessonAiProvider
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(
+        new ProviderRequestError(
+          `Provider "${provider}" không phản hồi trong thời gian cho phép (${Math.round(
+            timeoutMs / 1000
+          )} giây).`,
+          504,
+          provider
+        )
+      );
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 async function requestGemini(
   selection: LessonGenerationSelection,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  deadline?: number
 ): Promise<ModelTextResult> {
   try {
     const genAI = new GoogleGenerativeAI(selection.apiKey);
@@ -697,7 +799,11 @@ async function requestGemini(
       },
     });
 
-    const result = await model.generateContent(userPrompt);
+    const result = await withTimeout(
+      model.generateContent(userPrompt),
+      resolveCallTimeoutMs(deadline),
+      selection.provider
+    );
 
     return {
       model: selection.model,
@@ -711,7 +817,8 @@ async function requestGemini(
 async function generateWithGemini(
   selection: LessonGenerationSelection,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  deadline?: number
 ): Promise<ModelTextResult> {
   const modelsToTry = [
     selection.model,
@@ -728,7 +835,8 @@ async function generateWithGemini(
           model: modelName,
         },
         systemPrompt,
-        userPrompt
+        userPrompt,
+        deadline
       );
     } catch (error) {
       const providerError = toProviderRequestError(error, selection.provider);
@@ -820,7 +928,8 @@ async function requestOpenAiCompatible(
   selection: LessonGenerationSelection,
   systemPrompt: string,
   userPrompt: string,
-  useJsonMode: boolean
+  useJsonMode: boolean,
+  deadline?: number
 ): Promise<ModelTextResult> {
   if (!selection.baseUrl) {
     throw new ProviderRequestError(
@@ -845,9 +954,9 @@ async function requestOpenAiCompatible(
   }
 
   // Abort the upstream call before the Vercel function timeout (60s on Hobby) so we
-  // can return a clean error instead of an opaque 504. Raise AI_REQUEST_TIMEOUT_MS on
-  // a plan with a higher maxDuration (e.g. Pro allows up to 300s).
-  const timeoutMs = Number(process.env.AI_REQUEST_TIMEOUT_MS) || 55_000;
+  // can return a clean error instead of an opaque 504. Khi có deadline chung (two-pass),
+  // call này chỉ lấy phần ngân sách còn lại để tổng không vượt 60s.
+  const timeoutMs = resolveCallTimeoutMs(deadline);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -921,18 +1030,26 @@ async function requestOpenAiCompatible(
 async function generateWithOpenAiCompatible(
   selection: LessonGenerationSelection,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  deadline?: number
 ): Promise<ModelTextResult> {
   try {
     return await requestOpenAiCompatible(
       selection,
       systemPrompt,
       userPrompt,
-      true
+      true,
+      deadline
     );
   } catch (error) {
     if (error instanceof ProviderRequestError && error.status === 400) {
-      return requestOpenAiCompatible(selection, systemPrompt, userPrompt, false);
+      return requestOpenAiCompatible(
+        selection,
+        systemPrompt,
+        userPrompt,
+        false,
+        deadline
+      );
     }
 
     throw error;
@@ -944,19 +1061,22 @@ async function requestLessonObjectives(
   options: {
     title?: string;
     content: string;
-  }
+  },
+  deadline?: number
 ): Promise<{ objectives: LessonObjectivesDraft; model: string }> {
   const rawResult =
     PROVIDERS[selection.provider].kind === "gemini"
       ? await generateWithGemini(
           selection,
           buildObjectivesSystemPrompt(),
-          buildObjectivesUserPrompt(options)
+          buildObjectivesUserPrompt(options),
+          deadline
         )
       : await generateWithOpenAiCompatible(
           selection,
           buildObjectivesSystemPrompt(),
-          buildObjectivesUserPrompt(options)
+          buildObjectivesUserPrompt(options),
+          deadline
         );
 
   const objectives = normalizeGeneratedObjectives(parseJsonObject(rawResult.text));
@@ -978,22 +1098,28 @@ export async function generateLessonDraft(options: {
   content: string;
   provider?: string;
   model?: string;
+  context?: LessonGenerationContext;
 }): Promise<LessonGenerationResult> {
   const selection = resolveLessonGenerationSelection(
     options.provider,
     options.model
   );
   const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt(options.content);
+  const userPrompt = buildUserPrompt(options.content, options.context);
+
+  // Deadline chung cho cả hai pass (draft + objectives) trong cùng một request
+  // serverless, để tổng thời gian không vượt maxDuration của Vercel.
+  const deadline = Date.now() + LESSON_REQUEST_BUDGET_MS;
 
   try {
     const rawResult =
       PROVIDERS[selection.provider].kind === "gemini"
-        ? await generateWithGemini(selection, systemPrompt, userPrompt)
+        ? await generateWithGemini(selection, systemPrompt, userPrompt, deadline)
         : await generateWithOpenAiCompatible(
             selection,
             systemPrompt,
-            userPrompt
+            userPrompt,
+            deadline
           );
 
     const parsed = parseJsonObject(rawResult.text);
@@ -1016,17 +1142,31 @@ export async function generateLessonDraft(options: {
     };
 
     if (hasMissingObjectives(draft.objectives)) {
-      const objectiveResult = await requestLessonObjectives(selection, {
-        title: draft.title,
-        content: options.content,
-      });
-      draft = {
-        ...draft,
-        objectives: mergeMissingObjectives(
-          draft.objectives,
-          objectiveResult.objectives
-        ),
-      };
+      // Best-effort: pass 2 chỉ dùng phần ngân sách CÒN LẠI. Nếu nó timeout/lỗi (vd
+      // pass 1 đã ăn gần hết budget), vẫn trả về draft đã có thay vì làm hỏng cả lượt
+      // sinh bài — giáo viên tự bổ sung mục tiêu còn thiếu. Tránh 504 do cộng dồn.
+      try {
+        const objectiveResult = await requestLessonObjectives(
+          selection,
+          {
+            title: draft.title,
+            content: options.content,
+          },
+          deadline
+        );
+        draft = {
+          ...draft,
+          objectives: mergeMissingObjectives(
+            draft.objectives,
+            objectiveResult.objectives
+          ),
+        };
+      } catch (objectiveError) {
+        console.warn(
+          "Objective enrichment pass skipped (giữ draft chính):",
+          objectiveError
+        );
+      }
     }
 
     return {
@@ -1086,12 +1226,15 @@ function buildSectionCanvasUserPrompt(options: {
   lessonTitle?: string;
   isFirst?: boolean;
   layoutHints?: string[];
+  context?: LessonGenerationContext;
 }): string {
-  const { title, content, lessonTitle, isFirst, layoutHints } = options;
+  const { title, content, lessonTitle, isFirst, layoutHints, context } = options;
 
   return [
     `You are given ONE lesson tab titled "${title}". Convert ONLY this tab into teaching-canvas slides.`,
     "Do NOT create extra tabs, do NOT merge in unrelated ideas, do NOT drop any code block or example from the source.",
+    ...buildAuthoringConstraints(context),
+    "",
     "Return JSON with exactly this shape:",
     `{
   "contentBlocks": [
@@ -1202,6 +1345,7 @@ export async function generateSectionCanvas(options: {
   roleHint?: string;
   provider?: string;
   model?: string;
+  context?: LessonGenerationContext;
 }): Promise<{
   contentBlocks: unknown[];
   meta: { provider: LessonAiProvider; model: string };
@@ -1217,6 +1361,7 @@ export async function generateSectionCanvas(options: {
     lessonTitle: options.lessonTitle,
     isFirst: options.isFirst,
     layoutHints: options.layoutHints,
+    context: options.context,
   });
 
   try {

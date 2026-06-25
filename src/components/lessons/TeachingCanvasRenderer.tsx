@@ -357,7 +357,7 @@ export default function TeachingCanvasRenderer({
         }
 
         .teaching-canvas .lesson-content ul {
-          list-style-type: disc;
+          list-style: none;
           padding-left: 1.75rem;
           margin: 0.65rem 0 1.25rem 0;
         }
@@ -373,6 +373,26 @@ export default function TeachingCanvasRenderer({
           font-size: 1.125rem;
           line-height: 1.65;
           color: #334155;
+        }
+
+        /* Bullet xanh "tự thân" cho canvas: list-style:none + MỘT chấm ::before. Tránh
+           "double bullet" khi trang học sinh cũng thêm ::before (specificity của canvas
+           cao hơn nên thắng → chỉ còn 1 chấm), đồng thời vẫn có bullet ở xem trước trong
+           trình soạn — nơi không nạp CSS của trang học sinh. */
+        .teaching-canvas .lesson-content ul > li {
+          position: relative;
+          padding-left: 1.6rem;
+        }
+
+        .teaching-canvas .lesson-content ul > li::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0.7em;
+          width: 7px;
+          height: 7px;
+          background: #3b82f6;
+          border-radius: 50%;
         }
 
         .teaching-canvas .lesson-content li:last-child {
@@ -1957,11 +1977,19 @@ interface SlideProps {
   hasSteps: boolean;
 }
 
-/* Shrinks its content to fit the available box so nothing is ever clipped. */
+// Không thu nhỏ chữ xuống dưới mức này — dưới ngưỡng ~2/3 chữ trở nên khó đọc. Khi
+// nội dung dài tới mức cần nhỏ hơn sàn, ta GIỮ ở sàn và cho khung cuộn dọc thay vì
+// ép chữ li ti (đọc không nổi) hoặc cắt cụt nội dung phía dưới.
+const AUTOFIT_MIN_SCALE = 0.66;
+
+/* Shrinks content to fit the box; never below AUTOFIT_MIN_SCALE (scrolls instead). */
 function AutoFit({ children }: { children: ReactNode }) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
+  const [fit, setFit] = useState<{ scale: number; overflowing: boolean }>({
+    scale: 1,
+    overflowing: false,
+  });
 
   useLayoutEffect(() => {
     const outer = outerRef.current;
@@ -1974,8 +2002,14 @@ function AutoFit({ children }: { children: ReactNode }) {
       const needH = inner.offsetHeight;
       const needW = inner.offsetWidth;
       if (availH <= 0 || availW <= 0 || needH <= 0 || needW <= 0) return;
-      const next = Math.min(1, availH / needH, availW / needW);
-      setScale((prev) => (Math.abs(prev - next) > 0.004 ? next : prev));
+      const ideal = Math.min(1, availH / needH, availW / needW);
+      const scale = Math.max(AUTOFIT_MIN_SCALE, ideal);
+      const overflowing = ideal < AUTOFIT_MIN_SCALE;
+      setFit((prev) =>
+        Math.abs(prev.scale - scale) > 0.004 || prev.overflowing !== overflowing
+          ? { scale, overflowing }
+          : prev
+      );
     };
 
     measure();
@@ -1986,11 +2020,16 @@ function AutoFit({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div ref={outerRef} className="canvas-autofit">
+    <div
+      ref={outerRef}
+      className="canvas-autofit"
+      // Chạm sàn co chữ → cho cuộn dọc để không cắt mất nội dung (mặc định overflow ẩn).
+      style={fit.overflowing ? { overflowY: "auto" } : undefined}
+    >
       <div
         ref={innerRef}
         className="canvas-autofit-inner"
-        style={{ transform: scale < 1 ? `scale(${scale})` : undefined }}
+        style={{ transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined }}
       >
         {children}
       </div>
@@ -2089,8 +2128,16 @@ function CardsSlide({ canvas, visibleSteps }: SlideProps) {
                     <i className={`fa-solid ${card.icon}`}></i>
                   </span>
                 )}
-                <h4 className="canvas-card-title">{card.title}</h4>
-                <p className="canvas-card-desc">{card.description}</p>
+                <h4
+                  className="canvas-card-title"
+                  dangerouslySetInnerHTML={{ __html: renderInlineLessonHtml(card.title || "") }}
+                />
+                <p
+                  className="canvas-card-desc"
+                  dangerouslySetInnerHTML={{
+                    __html: renderInlineLessonHtml(card.description || ""),
+                  }}
+                />
               </div>
             ))}
           </div>
@@ -2195,8 +2242,16 @@ function CompareSlide({ canvas, media, visibleSteps }: SlideProps) {
                 <i className={`fa-solid ${left.icon}`}></i>
               </span>
             )}
-            <h4 className="canvas-compare-title">{left.title}</h4>
-            <p className="canvas-compare-desc">{left.description}</p>
+            <h4
+              className="canvas-compare-title"
+              dangerouslySetInnerHTML={{ __html: renderInlineLessonHtml(left.title || "") }}
+            />
+            <p
+              className="canvas-compare-desc"
+              dangerouslySetInnerHTML={{
+                __html: renderInlineLessonHtml(left.description || ""),
+              }}
+            />
           </div>
           <span
             className={`canvas-compare-vs${shown >= 2 ? "" : " is-hidden"}${shown === 2 ? " canvas-reveal-new" : ""}`}
@@ -2210,8 +2265,16 @@ function CompareSlide({ canvas, media, visibleSteps }: SlideProps) {
                   <i className={`fa-solid ${right.icon}`}></i>
                 </span>
               )}
-              <h4 className="canvas-compare-title">{right.title}</h4>
-              <p className="canvas-compare-desc">{right.description}</p>
+              <h4
+                className="canvas-compare-title"
+                dangerouslySetInnerHTML={{ __html: renderInlineLessonHtml(right.title || "") }}
+              />
+              <p
+                className="canvas-compare-desc"
+                dangerouslySetInnerHTML={{
+                  __html: renderInlineLessonHtml(right.description || ""),
+                }}
+              />
             </div>
           ) : (
             <div className="canvas-compare-side canvas-compare-placeholder" aria-hidden="true" />
@@ -2550,7 +2613,10 @@ function QuizSlide({ canvas }: SlideProps) {
                 className={`canvas-quiz-option ${state}`}
               >
                 <span className="canvas-quiz-mark">{String.fromCharCode(65 + i)}</span>
-                <span className="canvas-quiz-label">{opt.title}</span>
+                <span
+                  className="canvas-quiz-label"
+                  dangerouslySetInnerHTML={{ __html: renderInlineLessonHtml(opt.title || "") }}
+                />
                 {answered && isCorrect && <i className="fa-solid fa-circle-check"></i>}
                 {answered && !isCorrect && i === picked && (
                   <i className="fa-solid fa-circle-xmark"></i>
