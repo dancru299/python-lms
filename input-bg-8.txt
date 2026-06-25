@@ -1,0 +1,335 @@
+[SLIDE CHÍNH]: BUỔI 8: BÀI KIỂM TRA ĐỊNH KỲ CHƯƠNG 1 & 2 (45 PHÚT)
+
+[SLIDE/TAB 1: KHỞI ĐỘNG & MỤC TIÊU]
+Vai trò gợi ý: hero
+
+Tình huống dẫn dắt
+Các bạn đã đi qua 7 buổi học đầu tiên, làm quen với Biến, Toán tử và làm chủ được các câu lệnh rẽ nhánh if - elif - else. Hôm nay là lúc gập lại tài liệu, đối mặt với bài kiểm tra định kỳ để xem tư duy logic của bạn đã đạt đến cấp độ nào!
+
+Quy chế thi
+
+Bài thi kéo dài đúng 45 phút.
+
+Gồm 2 phần: Trắc nghiệm (làm ra giấy) và Thực hành (gõ code trên máy).
+
+Không sử dụng tài liệu hay copy code của bạn bên cạnh.
+
+Mục tiêu bài học
+
+Kiến thức: Đánh giá khả năng ghi nhớ cú pháp và hiểu luồng hoạt động của Python.
+
+Kỹ năng: Luyện phản xạ chia nhỏ bài toán phức tạp và bẫy lỗi (bug) trong thời gian giới hạn.
+
+Thái độ: Nghiêm túc, trung thực và tập trung cao độ.
+
+Sẵn sàng chưa?
+Hít một hơi thật sâu, mở trình soạn thảo code lên và chúng ta bắt đầu tính giờ!
+
+[SLIDE/TAB 2: ĐỀ THI - PHẦN 1: TRẮC NGHIỆM TƯ DUY]
+Vai trò gợi ý: quiz
+
+Thời gian khuyến nghị: 10 phút
+Học sinh đọc kỹ đề và ghi đáp án (A, B, C hoặc D) ra giấy.
+
+Câu 1: Phép toán 15 // 4 + 15 % 4 sẽ cho ra kết quả là bao nhiêu?
+
+A. 3
+
+B. 6
+
+C. 7
+
+D. 3.75
+
+Câu 2: Biểu thức logic nào dưới đây trả về kết quả True nếu biến tuoi = 15?
+
+A. tuoi > 18 and tuoi < 20
+
+B. tuoi == 15 or tuoi > 20
+
+C. not (tuoi == 15)
+
+D. tuoi != 15 and tuoi < 18
+
+Câu 3: Lỗi "IndentationError" trong Python thường xảy ra khi nào?
+
+A. Viết sai tên lệnh (ví dụ: pritn).
+
+B. Quên thụt lề (Tab) các dòng code bên trong lệnh if hoặc else.
+
+C. Quên dấu ngoặc kép khi in chuỗi.
+
+D. Chia một số cho 0.
+
+Câu 4: Để kiểm tra xem biến diem có nằm trong khoảng từ 5 đến 10 (bao gồm cả 5 và 10) hay không, ta viết thế nào?
+
+A. if diem >= 5 or diem <= 10:
+
+B. if 5 < diem < 10:
+
+C. if diem >= 5 and diem <= 10:
+
+D. if diem => 5 and diem <= 10:
+
+[SLIDE/TAB 3: ĐỀ THI - PHẦN 2: THỰC HÀNH LẬP TRÌNH]
+Vai trò gợi ý: statement
+
+Thời gian khuyến nghị: 35 phút
+Học sinh tạo file Python mới cho mỗi bài và gõ code giải quyết.
+
+Bài 1: Rạp chiếu phim (3 Điểm)
+
+Đề bài: Giá vé xem phim là 50.000đ/vé. Yêu cầu người dùng nhập vào số lượng vé muốn mua. Nếu mua từ 5 vé trở lên, khách hàng được giảm giá 10% TỔNG hóa đơn. Tính và in ra số tiền khách phải trả.
+
+Bài 2: Oẳn Tù Tì (3 Điểm)
+
+Đề bài: Yêu cầu người chơi 1 và người chơi 2 lần lượt nhập vào lựa chọn của mình ("Kéo", "Búa", hoặc "Bao"). Viết chương trình xác định kết quả: "Người 1 thắng", "Người 2 thắng", hoặc "Hòa". (Gợi ý: Dùng if - elif - else và toán tử and để liệt kê các trường hợp thắng của Người 1).
+
+Bài 3: Phí Giao Hàng (4 Điểm)
+
+Đề bài: Nhập vào khoảng cách giao hàng (km) và giá trị đơn hàng (VNĐ). Tính phí giao hàng theo quy tắc sau:
+
+Khoảng cách <= 2 km: Phí 15.000đ.
+
+Khoảng cách từ 2 km đến dưới 5 km: Phí 25.000đ.
+
+Khoảng cách >= 5 km: Phí cơ bản 25.000đ + 5.000đ cho mỗi km vượt quá mốc 5km.
+
+ĐẶC BIỆT: Nếu giá trị đơn hàng >= 300.000đ, miễn phí giao hàng (Phí = 0) bất kể khoảng cách.
+
+[SLIDE/TAB 4: CHỮA BÀI - ĐÁP ÁN THỰC HÀNH NÂNG CAO]
+Vai trò gợi ý: code_explain
+
+Chữa Bài 3: Phí Giao Hàng (4 Điểm)
+Đây là bài toán chia bậc kết hợp với điều kiện ưu tiên (đơn trên 300k). Cách làm tốt nhất là xét điều kiện ưu tiên trước!
+
+Python
+khoang_cach = float(input("Nhập khoảng cách (km): "))
+gia_tri_don = int(input("Nhập giá trị đơn hàng (VNĐ): "))
+
+# Xét điều kiện ưu tiên trước tiên
+if gia_tri_don >= 300000:
+    phi = 0
+# Bắt đầu chia bậc khoảng cách nếu không được miễn phí
+elif khoang_cach <= 2:
+    phi = 15000
+elif khoang_cach < 5:
+    phi = 25000
+else:
+    # Lấy 25000 cộng với phần km vượt quá 5
+    phi = 25000 + (khoang_cach - 5) * 5000
+
+print("Phí giao hàng của bạn là:", phi)
+Output:
+
+Plaintext
+Nhập khoảng cách (km): 7.5
+Nhập giá trị đơn hàng (VNĐ): 150000
+Phí giao hàng của bạn là: 37500.0
+Giải thích từng dòng:
+
+Dòng 1-2: Nhập dữ liệu, ép kiểu float cho khoảng cách và int cho giá trị đơn.
+
+Dòng 5: Lệnh if kiểm tra ngay xem đơn có lớn hơn 300k không. Nếu đúng, gắn phí = 0 và BỎ QUA toàn bộ tính toán bên dưới.
+
+Dòng 8-11: Nếu đơn < 300k, máy tính mới kiểm tra tiếp các bậc khoảng cách.
+
+Dòng 13: Công thức tính bậc cuối. Lấy tổng km trừ đi 5 để ra số km vượt mức, rồi nhân với 5000.
+
+[SLIDE/TAB 5: CHỮA BÀI - ĐÁP ÁN OẲN TÙ TÌ & TRẮC NGHIỆM]
+Vai trò gợi ý: highlight
+
+Chữa nhanh Phần 1: Trắc nghiệm
+
+Câu 1: B (15 // 4 = 3. 15 % 4 = 3. Tổng là 6).
+
+Câu 2: B (Vì tuoi == 15 là Đúng, or chỉ cần 1 vế Đúng là ra Đúng).
+
+Câu 3: B (Lỗi thụt lề Tab rất hay gặp khi học bài if-else).
+
+Câu 4: C (Dùng and để kẹp chặt hai đầu >= 5 và <= 10).
+
+Hướng dẫn logic Bài 2: Oẳn Tù Tì
+Không cần phải viết tất cả 9 trường hợp! Hãy tư duy gộp:
+
+Trường hợp 1: Nhập giống nhau -> Hòa.
+
+Trường hợp 2: Các ngã rẽ để Người 1 thắng.
+
+Kéo thắng Bao or Búa thắng Kéo or Bao thắng Búa.
+
+Trường hợp 3 (Ngược lại): Người 2 thắng.
+
+[SLIDE/TAB 6: TỔNG KẾT]
+Vai trò gợi ý: checklist
+
+Nhìn lại bài kiểm tra hôm nay
+
+Lỗi sai phổ biến 1: Quên ép kiểu dữ liệu khi dùng input() dẫn đến bị lỗi khi tính toán. (Lỗi TypeError).
+
+Lỗi sai phổ biến 2: Ở Bài 3, nhiều bạn áp dụng công thức tính thẳng khoang_cach * 5000 ở bậc cuối mà quên mất quy tắc tính bậc thang (phải trừ đi phần km đã được tính giá cố định ở bậc trước).
+
+Kinh nghiệm rút ra: Khi gặp bài có điều kiện "Ghi đè" (Như miễn phí giao hàng), hãy cho điều kiện đó lên dòng if đầu tiên để hệ thống kiểm tra và loại trừ sớm nhất.
+
+[SLIDE/TAB 7: LUYỆN TẬP]
+Vai trò gợi ý: checklist
+
+Bài 1: Mua vé tàu (Độ khó: Dễ)
+
+Mục tiêu: Luyện tập if - else.
+
+Đề bài: Trẻ em dưới 6 tuổi được miễn vé tàu. Yêu cầu nhập tuổi của hành khách. Nếu tuổi < 6, in ra "Miễn phí vé". Ngược lại in "Giá vé: 100.000đ".
+
+Đáp án mẫu:
+
+Python
+tuoi = int(input("Nhập tuổi: "))
+if tuoi < 6:
+    print("Miễn phí vé")
+else:
+    print("Giá vé: 100.000đ")
+Bài 2: Tính chu vi hoặc diện tích (Độ khó: Trung bình)
+
+Mục tiêu: Rẽ nhánh dựa trên chuỗi nhập vào.
+
+Đề bài: Nhập vào cạnh của một hình vuông. Sau đó yêu cầu nhập phép tính muốn làm: "Chu vi" hoặc "Diện tích". Tính và in ra kết quả tương ứng.
+
+Gợi ý: Chu vi = cạnh * 4, Diện tích = cạnh * cạnh.
+
+Đáp án mẫu:
+
+Python
+canh = float(input("Nhập cạnh hình vuông: "))
+lua_chon = input("Bạn muốn tính Chu vi hay Diện tích?: ")
+
+if lua_chon == "Chu vi":
+    print("Kết quả:", canh * 4)
+elif lua_chon == "Diện tích":
+    print("Kết quả:", canh * canh)
+else:
+    print("Lựa chọn không hợp lệ")
+Bài 3: Hệ thống đăng nhập (Độ khó: Trung bình)
+
+Mục tiêu: Kết hợp and.
+
+Đề bài: Tài khoản là "admin", mật khẩu là "12345". Nhập vào tài khoản và mật khẩu. Nếu khớp cả 2 in "Đăng nhập thành công", ngược lại in "Sai thông tin".
+
+Đáp án mẫu:
+
+Python
+tk = input("Nhập tài khoản: ")
+mk = input("Nhập mật khẩu: ")
+
+if tk == "admin" and mk == "12345":
+    print("Đăng nhập thành công")
+else:
+    print("Sai thông tin")
+Bài 4: Chữa lại code rạp phim (Độ khó: Khó)
+
+Mục tiêu: Viết lại code giải Bài 1 trong đề thi.
+
+Đề bài: Giá 50k/vé. Mua >= 5 vé giảm 10%. Tính tổng tiền.
+
+Đáp án mẫu:
+
+Python
+so_ve = int(input("Nhập số vé: "))
+tien = so_ve * 50000
+
+if so_ve >= 5:
+    tien = tien - (tien * 10 / 100)
+
+print("Số tiền phải trả:", tien)
+Bài 5: Chữa lại code Oẳn Tù Tì (Độ khó: Khó)
+
+Mục tiêu: Viết lại code giải Bài 2 trong đề thi.
+
+Đề bài: Nhập lựa chọn người 1, người 2. In ra ai thắng.
+
+Đáp án mẫu:
+
+Python
+p1 = input("Người 1 ra gì (Kéo/Búa/Bao): ")
+p2 = input("Người 2 ra gì (Kéo/Búa/Bao): ")
+
+if p1 == p2:
+    print("Hòa")
+elif (p1 == "Kéo" and p2 == "Bao") or (p1 == "Búa" and p2 == "Kéo") or (p1 == "Bao" and p2 == "Búa"):
+    print("Người 1 thắng")
+else:
+    print("Người 2 thắng")
+[SLIDE/TAB 8: BÀI TẬP VỀ NHÀ]
+Vai trò gợi ý: checklist
+
+Bài 1: Phân loại nước (Độ khó: Dễ)
+
+Đề bài: Nhập vào nhiệt độ của nước. Nếu <= 0 in ra "Thể rắn". Nếu >= 100 in ra "Thể khí". Còn lại in "Thể lỏng".
+
+Input: 105
+
+Output: Thể khí
+
+Đáp án mẫu:
+
+Python
+nhiet_do = float(input("Nhập nhiệt độ nước: "))
+if nhiet_do <= 0:
+    print("Thể rắn")
+elif nhiet_do >= 100:
+    print("Thể khí")
+else:
+    print("Thể lỏng")
+Bài 2: Tính tiền giữ xe (Độ khó: Trung bình)
+
+Đề bài: Phí giữ xe máy qua đêm tính như sau: Dưới 3 giờ tính 10.000đ. Nếu gửi từ 3 giờ trở lên, mức phí là 3.000đ cho mỗi giờ. Nhập số giờ gửi và tính tiền.
+
+Input: 5
+
+Output: 15000
+
+Đáp án mẫu:
+
+Python
+so_gio = int(input("Nhập số giờ gửi: "))
+if so_gio < 3:
+    tien = 10000
+else:
+    tien = so_gio * 3000
+print("Tiền giữ xe:", tien)
+Bài 3: Đoán màu sắc (Độ khó: Trung bình)
+
+Đề bài: Người dùng nhập vào một màu cơ bản ("Đỏ", "Vàng", "Xanh"). Nếu nhập "Đỏ", in "Dừng lại". Nếu "Vàng", in "Đi chậm". Nếu "Xanh", in "Đi". Nếu nhập màu khác, in "Không rõ".
+
+Input: Đỏ
+
+Output: Dừng lại
+
+Đáp án mẫu:
+
+Python
+mau = input("Nhập màu: ")
+if mau == "Đỏ":
+    print("Dừng lại")
+elif mau == "Vàng":
+    print("Đi chậm")
+elif mau == "Xanh":
+    print("Đi")
+else:
+    print("Không rõ")
+Bài 4: Tính thuế thu nhập (Độ khó: Khó)
+
+Đề bài: Lương tháng dưới 11 triệu không phải đóng thuế (Thuế = 0). Lương từ 11 triệu trở lên, phần lương vượt trên 11 triệu sẽ bị đánh thuế 10%. Nhập tiền lương (VNĐ) và tính phần thuế phải nộp.
+
+Input: 15000000
+
+Output: 400000.0
+
+Đáp án mẫu:
+
+Python
+luong = float(input("Nhập lương (VNĐ): "))
+if luong <= 11000000:
+    thue = 0
+else:
+    thue = (luong - 11000000) * 10 / 100
+print("Thuế phải nộp là:", thue)

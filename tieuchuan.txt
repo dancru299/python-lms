@@ -1,0 +1,481 @@
+Đây là câu hỏi về thiết kế hệ thống — không phải vibecode task. Mình sẽ phân tích trực tiếp.Để mình phân tích thẳng vào hệ thống này — đây là một bài toán khá thú vị và có nhiều lớp logic cần thiết kế kỹ.
+
+---
+
+## Kiến trúc tổng thể của hệ thống
+
+Hệ thống gồm **3 tầng xử lý chính** và **2 agent chuyên biệt**:
+
+```
+INPUT (nội dung thô)
+      ↓
+[TẦNG 1] LLM Fill Agent — điền nội dung vào form/khung slide
+      ↓
+[TẦNG 2] Review Agent — duyệt bài giảng theo tiêu chí
+      ↓
+[TẦNG 3] Edit Agent — sửa theo feedback của Review Agent
+      ↓
+OUTPUT (bài giảng hoàn chỉnh)
+```
+
+---
+
+## I. Logic của LLM Fill Agent (điền nội dung)
+
+Đây là bước **mapping thô → có cấu trúc**, cần các tiêu chí sau:
+
+**A. Hiểu cấu trúc khung (form schema)**
+- Mỗi slide có các slot: `title`, `body`, `example`, `image_prompt`, `speaker_notes`, `key_takeaway`
+- Agent phải biết slot nào là bắt buộc, slot nào là tùy chọn
+- Mỗi slot có **giới hạn ký tự / số gạch đầu dòng** (ví dụ: body tối đa 5 bullets, mỗi bullet ≤ 12 từ)
+
+**B. Phân đoạn nội dung thô → slide**
+- Tách nội dung thô thành các đơn vị ý nghĩa (chunking by concept)
+- Mỗi slide = 1 ý chính duy nhất (Single Responsibility Principle cho slide)
+- Quyết định thứ tự slide: intro → lý thuyết → ví dụ → tổng kết
+
+**C. Tối ưu hóa ngôn ngữ cho slide**
+- Viết lại sang dạng ngắn gọn, bullet-point-friendly
+- Loại bỏ văn phong văn xuôi dài dòng
+- Giữ thuật ngữ chuyên ngành chính xác
+
+---
+
+## II. Logic của Review Agent (duyệt bài giảng)
+
+Đây là tầng quan trọng nhất. Agent này cần đánh giá theo **5 nhóm tiêu chí**:
+
+### 1. Tiêu chí Sư phạm (Pedagogical Standards)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Mục tiêu học tập rõ ràng | Slide đầu có nêu "Sau bài này học viên sẽ..." không? |
+| Trình tự logic | Ý có đi từ đơn giản → phức tạp không? |
+| Bloom's Taxonomy | Nội dung có bao phủ đủ tầng nhận thức (nhớ → hiểu → áp dụng) không? |
+| Tỷ lệ ví dụ/lý thuyết | Mỗi khái niệm trừu tượng có ít nhất 1 ví dụ cụ thể không? |
+| Kiểm tra hiểu biết | Có câu hỏi/quiz/reflection sau mỗi phần không? |
+
+### 2. Tiêu chí Nội dung (Content Quality)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Độ chính xác | Thông tin có đúng về mặt chuyên môn không? |
+| Không thừa/không thiếu | Slide có bị trùng lặp nội dung không? Có bỏ sót ý quan trọng không? |
+| Nhất quán thuật ngữ | Cùng 1 khái niệm có dùng nhiều tên khác nhau không? |
+| Nguồn tham chiếu | Dữ liệu/số liệu có được chú thích nguồn không? |
+
+### 3. Tiêu chí Trình bày (Presentation Design)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| 5×5 Rule | Mỗi slide ≤ 5 dòng, mỗi dòng ≤ 5 từ (hoặc giới hạn đã định) |
+| 1 slide = 1 ý | Slide có bị nhồi nhiều ý không? |
+| Tiêu đề hành động | Tiêu đề có là câu hành động/câu hỏi thay vì danh từ chung chung không? |
+| Cân bằng visual | Có gợi ý hình ảnh/biểu đồ cho slide quá nhiều chữ không? |
+
+### 4. Tiêu chí Luồng bài giảng (Flow & Pacing)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Hook mở đầu | Slide đầu có tạo sự kéo chú ý không? |
+| Transition giữa các slide | Có connector câu chuyển ý không? |
+| Tốc độ nội dung | Số slide có phù hợp với thời lượng bài giảng không? (chuẩn: 1-2 phút/slide) |
+| Kết thúc đóng vòng | Slide cuối có nhắc lại mục tiêu ban đầu không? |
+
+### 5. Tiêu chí Đối tượng học viên (Audience Fit)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Độ khó phù hợp | Ngôn ngữ có phù hợp trình độ người học không? |
+| Prior knowledge | Có giải thích thuật ngữ cần thiết không? |
+| Relevance | Ví dụ có gần gũi với ngữ cảnh của học viên không? |
+
+---
+
+## III. Logic của Edit Agent (sửa bài giảng)
+
+Agent này nhận **Review Report** từ Review Agent và xử lý theo logic sau:
+
+### A. Phân loại lỗi theo mức độ ưu tiên
+
+```
+P0 — Critical (bắt buộc sửa, block output):
+  - Nội dung sai về mặt chuyên môn
+  - Thiếu mục tiêu học tập
+  - Slide trắng / không có nội dung
+
+P1 — Major (nên sửa trước khi xuất):
+  - Vi phạm 5×5 rule nghiêm trọng
+  - 1 slide chứa 3+ ý
+  - Thiếu ví dụ cho toàn bộ phần lý thuyết
+
+P2 — Minor (cải thiện chất lượng):
+  - Tiêu đề chưa là câu hành động
+  - Thiếu transition
+  - Gợi ý hình ảnh còn chung chung
+
+P3 — Polish (tối ưu hóa):
+  - Từ ngữ chưa mượt
+  - Speaker notes chưa đủ chi tiết
+```
+
+### B. Chiến lược sửa
+
+- **Sửa tại chỗ (In-place edit):** Với lỗi cấp độ từ (quá dài, sai chính tả, từ lặp)
+- **Tái cấu trúc slide (Slide restructure):** Với lỗi "1 slide = nhiều ý" → tách thành nhiều slide
+- **Merge slide:** Với lỗi "slide quá mỏng" → gộp với slide liền kề
+- **Chèn slide mới:** Thiếu transition slide, thiếu recap, thiếu quiz
+
+### C. Vòng lặp kiểm soát chất lượng
+
+```
+Edit Agent sửa
+      ↓
+Review Agent chạy lại (chỉ check phần đã sửa)
+      ↓
+Nếu P0/P1 còn tồn tại → Edit lần 2
+      ↓
+Tối đa 3 vòng lặp → Nếu vẫn còn lỗi → Escalate lên human
+```
+
+---
+
+## IV. Tiêu chuẩn bổ sung cần thiết kế trước
+
+**1. Schema của khung slide (bắt buộc define rõ)**
+Agent cần biết chính xác: slot nào, max length bao nhiêu, kiểu nội dung là gì. Đây là "hợp đồng" giữa Fill Agent và Review Agent.
+
+**2. Rubric scoring (tùy chọn nhưng rất nên có)**
+Thay vì chỉ pass/fail, Review Agent nên cho điểm từng tiêu chí (0-10) để Edit Agent biết ưu tiên sửa gì trước. Ví dụ: Pedagogical score: 6/10, Content score: 9/10, Design score: 4/10 → Edit Agent tập trung vào Design trước.
+
+**3. Domain profile của bài giảng**
+Bài giảng Toán khác bài giảng Lịch sử — cần inject `domain_context` vào prompt của cả 3 agent để tiêu chí được calibrated đúng.
+
+**4. Giới hạn can thiệp của Edit Agent**
+Agent không được phép thay đổi ý chính của nội dung gốc — chỉ được sửa cách trình bày. Nếu phát hiện nội dung gốc sai, phải flag lên human thay vì tự sửa.
+
+---
+
+## Tóm lại — Checklist thiết kế hệ thống
+
+Bạn cần làm rõ các điểm này trước khi build:
+
+1. **Khung slide** — có bao nhiêu loại slide? Schema từng loại là gì?
+2. **Đối tượng học viên** — cấp độ, ngành, ngữ cảnh (trường học / doanh nghiệp / online)?
+3. **Thời lượng bài giảng** — để tính số slide phù hợp
+4. **Ngôn ngữ** — Việt/Anh/song ngữ?
+5. **Mức độ tự động** — Edit Agent được tự sửa đến đâu, lỗi gì phải hỏi human?
+6. **Output format** — xuất ra PPTX, JSON, Markdown, hay gì khác?
+
+Bạn muốn đi sâu vào phần nào trước — thiết kế Review Agent với rubric chấm điểm cụ thể, hay thiết kế schema cho khung slide?Đây là câu hỏi về thiết kế hệ thống — không phải vibecode task. Mình sẽ phân tích trực tiếp.Để mình phân tích thẳng vào hệ thống này — đây là một bài toán khá thú vị và có nhiều lớp logic cần thiết kế kỹ.
+
+---
+
+## Kiến trúc tổng thể của hệ thống
+
+Hệ thống gồm **3 tầng xử lý chính** và **2 agent chuyên biệt**:
+
+```
+INPUT (nội dung thô)
+      ↓
+[TẦNG 1] LLM Fill Agent — điền nội dung vào form/khung slide
+      ↓
+[TẦNG 2] Review Agent — duyệt bài giảng theo tiêu chí
+      ↓
+[TẦNG 3] Edit Agent — sửa theo feedback của Review Agent
+      ↓
+OUTPUT (bài giảng hoàn chỉnh)
+```
+
+---
+
+## I. Logic của LLM Fill Agent (điền nội dung)
+
+Đây là bước **mapping thô → có cấu trúc**, cần các tiêu chí sau:
+
+**A. Hiểu cấu trúc khung (form schema)**
+- Mỗi slide có các slot: `title`, `body`, `example`, `image_prompt`, `speaker_notes`, `key_takeaway`
+- Agent phải biết slot nào là bắt buộc, slot nào là tùy chọn
+- Mỗi slot có **giới hạn ký tự / số gạch đầu dòng** (ví dụ: body tối đa 5 bullets, mỗi bullet ≤ 12 từ)
+
+**B. Phân đoạn nội dung thô → slide**
+- Tách nội dung thô thành các đơn vị ý nghĩa (chunking by concept)
+- Mỗi slide = 1 ý chính duy nhất (Single Responsibility Principle cho slide)
+- Quyết định thứ tự slide: intro → lý thuyết → ví dụ → tổng kết
+
+**C. Tối ưu hóa ngôn ngữ cho slide**
+- Viết lại sang dạng ngắn gọn, bullet-point-friendly
+- Loại bỏ văn phong văn xuôi dài dòng
+- Giữ thuật ngữ chuyên ngành chính xác
+
+---
+
+## II. Logic của Review Agent (duyệt bài giảng)
+
+Đây là tầng quan trọng nhất. Agent này cần đánh giá theo **5 nhóm tiêu chí**:
+
+### 1. Tiêu chí Sư phạm (Pedagogical Standards)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Mục tiêu học tập rõ ràng | Slide đầu có nêu "Sau bài này học viên sẽ..." không? |
+| Trình tự logic | Ý có đi từ đơn giản → phức tạp không? |
+| Bloom's Taxonomy | Nội dung có bao phủ đủ tầng nhận thức (nhớ → hiểu → áp dụng) không? |
+| Tỷ lệ ví dụ/lý thuyết | Mỗi khái niệm trừu tượng có ít nhất 1 ví dụ cụ thể không? |
+| Kiểm tra hiểu biết | Có câu hỏi/quiz/reflection sau mỗi phần không? |
+
+### 2. Tiêu chí Nội dung (Content Quality)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Độ chính xác | Thông tin có đúng về mặt chuyên môn không? |
+| Không thừa/không thiếu | Slide có bị trùng lặp nội dung không? Có bỏ sót ý quan trọng không? |
+| Nhất quán thuật ngữ | Cùng 1 khái niệm có dùng nhiều tên khác nhau không? |
+| Nguồn tham chiếu | Dữ liệu/số liệu có được chú thích nguồn không? |
+
+### 3. Tiêu chí Trình bày (Presentation Design)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| 5×5 Rule | Mỗi slide ≤ 5 dòng, mỗi dòng ≤ 5 từ (hoặc giới hạn đã định) |
+| 1 slide = 1 ý | Slide có bị nhồi nhiều ý không? |
+| Tiêu đề hành động | Tiêu đề có là câu hành động/câu hỏi thay vì danh từ chung chung không? |
+| Cân bằng visual | Có gợi ý hình ảnh/biểu đồ cho slide quá nhiều chữ không? |
+
+### 4. Tiêu chí Luồng bài giảng (Flow & Pacing)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Hook mở đầu | Slide đầu có tạo sự kéo chú ý không? |
+| Transition giữa các slide | Có connector câu chuyển ý không? |
+| Tốc độ nội dung | Số slide có phù hợp với thời lượng bài giảng không? (chuẩn: 1-2 phút/slide) |
+| Kết thúc đóng vòng | Slide cuối có nhắc lại mục tiêu ban đầu không? |
+
+### 5. Tiêu chí Đối tượng học viên (Audience Fit)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Độ khó phù hợp | Ngôn ngữ có phù hợp trình độ người học không? |
+| Prior knowledge | Có giải thích thuật ngữ cần thiết không? |
+| Relevance | Ví dụ có gần gũi với ngữ cảnh của học viên không? |
+
+---
+
+## III. Logic của Edit Agent (sửa bài giảng)
+
+Agent này nhận **Review Report** từ Review Agent và xử lý theo logic sau:
+
+### A. Phân loại lỗi theo mức độ ưu tiên
+
+```
+P0 — Critical (bắt buộc sửa, block output):
+  - Nội dung sai về mặt chuyên môn
+  - Thiếu mục tiêu học tập
+  - Slide trắng / không có nội dung
+
+P1 — Major (nên sửa trước khi xuất):
+  - Vi phạm 5×5 rule nghiêm trọng
+  - 1 slide chứa 3+ ý
+  - Thiếu ví dụ cho toàn bộ phần lý thuyết
+
+P2 — Minor (cải thiện chất lượng):
+  - Tiêu đề chưa là câu hành động
+  - Thiếu transition
+  - Gợi ý hình ảnh còn chung chung
+
+P3 — Polish (tối ưu hóa):
+  - Từ ngữ chưa mượt
+  - Speaker notes chưa đủ chi tiết
+```
+
+### B. Chiến lược sửa
+
+- **Sửa tại chỗ (In-place edit):** Với lỗi cấp độ từ (quá dài, sai chính tả, từ lặp)
+- **Tái cấu trúc slide (Slide restructure):** Với lỗi "1 slide = nhiều ý" → tách thành nhiều slide
+- **Merge slide:** Với lỗi "slide quá mỏng" → gộp với slide liền kề
+- **Chèn slide mới:** Thiếu transition slide, thiếu recap, thiếu quiz
+
+### C. Vòng lặp kiểm soát chất lượng
+
+```
+Edit Agent sửa
+      ↓
+Review Agent chạy lại (chỉ check phần đã sửa)
+      ↓
+Nếu P0/P1 còn tồn tại → Edit lần 2
+      ↓
+Tối đa 3 vòng lặp → Nếu vẫn còn lỗi → Escalate lên human
+```
+
+---
+
+## IV. Tiêu chuẩn bổ sung cần thiết kế trước
+
+**1. Schema của khung slide (bắt buộc define rõ)**
+Agent cần biết chính xác: slot nào, max length bao nhiêu, kiểu nội dung là gì. Đây là "hợp đồng" giữa Fill Agent và Review Agent.
+
+**2. Rubric scoring (tùy chọn nhưng rất nên có)**
+Thay vì chỉ pass/fail, Review Agent nên cho điểm từng tiêu chí (0-10) để Edit Agent biết ưu tiên sửa gì trước. Ví dụ: Pedagogical score: 6/10, Content score: 9/10, Design score: 4/10 → Edit Agent tập trung vào Design trước.
+
+**3. Domain profile của bài giảng**
+Bài giảng Toán khác bài giảng Lịch sử — cần inject `domain_context` vào prompt của cả 3 agent để tiêu chí được calibrated đúng.
+
+**4. Giới hạn can thiệp của Edit Agent**
+Agent không được phép thay đổi ý chính của nội dung gốc — chỉ được sửa cách trình bày. Nếu phát hiện nội dung gốc sai, phải flag lên human thay vì tự sửa.
+
+---
+
+## Tóm lại — Checklist thiếĐây là câu hỏi về thiết kế hệ thống — không phải vibecode task. Mình sẽ phân tích trực tiếp.Để mình phân tích thẳng vào hệ thống này — đây là một bài toán khá thú vị và có nhiều lớp logic cần thiết kế kỹ.
+
+---
+
+## Kiến trúc tổng thể của hệ thống
+
+Hệ thống gồm **3 tầng xử lý chính** và **2 agent chuyên biệt**:
+
+```
+INPUT (nội dung thô)
+      ↓
+[TẦNG 1] LLM Fill Agent — điền nội dung vào form/khung slide
+      ↓
+[TẦNG 2] Review Agent — duyệt bài giảng theo tiêu chí
+      ↓
+[TẦNG 3] Edit Agent — sửa theo feedback của Review Agent
+      ↓
+OUTPUT (bài giảng hoàn chỉnh)
+```
+
+---
+
+## I. Logic của LLM Fill Agent (điền nội dung)
+
+Đây là bước **mapping thô → có cấu trúc**, cần các tiêu chí sau:
+
+**A. Hiểu cấu trúc khung (form schema)**
+- Mỗi slide có các slot: `title`, `body`, `example`, `image_prompt`, `speaker_notes`, `key_takeaway`
+- Agent phải biết slot nào là bắt buộc, slot nào là tùy chọn
+- Mỗi slot có **giới hạn ký tự / số gạch đầu dòng** (ví dụ: body tối đa 5 bullets, mỗi bullet ≤ 12 từ)
+
+**B. Phân đoạn nội dung thô → slide**
+- Tách nội dung thô thành các đơn vị ý nghĩa (chunking by concept)
+- Mỗi slide = 1 ý chính duy nhất (Single Responsibility Principle cho slide)
+- Quyết định thứ tự slide: intro → lý thuyết → ví dụ → tổng kết
+
+**C. Tối ưu hóa ngôn ngữ cho slide**
+- Viết lại sang dạng ngắn gọn, bullet-point-friendly
+- Loại bỏ văn phong văn xuôi dài dòng
+- Giữ thuật ngữ chuyên ngành chính xác
+
+---
+
+## II. Logic của Review Agent (duyệt bài giảng)
+
+Đây là tầng quan trọng nhất. Agent này cần đánh giá theo **5 nhóm tiêu chí**:
+
+### 1. Tiêu chí Sư phạm (Pedagogical Standards)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Mục tiêu học tập rõ ràng | Slide đầu có nêu "Sau bài này học viên sẽ..." không? |
+| Trình tự logic | Ý có đi từ đơn giản → phức tạp không? |
+| Bloom's Taxonomy | Nội dung có bao phủ đủ tầng nhận thức (nhớ → hiểu → áp dụng) không? |
+| Tỷ lệ ví dụ/lý thuyết | Mỗi khái niệm trừu tượng có ít nhất 1 ví dụ cụ thể không? |
+| Kiểm tra hiểu biết | Có câu hỏi/quiz/reflection sau mỗi phần không? |
+
+### 2. Tiêu chí Nội dung (Content Quality)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Độ chính xác | Thông tin có đúng về mặt chuyên môn không? |
+| Không thừa/không thiếu | Slide có bị trùng lặp nội dung không? Có bỏ sót ý quan trọng không? |
+| Nhất quán thuật ngữ | Cùng 1 khái niệm có dùng nhiều tên khác nhau không? |
+| Nguồn tham chiếu | Dữ liệu/số liệu có được chú thích nguồn không? |
+
+### 3. Tiêu chí Trình bày (Presentation Design)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| 5×5 Rule | Mỗi slide ≤ 5 dòng, mỗi dòng ≤ 5 từ (hoặc giới hạn đã định) |
+| 1 slide = 1 ý | Slide có bị nhồi nhiều ý không? |
+| Tiêu đề hành động | Tiêu đề có là câu hành động/câu hỏi thay vì danh từ chung chung không? |
+| Cân bằng visual | Có gợi ý hình ảnh/biểu đồ cho slide quá nhiều chữ không? |
+
+### 4. Tiêu chí Luồng bài giảng (Flow & Pacing)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Hook mở đầu | Slide đầu có tạo sự kéo chú ý không? |
+| Transition giữa các slide | Có connector câu chuyển ý không? |
+| Tốc độ nội dung | Số slide có phù hợp với thời lượng bài giảng không? (chuẩn: 1-2 phút/slide) |
+| Kết thúc đóng vòng | Slide cuối có nhắc lại mục tiêu ban đầu không? |
+
+### 5. Tiêu chí Đối tượng học viên (Audience Fit)
+| Tiêu chí | Câu hỏi kiểm tra |
+|---|---|
+| Độ khó phù hợp | Ngôn ngữ có phù hợp trình độ người học không? |
+| Prior knowledge | Có giải thích thuật ngữ cần thiết không? |
+| Relevance | Ví dụ có gần gũi với ngữ cảnh của học viên không? |
+
+---
+
+## III. Logic của Edit Agent (sửa bài giảng)
+
+Agent này nhận **Review Report** từ Review Agent và xử lý theo logic sau:
+
+### A. Phân loại lỗi theo mức độ ưu tiên
+
+```
+P0 — Critical (bắt buộc sửa, block output):
+  - Nội dung sai về mặt chuyên môn
+  - Thiếu mục tiêu học tập
+  - Slide trắng / không có nội dung
+
+P1 — Major (nên sửa trước khi xuất):
+  - Vi phạm 5×5 rule nghiêm trọng
+  - 1 slide chứa 3+ ý
+  - Thiếu ví dụ cho toàn bộ phần lý thuyết
+
+P2 — Minor (cải thiện chất lượng):
+  - Tiêu đề chưa là câu hành động
+  - Thiếu transition
+  - Gợi ý hình ảnh còn chung chung
+
+P3 — Polish (tối ưu hóa):
+  - Từ ngữ chưa mượt
+  - Speaker notes chưa đủ chi tiết
+```
+
+### B. Chiến lược sửa
+
+- **Sửa tại chỗ (In-place edit):** Với lỗi cấp độ từ (quá dài, sai chính tả, từ lặp)
+- **Tái cấu trúc slide (Slide restructure):** Với lỗi "1 slide = nhiều ý" → tách thành nhiều slide
+- **Merge slide:** Với lỗi "slide quá mỏng" → gộp với slide liền kề
+- **Chèn slide mới:** Thiếu transition slide, thiếu recap, thiếu quiz
+
+### C. Vòng lặp kiểm soát chất lượng
+
+```
+Edit Agent sửa
+      ↓
+Review Agent chạy lại (chỉ check phần đã sửa)
+      ↓
+Nếu P0/P1 còn tồn tại → Edit lần 2
+      ↓
+Tối đa 3 vòng lặp → Nếu vẫn còn lỗi → Escalate lên human
+```
+
+---
+
+## IV. Tiêu chuẩn bổ sung cần thiết kế trước
+
+**1. Schema của khung slide (bắt buộc define rõ)**
+Agent cần biết chính xác: slot nào, max length bao nhiêu, kiểu nội dung là gì. Đây là "hợp đồng" giữa Fill Agent và Review Agent.
+
+**2. Rubric scoring (tùy chọn nhưng rất nên có)**
+Thay vì chỉ pass/fail, Review Agent nên cho điểm từng tiêu chí (0-10) để Edit Agent biết ưu tiên sửa gì trước. Ví dụ: Pedagogical score: 6/10, Content score: 9/10, Design score: 4/10 → Edit Agent tập trung vào Design trước.
+
+**3. Domain profile của bài giảng**
+Bài giảng Toán khác bài giảng Lịch sử — cần inject `domain_context` vào prompt của cả 3 agent để tiêu chí được calibrated đúng.
+
+**4. Giới hạn can thiệp của Edit Agent**
+Agent không được phép thay đổi ý chính của nội dung gốc — chỉ được sửa cách trình bày. Nếu phát hiện nội dung gốc sai, phải flag lên human thay vì tự sửa.
+
+---
+
+## Tóm lại — Checklist thiết kế hệ thống
+
+Bạn cần làm rõ các điểm này trước khi build:
+
+1. **Khung slide** — có bao nhiêu loại slide? Schema từng loại là gì?
+2. **Đối tượng học viên** — cấp độ, ngành, ngữ cảnh (trường học / doanh nghiệp / online)?
+3. **Thời lượng bài giảng** — để tính số slide phù hợp
+4. **Ngôn ngữ** — Việt/Anh/song ngữ?
+5. **Mức độ tự động** — Edit Agent được tự sửa đến đâu, lỗi gì phải hỏi human?
+6. **Output format** — xuất ra PPTX, JSON, Markdown, hay gì khác?
+
