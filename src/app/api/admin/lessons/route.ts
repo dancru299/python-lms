@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
+import { requireTeacherSessionJson } from "@/lib/api-auth";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
 import {
@@ -9,27 +8,10 @@ import {
 } from "@/lib/lessons/lesson-media";
 import { sanitizeLessonMutationHtml } from "@/lib/sanitize-html";
 
-async function verifyTeacher() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    if (sessionData.role !== "teacher" && sessionData.role !== "admin") return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET() {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const chapters = await prisma.chapter.findMany({
       include: {
@@ -55,10 +37,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireTeacherSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     const payload = sanitizeLessonMutationHtml(
       normalizeLessonMutationPayload(await request.json())

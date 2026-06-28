@@ -7,7 +7,7 @@ import SettingsClientPage from "./SettingsClientPage";
 export default async function AdminSettingsPage() {
   await requireAdmin();
 
-  const rawSettings = await (prisma as any).setting
+  const rawSettings = await prisma.setting
     .findMany({ orderBy: { key: "asc" } })
     .catch(() => []);
 

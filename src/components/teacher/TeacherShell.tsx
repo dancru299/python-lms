@@ -175,7 +175,7 @@ export default function TeacherShell({
 }: TeacherShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [pageChrome, setPageChrome] = useState<TeacherShellPageChrome>(defaultPageChrome);
+  const [, setPageChrome] = useState<TeacherShellPageChrome>(defaultPageChrome);
   const [notificationCount, setNotificationCount] = useState(initialNotificationCount);
   const resolvedActive = active ?? resolveActiveTeacherNav(pathname);
 

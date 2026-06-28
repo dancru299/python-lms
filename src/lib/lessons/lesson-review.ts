@@ -378,6 +378,26 @@ function reviewCanvas(
     });
   }
 
+  // mainHtml chỉ nên là câu dẫn THÊM thông tin, không chép lại tiêu đề. Khi nó
+  // trùng tiêu đề thì canvas vừa thừa vừa lãng phí một dòng (cards/hero dùng tiêu
+  // đề làm headline nên được miễn).
+  if (canvas.kind !== "cards" && canvas.kind !== "hero" && canvas.kind !== "cover") {
+    const mainText = stripHtml(canvas.html || "").replace(/\s+/g, " ").trim();
+    const normalize = (value: string) =>
+      value.toLowerCase().replace(/[\s.:!?…]+$/g, "").trim();
+    if (mainText && normalize(mainText) === normalize(canvas.title)) {
+      addIssue(issues, {
+        severity: "suggestion",
+        category: "canvas",
+        target,
+        title: "Nội dung chính lặp lại tiêu đề",
+        detail: "mainHtml chỉ chép lại tiêu đề canvas, không bổ sung thông tin gì.",
+        suggestion:
+          "Viết câu dẫn bổ sung (định nghĩa/ngữ cảnh) hoặc để trống mainHtml nếu tiêu đề đã đủ.",
+      });
+    }
+  }
+
   if (canvas.code?.trim()) {
     const syntaxIssues = findPythonSyntaxIssues(canvas.code);
     if (syntaxIssues.length > 0) {
@@ -562,9 +582,25 @@ function reviewCanvas(
       break;
 
     case "code_explain": {
-      const nonEmptyLines = (canvas.code || "")
-        .split(/\r?\n/)
-        .filter((line) => line.trim()).length;
+      const rawLines = (canvas.code || "").split(/\r?\n/);
+      const nonEmptyLines = rawLines.filter((line) => line.trim()).length;
+      // code_explain ghép 1:1 mỗi DÒNG code với một step. Dòng trống hoặc dòng chỉ
+      // có chú thích (#...) làm tổng số dòng vật lý lệch số step → người dạy thấy
+      // "17 dòng nhưng 12 bước". Giữ code sạch để mỗi dòng khớp đúng một bước.
+      const noiseLines = rawLines.filter(
+        (line) => line.trim() === "" || /^\s*#/.test(line)
+      ).length;
+      if (noiseLines > 0 && canvas.steps.length > 0) {
+        addIssue(issues, {
+          severity: "suggestion",
+          category: "canvas",
+          target,
+          title: "Code explain có dòng trống/chú thích",
+          detail: `Code có ${rawLines.length} dòng vật lý (gồm ${noiseLines} dòng trống/chú thích) nhưng ${canvas.steps.length} bước — số dòng và số bước lệch nhau.`,
+          suggestion:
+            "Bỏ dòng trống và dòng chỉ có chú thích để mỗi dòng code khớp đúng một bước (hoặc đổi sang layout 'code' nếu muốn giữ chú thích).",
+        });
+      }
       if (!canvas.code?.trim()) {
         addIssue(issues, {
           severity: "critical",
@@ -1067,6 +1103,22 @@ export function reviewLessonDraftDeterministic(draft: LessonDraft): LessonReview
         title: "Tab có quá nhiều canvas",
         detail: `Tab này có ${canvases.length} canvas, có thể khiến buổi học dài và khó theo dõi.`,
         suggestion: "Giữ mỗi tab khoảng 1-4 canvas chính.",
+      });
+    }
+
+    // Với tab dạng canvas, trường `content` chỉ là bản tóm tắt dùng cho preview.
+    // Khi nó chứa cả nội dung canvas (thường do generator chép nguyên) thì preview
+    // quá dài, dễ tràn và lệch với nội dung thật.
+    const hasCanvasBlocks =
+      Array.isArray(section.contentBlocks) && section.contentBlocks.length > 0;
+    if (hasCanvasBlocks && textLength(section.content || "") > 600) {
+      addIssue(issues, {
+        severity: "suggestion",
+        category: "section",
+        target: sectionTarget,
+        title: "Tóm tắt tab quá dài",
+        detail: `Trường content của tab dài ${textLength(section.content || "")} ký tự — đang chép gần như toàn bộ nội dung canvas thay vì tóm tắt.`,
+        suggestion: "Rút content còn 1-2 câu tóm tắt tab (dưới ~200 ký tự); nội dung chi tiết để trong canvas.",
       });
     }
 

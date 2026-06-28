@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
+import { requireTeacherSessionJson } from "@/lib/api-auth";
 import {
   normalizeScheduleRules,
   regenerateClassroomSessions,
@@ -23,29 +22,12 @@ function generateCode(length: number = 6): string {
   return result;
 }
 
-// Verify admin/teacher
-async function verifyTeacher() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    if (sessionData.role !== "teacher" && sessionData.role !== "admin") return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
-
 // GET - List classrooms
 export async function GET() {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireTeacherSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     const classrooms = await prisma.classroom.findMany({
       where: session.role === "admin" ? {} : { teacherId: session.userId },
@@ -68,10 +50,9 @@ export async function GET() {
 // POST - Create classroom
 export async function POST(request: NextRequest) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireTeacherSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     if (session.role !== "admin") {
       return NextResponse.json(

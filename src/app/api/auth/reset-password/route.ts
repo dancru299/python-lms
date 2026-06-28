@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     // 1. Validate OTP
-    const resetRequest = await (prisma as any).passwordReset.findFirst({
+    const resetRequest = await prisma.passwordReset.findFirst({
       where: {
         email,
         otp,
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     });
 
     // 3. Cleanup
-    await (prisma as any).passwordReset.deleteMany({
+    await prisma.passwordReset.deleteMany({
       where: { email },
     });
 

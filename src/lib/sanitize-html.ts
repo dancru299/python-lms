@@ -1,4 +1,4 @@
-import { parse, HTMLElement } from "node-html-parser";
+import { parse, HTMLElement, Node } from "node-html-parser";
 import type { LessonMutationPayload } from "@/lib/lessons/lesson-draft";
 
 const ALLOWED_TAGS = new Set([
@@ -46,7 +46,7 @@ function isAttributeAllowed(name: string): boolean {
 }
 
 // Đệ quy làm sạch từng node HTML
-function cleanHtmlNode(node: any): any {
+function cleanHtmlNode(node: Node): Node | null {
   // Node loại TEXT_NODE (type === 3) giữ nguyên
   if (node.nodeType === 3) {
     return node;

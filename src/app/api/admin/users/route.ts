@@ -1,31 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
-
-// Verify admin/teacher
-async function verifyTeacher() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    if (sessionData.role !== "teacher" && sessionData.role !== "admin") return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
+import { requireTeacherSessionJson } from "@/lib/api-auth";
 
 // GET - Get list of teachers and students
 export async function GET() {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const [teachers, students] = await Promise.all([
       prisma.user.findMany({

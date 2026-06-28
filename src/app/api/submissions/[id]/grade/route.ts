@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
-
-// Helper to get session
-async function getSessionUser() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
+import { requireTeacherSessionJson } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -25,10 +9,9 @@ interface RouteParams {
 // POST - Grade a submission
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await getSessionUser();
-    if (!session || (session.role !== "teacher" && session.role !== "admin")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireTeacherSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     const { id } = await params;
     const body = await request.json();

@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCookieSessionUser } from "@/lib/cookie-session";
+import { getSession } from "@/lib/session";
 
 interface RouteParams {
   params: Promise<{ id: string; assignmentId: string; submissionId: string }>;
@@ -8,7 +8,7 @@ interface RouteParams {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await getCookieSessionUser();
+    const session = await getSession();
     if (!session || (session.role !== "teacher" && session.role !== "admin")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

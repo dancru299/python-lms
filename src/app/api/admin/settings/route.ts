@@ -1,23 +1,25 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireAdmin } from "@/lib/session";
+import { requireAdminSessionJson } from "@/lib/api-auth";
 
 export async function GET() {
   try {
-    await requireAdmin();
-    const settings = await (prisma as any).setting.findMany({ orderBy: { key: "asc" } });
+    const { response } = await requireAdminSessionJson();
+    if (response) return response;
+
+    const settings = await prisma.setting.findMany({ orderBy: { key: "asc" } });
     return NextResponse.json(settings);
-  } catch (error: any) {
-    if (error?.message?.includes("UNAUTHORIZED")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  } catch (error) {
+    console.error("Get settings error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    await requireAdmin();
+    const { response } = await requireAdminSessionJson();
+    if (response) return response;
+
     const body = await request.json();
 
     if (!Array.isArray(body)) {
@@ -26,7 +28,7 @@ export async function PUT(request: Request) {
 
     await Promise.all(
       body.map(({ key, value }: { key: string; value: string }) =>
-        (prisma as any).setting.upsert({
+        prisma.setting.upsert({
           where: { key },
           create: { key, value },
           update: { value },
@@ -35,10 +37,8 @@ export async function PUT(request: Request) {
     );
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    if (error?.message?.includes("UNAUTHORIZED")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  } catch (error) {
+    console.error("Update settings error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
