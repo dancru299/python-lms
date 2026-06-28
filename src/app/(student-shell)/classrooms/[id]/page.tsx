@@ -124,6 +124,93 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
     .flatMap((m) => m.lessons)
     .find((l) => !completedLessonIds.has(l.lessonId));
 
+  const studentCount = await prisma.classroomStudent.count({ where: { classroomId: id } });
+
+  const fmtDate = (value: Date) =>
+    new Date(value).toLocaleDateString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  const { startDate, endDate, description } = membership.classroom;
+  const coursePeriod =
+    startDate && endDate
+      ? `${fmtDate(startDate)} – ${fmtDate(endDate)}`
+      : startDate
+        ? `Từ ${fmtDate(startDate)}`
+        : endDate
+          ? `Đến ${fmtDate(endDate)}`
+          : null;
+
+  // Cần làm = chưa nộp (xếp theo hạn nộp gần nhất trước); còn lại là đã nộp/đã chấm.
+  const pendingAssignments = assignments
+    .filter((a) => a.submissions.length === 0)
+    .sort((a, b) => {
+      const da = a.dueAt ? new Date(a.dueAt).getTime() : Infinity;
+      const db = b.dueAt ? new Date(b.dueAt).getTime() : Infinity;
+      return da - db;
+    });
+  const doneAssignments = assignments.filter((a) => a.submissions.length > 0);
+
+  const renderAssignmentCard = (assignment: (typeof assignments)[number]) => {
+    const mySubmission = assignment.submissions[0];
+    return (
+      <Link
+        key={assignment.id}
+        href={`/classrooms/${id}/assignments/${assignment.id}`}
+        className="block card rounded-[1.5rem] p-5 transition hover:shadow-md"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2">
+              <span
+                className={`badge ${assignment.type === "test" ? "badge-warning" : "badge-success"}`}
+              >
+                {assignment.type === "test" ? "Kiểm tra" : "BTVN"}
+              </span>
+              <span className="truncate text-sm text-slate-500">
+                {assignment.lesson?.title || "Không rõ bài giảng"}
+              </span>
+            </div>
+            <h3 className="font-semibold text-slate-900">{assignment.title}</h3>
+            <p className="text-sm text-slate-500">
+              {assignment.type === "test" && assignment.durationMinutes
+                ? `${assignment.durationMinutes} phút • `
+                : ""}
+              {assignment.maxScore} điểm
+            </p>
+            {assignment.dueAt && (
+              <p className="mt-1 text-sm text-slate-500">
+                <i className="fa-regular fa-clock mr-1"></i>
+                Hạn nộp:{" "}
+                {new Date(assignment.dueAt).toLocaleString("vi-VN", {
+                  timeZone: "Asia/Ho_Chi_Minh",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            {mySubmission ? (
+              <span
+                className={`badge ${mySubmission.status === "graded" ? "badge-success" : "badge-warning"}`}
+              >
+                {mySubmission.status === "graded"
+                  ? `Đã chấm ${mySubmission.score ?? 0}/${assignment.maxScore}`
+                  : "Đã nộp"}
+              </span>
+            ) : (
+              <span className="badge badge-primary">Chưa nộp</span>
+            )}
+            {mySubmission?.isLate && <span className="badge badge-danger">Nộp muộn</span>}
+          </div>
+        </div>
+      </Link>
+    );
+  };
+
   return (
     <StudentPageFrame
       title={membership.classroom.name}
@@ -143,6 +230,28 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
       ]}
     >
       <div className="space-y-6">
+        {(description || coursePeriod) && (
+          <section className="card rounded-[1.5rem] p-5">
+            {description && <p className="text-sm text-slate-600">{description}</p>}
+            <div
+              className={`flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500 ${
+                description ? "mt-3" : ""
+              }`}
+            >
+              <span>
+                <i className="fa-solid fa-users mr-1.5 text-slate-400"></i>
+                {studentCount} học sinh
+              </span>
+              {coursePeriod && (
+                <span>
+                  <i className="fa-regular fa-calendar mr-1.5 text-slate-400"></i>
+                  Khoá học: {coursePeriod}
+                </span>
+              )}
+            </div>
+          </section>
+        )}
+
         {(scheduleSummary || upcomingSessions.length > 0) && (
           <section id="lich-hoc" className="card rounded-[1.5rem] p-5">
             <div className="flex items-center gap-2 text-slate-900">
@@ -253,72 +362,38 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
           </section>
         )}
 
-        <section id="bai-giao" className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">Bài tập &amp; kiểm tra</h2>
-
-          {assignments.map((assignment) => {
-            const mySubmission = assignment.submissions[0];
-            return (
-              <Link
-                key={assignment.id}
-                href={`/classrooms/${id}/assignments/${assignment.id}`}
-                className="block card rounded-[1.5rem] p-5 transition hover:shadow-md"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="mb-1 flex items-center gap-2">
-                      <span
-                        className={`badge ${assignment.type === "test" ? "badge-warning" : "badge-success"}`}
-                      >
-                        {assignment.type === "test" ? "Kiểm tra" : "BTVN"}
-                      </span>
-                      <span className="truncate text-sm text-slate-500">
-                        {assignment.lesson?.title || "Không rõ bài giảng"}
-                      </span>
-                    </div>
-                    <h3 className="font-semibold text-slate-900">{assignment.title}</h3>
-                    <p className="text-sm text-slate-500">
-                      {assignment.type === "test" && assignment.durationMinutes
-                        ? `${assignment.durationMinutes} phút • `
-                        : ""}
-                      {assignment.maxScore} điểm
-                    </p>
-                    {assignment.dueAt && (
-                      <p className="mt-1 text-sm text-slate-500">
-                        <i className="fa-regular fa-clock mr-1"></i>
-                        Hạn nộp:{" "}
-                        {new Date(assignment.dueAt).toLocaleString("vi-VN", {
-                          timeZone: "Asia/Ho_Chi_Minh",
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {mySubmission ? (
-                      <span
-                        className={`badge ${mySubmission.status === "graded" ? "badge-success" : "badge-warning"}`}
-                      >
-                        {mySubmission.status === "graded"
-                          ? `Đã chấm ${mySubmission.score ?? 0}/${assignment.maxScore}`
-                          : "Đã nộp"}
-                      </span>
-                    ) : (
-                      <span className="badge badge-primary">Chưa nộp</span>
-                    )}
-                    {mySubmission?.isLate && <span className="badge badge-danger">Nộp muộn</span>}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-
-          {assignments.length === 0 && (
+        <section id="bai-giao" className="space-y-5">
+          {assignments.length === 0 ? (
             <div className="card rounded-[1.5rem] p-10 text-center text-slate-500">
               <i className="fa-solid fa-clipboard-list text-4xl text-slate-300"></i>
               <p className="mt-4">Hiện chưa có bài tập hoặc bài kiểm tra nào.</p>
             </div>
+          ) : (
+            <>
+              {pendingAssignments.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Cần làm{" "}
+                    <span className="text-sm font-medium text-slate-400">
+                      ({pendingAssignments.length})
+                    </span>
+                  </h2>
+                  {pendingAssignments.map(renderAssignmentCard)}
+                </div>
+              )}
+
+              {doneAssignments.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Đã nộp{" "}
+                    <span className="text-sm font-medium text-slate-400">
+                      ({doneAssignments.length})
+                    </span>
+                  </h2>
+                  {doneAssignments.map(renderAssignmentCard)}
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>
