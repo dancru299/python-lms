@@ -1,31 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
+import { requireUserSessionJson } from "@/lib/api-auth";
 import { getLessonGateForStudent, getStudentProgramId } from "@/lib/programs/lesson-gating";
-
-// Helper to get session
-async function getSessionUser() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
 
 // POST - Create submission
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireUserSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     // Only students can submit
     if (session.role === "teacher" || session.role === "admin") {
@@ -178,10 +161,9 @@ export async function POST(request: NextRequest) {
 // GET - Get user's submissions
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireUserSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     const { searchParams } = new URL(request.url);
     const exerciseId = searchParams.get("exerciseId");

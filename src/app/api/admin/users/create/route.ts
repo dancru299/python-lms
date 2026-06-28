@@ -1,32 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
 import { hashPassword } from "@/lib/auth";
-import { verifySession } from "@/lib/session-token";
-
-// Verify admin only
-async function verifyAdmin() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    if (sessionData.role !== "admin") return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
+import { requireAdminSessionJson } from "@/lib/api-auth";
 
 // POST - Create new user (admin only)
 export async function POST(request: NextRequest) {
   try {
-    const session = await verifyAdmin();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized - Admin only" }, { status: 401 });
-    }
+    const { response } = await requireAdminSessionJson();
+    if (response) return response;
 
     const body = await request.json();
     const { name, email, password, role } = body;

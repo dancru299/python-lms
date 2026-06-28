@@ -1,32 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
-
-// Get current user from session
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
+import { requireUserSessionJson } from "@/lib/api-auth";
 
 // GET - Get user's notifications
 export async function GET(request: NextRequest) {
   const summaryOnly = request.nextUrl.searchParams.get("summaryOnly") === "1";
 
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireUserSessionJson();
+    if (!auth.session) return auth.response;
+    const user = auth.session;
 
     const unreadCountPromise = prisma.notification.count({
       where: { userId: user.userId, isRead: false },
@@ -60,10 +43,9 @@ export async function GET(request: NextRequest) {
 // POST - Mark notifications as read
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireUserSessionJson();
+    if (!auth.session) return auth.response;
+    const user = auth.session;
 
     const body = await request.json();
     const { notificationId, markAllRead } = body;
@@ -74,8 +56,10 @@ export async function POST(request: NextRequest) {
         data: { isRead: true },
       });
     } else if (notificationId) {
-      await prisma.notification.update({
-        where: { id: notificationId },
+      // Scope theo userId để một user KHÔNG thể đánh dấu đã đọc thông báo của người
+      // khác (chống IDOR). updateMany cho phép thêm điều kiện ngoài khóa chính.
+      await prisma.notification.updateMany({
+        where: { id: notificationId, userId: user.userId },
         data: { isRead: true },
       });
     }

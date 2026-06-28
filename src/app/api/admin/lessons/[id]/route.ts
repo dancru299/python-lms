@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
+import { requireTeacherSessionJson } from "@/lib/api-auth";
 import prisma from "@/lib/prisma";
 import { normalizeLessonMutationPayload } from "@/lib/lessons/lesson-draft";
 import {
@@ -13,27 +12,10 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-async function verifyTeacher() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    if (sessionData.role !== "teacher" && sessionData.role !== "admin") return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const { id } = await params;
 
@@ -62,10 +44,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireTeacherSessionJson();
+    if (!auth.session) return auth.response;
+    const { session } = auth;
 
     const { id } = await params;
     const payload = sanitizeLessonMutationHtml(
@@ -185,10 +166,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const { id } = await params;
     const body = await request.json();
@@ -222,10 +201,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const { id } = await params;
 

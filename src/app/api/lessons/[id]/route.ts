@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
+import { getSession } from "@/lib/session";
 import {
   buildLessonProgressTabs,
   summarizeLessonProgress,
@@ -11,25 +10,11 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// Get current user from session
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const user = await getCurrentUser();
+    // Bài giảng cho phép xem ẩn danh (public preview); user có thể là null.
+    const user = await getSession();
 
     const lesson = await prisma.lesson.findUnique({
       where: { id },

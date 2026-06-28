@@ -1,35 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session-token";
+import { requireTeacherSessionJson } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// Verify admin/teacher
-async function verifyTeacher() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("session");
-  if (!sessionCookie) return null;
-
-  try {
-    const sessionData = verifySession(sessionCookie.value);
-    if (!sessionData) return null;
-    if (sessionData.role !== "teacher" && sessionData.role !== "admin") return null;
-    return sessionData;
-  } catch {
-    return null;
-  }
-}
-
 // PUT - Update chapter
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const { id } = await params;
     const body = await request.json();
@@ -64,10 +45,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE - Delete chapter
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await verifyTeacher();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { response } = await requireTeacherSessionJson();
+    if (response) return response;
 
     const { id } = await params;
 
