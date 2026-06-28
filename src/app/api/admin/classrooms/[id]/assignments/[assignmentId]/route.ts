@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCookieSessionUser } from "@/lib/cookie-session";
+import { getSession } from "@/lib/session";
 import { convertDocxToHtml } from "@/lib/docx-html";
 
 interface RouteParams {
@@ -9,7 +9,7 @@ interface RouteParams {
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getCookieSessionUser();
+    const session = await getSession();
     if (!session || (session.role !== "teacher" && session.role !== "admin")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -71,7 +71,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 // Học sinh chỉ cần tải lại trang là thấy đề mới (vẫn là cùng một bài, không tạo bài khác).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await getCookieSessionUser();
+    const session = await getSession();
     if (!session || (session.role !== "teacher" && session.role !== "admin")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

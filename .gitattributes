@@ -1,0 +1,18 @@
+# Chuẩn hoá kết thúc dòng: mọi file text dùng LF trong repo VÀ trong working tree.
+# Tránh cảnh báo "LF will be replaced by CRLF" trên Windows (autocrlf).
+* text=auto eol=lf
+
+# File nhị phân: không đụng vào line-ending.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary
+*.docx  binary
+*.db    binary

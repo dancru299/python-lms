@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCookieSessionUser } from "@/lib/cookie-session";
+import { getSession } from "@/lib/session";
 import { convertDocxToHtml } from "@/lib/docx-html";
 import { getNextSession } from "@/lib/classroom-schedule";
 
@@ -9,7 +9,7 @@ interface RouteParams {
 }
 
 async function verifyTeacherAccess(classroomId: string) {
-  const session = await getCookieSessionUser();
+  const session = await getSession();
   if (!session || (session.role !== "teacher" && session.role !== "admin")) {
     return { error: "Unauthorized", status: 401 as const };
   }

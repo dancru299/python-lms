@@ -44,8 +44,8 @@ export async function POST(request: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = new Date(Date.now() + 15 * 60 * 1000);
 
-    await (prisma as any).passwordReset.deleteMany({ where: { email } });
-    await (prisma as any).passwordReset.create({ data: { email, otp, expires } });
+    await prisma.passwordReset.deleteMany({ where: { email } });
+    await prisma.passwordReset.create({ data: { email, otp, expires } });
 
     if (process.env.SMTP_HOST) {
       await sendPasswordResetOtp(email, otp);
