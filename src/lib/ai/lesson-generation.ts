@@ -529,6 +529,13 @@ function buildUserPrompt(content: string, context?: LessonGenerationContext): st
     "- answer field: realistic, runnable Python. Never HTML.",
     "- If no exercise in source, create one practice exercise.",
     "- Use realistic variable names and data, not foo/bar placeholders.",
+    "- mainHtml MUST NOT merely repeat the canvas 'title'. It is a lead-in: a definition, context, or one-sentence framing that ADDS information. For 'cards' and 'hero' layouts leave mainHtml empty (the title is the headline). Never set mainHtml to the title wrapped in <p>…</p>.",
+    "- 'code_explain' must have CLEAN code: no blank lines and no comment-only lines, because each physical code line is paired 1:1 with a reveal step. Provide exactly one step per code line, in the same order. (Use ordinary 'code' layout if you want decorative comments/blank lines.)",
+    "- ALWAYS describe the expected result of a runnable example. For console code put the output as a comment (e.g. '# Kết quả: ...') or in mainHtml; for VISUAL output (turtle/đồ họa/matplotlib) describe what is drawn in 'notesHtml' and add a media placeholder so a teacher can attach a screenshot.",
+    "- section 'content' (when contentFormat is 'canvas') is a 1–2 sentence Vietnamese SUMMARY of the section for previews — never a copy of the full canvas text. Keep it under ~200 characters.",
+    "- A recap/summary section must not duplicate itself across canvases: if you use both 'cards' and 'checklist', give them DISTINCT focus — 'cards' = key concepts learned, 'checklist' = 'Em có thể …' can-do skills. No overlapping wording.",
+    "- Coverage: every concept, formula, or command referenced in the objectives OR required to solve an exercise (e.g. the 360/n turning-angle formula, the setup commands import/Turtle()/done()) MUST be explicitly taught in a canvas of the lesson body.",
+    "- Homework hints must be GUIDING QUESTIONS or idea prompts, not a step-by-step recipe that gives away the solution. Practice hints may be more direct.",
     "",
     "EXAMPLES of well-formed canvas blocks (one per layout):",
     `[
