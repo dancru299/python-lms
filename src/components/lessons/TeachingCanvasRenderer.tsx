@@ -6,6 +6,7 @@ import { sanitizeLessonHtml } from "@/lib/sanitize-html";
 import { runPython } from "@/lib/python/pyodide-client";
 import type { LessonMediaView } from "@/lib/lessons/lesson-media";
 import type { TeachingCanvas } from "@/lib/lessons/teaching-canvas";
+import { resolveCodeExplainLineIndexes, stripTags } from "@/lib/lessons/code-explain";
 
 interface TeachingCanvasRendererProps {
   sectionId: string;
@@ -2153,7 +2154,6 @@ function CardsSlide({ canvas, visibleSteps }: SlideProps) {
 
 /* ─── Highlight ─── */
 function HighlightSlide({ canvas, media, visibleSteps, hasSteps }: SlideProps) {
-  const kindLabel = "Điểm nhấn";
   const density = contentDensity(canvas.html, canvas.steps.length);
   return (
     <article className={`teaching-canvas teaching-canvas-highlight is-${density}`}>
@@ -2449,6 +2449,16 @@ function FlowSlide({ canvas, visibleSteps }: SlideProps) {
 /* ─── Code + giải thích từng dòng ─── */
 function CodeExplainSlide({ canvas, visibleSteps }: SlideProps) {
   const code = canvas.code?.trim() || "";
+  const lines = code.split("\n");
+  const notes = canvas.steps ?? [];
+  // Anchor each note to the real code line it quotes (steps often skip lines or
+  // include a summary step, so a plain index→line mapping mislabels them).
+  // LƯU Ý: hook PHẢI gọi trước mọi early-return để giữ đúng thứ tự (rules-of-hooks).
+  const noteLineIndexes = useMemo(
+    () => resolveCodeExplainLineIndexes(notes, lines),
+    [notes, code]
+  );
+
   if (!code) {
     return (
       <article className="teaching-canvas teaching-canvas-concept">
@@ -2462,15 +2472,8 @@ function CodeExplainSlide({ canvas, visibleSteps }: SlideProps) {
       </article>
     );
   }
-  const lines = code.split("\n");
-  const notes = canvas.steps ?? [];
+
   const activeNoteIndex = Math.max(0, Math.min(Math.max(1, visibleSteps) - 1, Math.max(notes.length - 1, 0)));
-  // Anchor each note to the real code line it quotes (steps often skip lines or
-  // include a summary step, so a plain index→line mapping mislabels them).
-  const noteLineIndexes = useMemo(
-    () => resolveCodeExplainLineIndexes(notes, lines),
-    [notes, code]
-  );
   const activeLineIndex = Math.max(
     0,
     Math.min(
@@ -2812,77 +2815,8 @@ function extractMediaFromHtml(html: string): { textHtml: string; mediaHtml: stri
   return { textHtml, mediaHtml: media.join("\n") };
 }
 
-function stripTags(html: string) {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeForMatch(value: string) {
-  return value.toLowerCase().replace(/["'`]/g, "").replace(/\s+/g, " ").trim();
-}
-
-/* How strongly a code line is referenced by a step's text. A step usually quotes
-   the line it explains ("…print(\"Kết thúc kỳ học.\") → …"), so a direct quote is
-   the most reliable signal; otherwise fall back to token overlap. */
-function codeLineMatchScore(codeLine: string, stepText: string): number {
-  const chunk = normalizeForMatch(codeLine).replace(/:$/, "").trim();
-  if (chunk.length < 3) return 0;
-  const step = normalizeForMatch(stepText);
-  if (chunk.length >= 5 && step.includes(chunk)) return chunk.length;
-  const tokens = chunk.split(/[^a-z0-9_]+/).filter((token) => token.length >= 3);
-  if (tokens.length < 2) return 0;
-  const matched = tokens.filter((token) => step.includes(token)).length;
-  return matched >= 2 && matched / tokens.length >= 0.6 ? matched : 0;
-}
-
-/* Maps each code_explain step to the index of the code line it describes:
-   1) the line it quotes (content match), 2) an explicit "Dòng N" number, else
-   3) the next not-yet-used line (sequential). Keeps the popover label and the
-   highlighted line consistent with the step's actual content. */
-function resolveCodeExplainLineIndexes(
-  notes: TeachingCanvas["steps"],
-  lines: string[]
-): number[] {
-  const explainable = lines
-    .map((line, index) => ({ line, index }))
-    .filter((entry) => entry.line.trim().length > 0);
-  if (explainable.length === 0) return notes.map(() => 0);
-
-  let cursor = 0;
-  return notes.map((note) => {
-    const text = note.text || stripTags(note.html || "");
-
-    let target: number;
-    // 1) Marker "Dòng N" = ý tác giả chỉ rõ → ưu tiên TRƯỚC so-trùng-token. Token
-    //    mờ dễ neo nhầm khi nhiều dòng dùng chung từ khoá (elif/diem/print) hoặc khi
-    //    chữ Việt bị tách vụn, gây nhảy ngược/đánh dấu sai dòng.
-    const explicit = text.match(/(?:dòng|dong|line|câu lệnh)\s*(\d+)/i);
-    if (explicit) {
-      target = Math.max(0, Math.min(parseInt(explicit[1], 10) - 1, lines.length - 1));
-    } else {
-      // 2) Không có marker → so trùng nội dung (trích dẫn/token) với dòng code.
-      let best = -1;
-      let bestScore = 0;
-      for (const { line, index } of explainable) {
-        const score = codeLineMatchScore(line, text);
-        if (score > bestScore) {
-          bestScore = score;
-          best = index;
-        }
-      }
-      // 3) Vẫn không khớp → dòng kế tiếp chưa dùng (tuần tự).
-      target =
-        best >= 0 ? best : explainable[Math.min(cursor, explainable.length - 1)].index;
-    }
-
-    const position = explainable.findIndex((entry) => entry.index === target);
-    cursor = position >= 0 ? position + 1 : cursor + 1;
-    return target;
-  });
-}
+// stripTags, normalizeForMatch, codeLineMatchScore, resolveCodeExplainLineIndexes
+// đã chuyển sang @/lib/lessons/code-explain (logic thuần, có unit test).
 
 function kickerLabel(kind: TeachingCanvas["kind"]): string {
   if (kind === "code") return "Code";
