@@ -27,7 +27,6 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      # --- Non-blocking: còn lỗi lint tồn đọng, dọn dần ---
-      - name: Lint (informational)
+      # Lint giờ sạch lỗi (chỉ còn warning, không chặn) -> để gate luôn.
+      - name: Lint
         run: npm run lint
-        continue-on-error: true

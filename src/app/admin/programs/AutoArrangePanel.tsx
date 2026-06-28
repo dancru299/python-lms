@@ -255,7 +255,6 @@ export default function AutoArrangePanel({
 
               {milestones.map((milestone, index) => {
                 const data = milestoneDraft(milestone.id);
-                const milestoneLessonSet = new Set(data.lessonIds);
                 const unassignedOptions = draft.unassignedLessonIds;
 
                 return (

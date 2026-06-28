@@ -6,7 +6,7 @@ import { requireTeacher } from "@/lib/session";
 export default async function AdminSubmissionsPage() {
   await requireTeacher();
 
-  const submissions = await (prisma as any).submission.findMany({
+  const submissions = await prisma.submission.findMany({
     where: { status: "graded" },
     include: {
       exercise: { include: { lesson: { include: { chapter: true } } } },
@@ -43,7 +43,7 @@ export default async function AdminSubmissionsPage() {
       <section id="danh-sach" className="max-w-4xl">
         {submissions.length > 0 ? (
           <div className="card divide-y divide-gray-100">
-            {submissions.map((submission: any) => (
+            {submissions.map((submission) => (
               <div key={submission.id} className="p-6 transition-colors hover:bg-gray-50">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">

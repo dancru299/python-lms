@@ -135,7 +135,7 @@ function Sidebar({
 export default function StudentShell({ userName, notificationCount = 0, active, children }: StudentShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [pageChrome, setPageChrome] = useState<StudentShellPageChrome>(defaultPageChrome);
+  const [, setPageChrome] = useState<StudentShellPageChrome>(defaultPageChrome);
   const resolvedActive = active ?? resolveActiveStudentNav(pathname);
 
   useEffect(() => {

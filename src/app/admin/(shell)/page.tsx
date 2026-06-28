@@ -7,22 +7,6 @@ import NotificationInbox from "@/components/notifications/NotificationInbox";
 import TeacherPageFrame from "@/components/teacher/TeacherPageFrame";
 import { requireTeacher } from "@/lib/session";
 
-function DashboardCardSkeleton() {
-  return (
-    <div className="card rounded-[1.5rem] p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="h-4 w-24 animate-pulse rounded-full bg-slate-200" />
-          <div className="mt-3 h-9 w-20 animate-pulse rounded-xl bg-slate-200" />
-        </div>
-        <div className="h-12 w-12 animate-pulse rounded-2xl bg-slate-200" />
-      </div>
-      <div className="mt-4 h-4 w-full animate-pulse rounded-full bg-slate-100" />
-      <div className="mt-2 h-4 w-4/5 animate-pulse rounded-full bg-slate-100" />
-    </div>
-  );
-}
-
 function PendingSubmissionsFallback() {
   return (
     <div className="space-y-4">

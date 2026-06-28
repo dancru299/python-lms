@@ -2,7 +2,6 @@ import type {
   CanvasCard,
   LessonContentBlock,
   LessonTeachingCanvasBlock,
-  LessonTeachingCanvasStep,
 } from "@/lib/lessons/lesson-media";
 
 export type TeachingCanvasKind =
@@ -304,22 +303,6 @@ function getTeachingCanvasKind(block: LessonTeachingCanvasBlock): TeachingCanvas
   if (block.mediaId?.trim()) return "media";
   if (block.steps.length > 0) return "steps";
   return "concept";
-}
-
-function buildTeachingCanvasMainHtml(block: LessonTeachingCanvasBlock) {
-  const parts = [block.mainHtml || ""];
-
-  if (block.code?.trim()) {
-    parts.push(`<div class="code-block">\n${escapeHtml(block.code.trim())}\n</div>`);
-  }
-
-  if (block.mediaId?.trim()) {
-    parts.push(
-      `<figure class="lesson-media" data-media-id="${escapeAttribute(block.mediaId.trim())}"></figure>`
-    );
-  }
-
-  return parts.filter((part) => part.trim()).join("\n\n");
 }
 
 function buildFromBlocks(section: TeachingCanvasSectionSource) {
