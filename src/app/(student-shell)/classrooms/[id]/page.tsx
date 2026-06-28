@@ -76,17 +76,69 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
 
   const pendingCount = assignments.filter((a) => a.submissions.length === 0).length;
 
+  // Lộ trình học của lớp (chỉ khi lớp được gắn một chương trình đào tạo).
+  const program = membership.classroom.programId
+    ? await prisma.program.findUnique({
+        where: { id: membership.classroom.programId },
+        select: {
+          id: true,
+          title: true,
+          milestones: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              title: true,
+              icon: true,
+              color: true,
+              lessons: {
+                where: { lesson: { isPublished: true } },
+                orderBy: { sortOrder: "asc" },
+                select: {
+                  lessonId: true,
+                  lesson: { select: { id: true, title: true, duration: true } },
+                },
+              },
+            },
+          },
+        },
+      })
+    : null;
+
+  const programMilestones = (program?.milestones ?? []).filter((m) => m.lessons.length > 0);
+  const programLessonIds = programMilestones.flatMap((m) => m.lessons.map((l) => l.lessonId));
+  const completedLessonIds = programLessonIds.length
+    ? new Set(
+        (
+          await prisma.userProgress.findMany({
+            where: { userId: session.userId, lessonId: { in: programLessonIds }, completed: true },
+            select: { lessonId: true },
+          })
+        ).map((p) => p.lessonId)
+      )
+    : new Set<string>();
+  const totalLessons = programLessonIds.length;
+  const completedCount = programLessonIds.filter((lid) => completedLessonIds.has(lid)).length;
+  const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+  // Bài kế tiếp chưa hoàn thành — dùng cho nút "Tiếp tục học".
+  const nextLesson = programMilestones
+    .flatMap((m) => m.lessons)
+    .find((l) => !completedLessonIds.has(l.lessonId));
+
   return (
     <StudentPageFrame
       title={membership.classroom.name}
       subtitle={`Giáo viên: ${membership.classroom.teacher.name}`}
       summaryPills={[
-        { label: "Bài đã giao", value: assignments.length, tone: "indigo" },
-        { label: "Cần làm", value: pendingCount, tone: "amber" },
+        ...(totalLessons > 0
+          ? [{ label: "Tiến độ bài học", value: `${progressPercent}%`, tone: "indigo" as const }]
+          : []),
+        { label: "Bài đã giao", value: assignments.length, tone: "slate" as const },
+        { label: "Cần làm", value: pendingCount, tone: "amber" as const },
       ]}
       secondaryAction={{ href: "/classrooms", label: "Lớp học của tôi", icon: "fa-arrow-left" }}
       sectionLinks={[
         { href: "#lich-hoc", label: "Lịch học" },
+        ...(programMilestones.length > 0 ? [{ href: "#lo-trinh", label: "Lộ trình" }] : []),
         { href: "#bai-giao", label: "Bài tập & kiểm tra" },
       ]}
     >
@@ -121,6 +173,83 @@ export default async function StudentClassroomDetailPage({ params }: PageProps) 
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {programMilestones.length > 0 && (
+          <section id="lo-trinh" className="card rounded-[1.5rem] p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-slate-900">
+                <i className="fa-solid fa-route text-indigo-500"></i>
+                <h2 className="font-semibold">
+                  Lộ trình học{program?.title ? `: ${program.title}` : ""}
+                </h2>
+              </div>
+              {nextLesson && (
+                <Link href={`/lessons/${nextLesson.lesson.id}`} className="btn btn-primary">
+                  <i className="fa-solid fa-play"></i>
+                  Tiếp tục học
+                </Link>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-sm text-slate-600">
+                <span>Tiến độ</span>
+                <span className="font-semibold">
+                  {completedCount}/{totalLessons} bài • {progressPercent}%
+                </span>
+              </div>
+              <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-indigo-500 transition-all"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-5">
+              {programMilestones.map((milestone) => (
+                <div key={milestone.id}>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-xs"
+                      style={{
+                        backgroundColor: `${milestone.color || "#6366F1"}20`,
+                        color: milestone.color || "#6366F1",
+                      }}
+                    >
+                      <i className={`fa-solid ${milestone.icon || "fa-flag-checkered"}`}></i>
+                    </span>
+                    <h3 className="text-sm font-semibold text-slate-800">{milestone.title}</h3>
+                  </div>
+                  <div className="mt-2 space-y-2 sm:pl-9">
+                    {milestone.lessons.map((link) => {
+                      const done = completedLessonIds.has(link.lessonId);
+                      return (
+                        <Link
+                          key={link.lessonId}
+                          href={`/lessons/${link.lesson.id}`}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm transition hover:bg-slate-50"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <i
+                              className={`fa-${done ? "solid" : "regular"} fa-circle-check ${
+                                done ? "text-emerald-500" : "text-slate-300"
+                              }`}
+                            ></i>
+                            <span className="truncate text-slate-700">{link.lesson.title}</span>
+                          </span>
+                          <span className="shrink-0 text-xs text-slate-400">
+                            {link.lesson.duration} phút
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
